@@ -1,28 +1,127 @@
-from typing import Optional, Dict, Any, List
 import configparser
 import os
-from PyQt6.QtWidgets import (
-    QMainWindow,
-    QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QLabel,
-    QPushButton,
-    QLineEdit,
-    QScrollArea,
-    QGroupBox,
-    QSlider,
-    QMessageBox,
-    QTabWidget,
-    QCheckBox,
-)
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QFont
+from typing import Any, Dict, List, Optional, Tuple
+
 from dirigera import Hub
-from dirigera.devices.light import Light
 from dirigera.devices.blinds import Blind
+from dirigera.devices.light import Light
 from dirigera.devices.outlet import Outlet
 from dirigera.devices.scene import Scene
+from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtGui import QFont
+from PyQt6.QtWidgets import (
+    QCheckBox,
+    QDialog,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QMainWindow,
+    QMessageBox,
+    QProgressDialog,
+    QPushButton,
+    QScrollArea,
+    QSlider,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
+
+from network_discovery import discover_dirigera_hubs
+
+# Constants
+DEFAULT_BRIGHTNESS = 50
+
+
+class DiscoveryThread(QThread):
+    """Background thread for network discovery."""
+
+    finished = pyqtSignal(list)  # List of (ip, mac) tuples
+
+    def run(self):
+        """Run the discovery process."""
+        try:
+            hubs = discover_dirigera_hubs()
+            self.finished.emit(hubs)
+        except Exception:
+            self.finished.emit([])
+
+
+class HubSelectionDialog(QDialog):
+    """Dialog for selecting a discovered hub or entering IP manually."""
+
+    def __init__(self, discovered_hubs: List[Tuple[str, str]], parent=None):
+        super().__init__(parent)
+        self.selected_ip: Optional[str] = None
+        self.discovered_hubs = discovered_hubs
+        self.init_ui()
+
+    def init_ui(self):
+        self.setWindowTitle("Select Dirigera Hub")
+        self.setMinimumWidth(500)
+        self.setMinimumHeight(400)
+
+        layout = QVBoxLayout(self)
+
+        if self.discovered_hubs:
+            # Show discovered hubs
+            label = QLabel(
+                f"Found {len(self.discovered_hubs)} Dirigera hub(s) on your network:"
+            )
+            layout.addWidget(label)
+
+            self.hub_list = QListWidget()
+            for ip, mac in self.discovered_hubs:
+                item = QListWidgetItem(f"{ip} (MAC: {mac})")
+                item.setData(Qt.ItemDataRole.UserRole, ip)
+                self.hub_list.addItem(item)
+            self.hub_list.itemDoubleClicked.connect(self.on_hub_selected)
+            layout.addWidget(self.hub_list)
+
+            select_button = QPushButton("Select")
+            select_button.clicked.connect(self.on_hub_selected)
+            layout.addWidget(select_button)
+
+            layout.addWidget(QLabel("Or enter IP address manually:"))
+        else:
+            label = QLabel("No Dirigera hubs found automatically.")
+            layout.addWidget(label)
+            layout.addWidget(QLabel("Please enter the IP address manually:"))
+
+        # Manual IP entry
+        manual_layout = QHBoxLayout()
+        self.manual_ip_input = QLineEdit()
+        self.manual_ip_input.setPlaceholderText("e.g., 192.168.1.100")
+        manual_layout.addWidget(self.manual_ip_input)
+
+        manual_button = QPushButton("Use This IP")
+        manual_button.clicked.connect(self.on_manual_ip)
+        manual_layout.addWidget(manual_button)
+
+        layout.addLayout(manual_layout)
+
+        # Cancel button
+        cancel_button = QPushButton("Cancel")
+        cancel_button.clicked.connect(self.reject)
+        layout.addWidget(cancel_button)
+
+    def on_hub_selected(self):
+        """Handle hub selection from list."""
+        current_item = self.hub_list.currentItem()
+        if current_item:
+            self.selected_ip = current_item.data(Qt.ItemDataRole.UserRole)
+            self.accept()
+
+    def on_manual_ip(self):
+        """Handle manual IP entry."""
+        ip = self.manual_ip_input.text().strip()
+        if ip:
+            self.selected_ip = ip
+            self.accept()
+        else:
+            QMessageBox.warning(self, "Input Error", "Please enter an IP address.")
 
 
 class DirigeraDashboard(QMainWindow):
@@ -72,6 +171,10 @@ class DirigeraDashboard(QMainWindow):
         self.ip_input = QLineEdit()
         self.ip_input.setPlaceholderText("e.g., 192.168.1.100")
         connection_layout.addWidget(self.ip_input)
+
+        self.discover_button = QPushButton("Discover")
+        self.discover_button.clicked.connect(self.discover_hubs)
+        connection_layout.addWidget(self.discover_button)
 
         self.token_label = QLabel("Token:")
         connection_layout.addWidget(self.token_label)
@@ -131,6 +234,51 @@ class DirigeraDashboard(QMainWindow):
 
         self.tab_widget.addTab(self.scenes_tab, "Scenes")
 
+    def discover_hubs(self):
+        """Discover Dirigera hubs on the network."""
+        # Show progress dialog
+        progress = QProgressDialog(
+            "Scanning network for Dirigera hubs...", "Cancel", 0, 0, self
+        )
+        progress.setWindowTitle("Discovering Hubs")
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setMinimumDuration(0)
+        progress.show()
+
+        # Create and start discovery thread
+        self.discovery_thread = DiscoveryThread()
+        self.discovery_thread.finished.connect(
+            lambda hubs: self.on_discovery_complete(hubs, progress)
+        )
+        self.discovery_thread.start()
+
+    def on_discovery_complete(
+        self, discovered_hubs: List[Tuple[str, str]], progress: QProgressDialog
+    ):
+        """Handle completion of hub discovery."""
+        progress.close()
+
+        if not discovered_hubs:
+            # No hubs found - show dialog to enter manually
+            dialog = HubSelectionDialog([], self)
+            if dialog.exec() == QDialog.DialogCode.Accepted and dialog.selected_ip:
+                self.ip_input.setText(dialog.selected_ip)
+        elif len(discovered_hubs) == 1:
+            # Exactly one hub found - use it automatically
+            ip, mac = discovered_hubs[0]
+            self.ip_input.setText(ip)
+            QMessageBox.information(
+                self,
+                "Hub Discovered",
+                f"Found Dirigera hub at {ip}\n(MAC: {mac})\n\n"
+                "IP address has been filled in. Please enter your token and connect.",
+            )
+        else:
+            # Multiple hubs found - let user choose
+            dialog = HubSelectionDialog(discovered_hubs, self)
+            if dialog.exec() == QDialog.DialogCode.Accepted and dialog.selected_ip:
+                self.ip_input.setText(dialog.selected_ip)
+
     def connect_to_hub(self):
         ip_address = self.ip_input.text().strip()
         token = self.token_input.text().strip()
@@ -170,7 +318,7 @@ class DirigeraDashboard(QMainWindow):
             # Group devices by room
             devices_by_room: Dict[str, List[Any]] = {}
             for device in self.devices:
-                room_name = getattr(device, "room", {}).get("name", "Unknown Room")
+                room_name = self.get_room_name(device)
                 if room_name not in devices_by_room:
                     devices_by_room[room_name] = []
                 devices_by_room[room_name].append(device)
@@ -219,10 +367,7 @@ class DirigeraDashboard(QMainWindow):
         layout = QHBoxLayout(widget)
 
         # Device name
-        name_label = QLabel(
-            getattr(device, "custom_name", None)
-            or getattr(device.attributes, "custom_name", "Unknown Device")
-        )
+        name_label = QLabel(self.get_device_name(device))
         name_label.setMinimumWidth(200)
         font = QFont()
         font.setBold(True)
@@ -257,7 +402,7 @@ class DirigeraDashboard(QMainWindow):
         on_off_checkbox = QCheckBox("On")
         on_off_checkbox.setChecked(light.is_on)
         on_off_checkbox.stateChanged.connect(
-            lambda state: self.toggle_light(light, state == Qt.CheckState.Checked.value)
+            lambda state: self.toggle_light(light, state == Qt.CheckState.Checked)
         )
         layout.addWidget(on_off_checkbox)
 
@@ -272,7 +417,9 @@ class DirigeraDashboard(QMainWindow):
             brightness_slider = QSlider(Qt.Orientation.Horizontal)
             brightness_slider.setMinimum(1)
             brightness_slider.setMaximum(100)
-            brightness_slider.setValue(light.attributes.light_level or 50)
+            brightness_slider.setValue(
+                light.attributes.light_level or DEFAULT_BRIGHTNESS
+            )
             brightness_slider.setMaximumWidth(200)
             brightness_slider.valueChanged.connect(
                 lambda value: self.set_light_brightness(light, value)
@@ -293,8 +440,8 @@ class DirigeraDashboard(QMainWindow):
         position_slider = QSlider(Qt.Orientation.Horizontal)
         position_slider.setMinimum(0)
         position_slider.setMaximum(100)
-        current_position = getattr(blind.attributes, "blinds_current_level", 0)
-        position_slider.setValue(current_position or 0)
+        current_position = getattr(blind.attributes, "blinds_current_level", 0) or 0
+        position_slider.setValue(current_position)
         position_slider.setMaximumWidth(200)
         position_slider.valueChanged.connect(
             lambda value: self.set_blind_position(blind, value)
@@ -312,9 +459,7 @@ class DirigeraDashboard(QMainWindow):
         on_off_checkbox = QCheckBox("On")
         on_off_checkbox.setChecked(outlet.is_on)
         on_off_checkbox.stateChanged.connect(
-            lambda state: self.toggle_outlet(
-                outlet, state == Qt.CheckState.Checked.value
-            )
+            lambda state: self.toggle_outlet(outlet, state == Qt.CheckState.Checked)
         )
         layout.addWidget(on_off_checkbox)
 
@@ -400,3 +545,18 @@ class DirigeraDashboard(QMainWindow):
             item = layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
+
+    @staticmethod
+    def get_device_name(device: Any) -> str:
+        """Get the display name for a device"""
+        return (
+            getattr(device, "custom_name", None)
+            or getattr(getattr(device, "attributes", None), "custom_name", None)
+            or "Unknown Device"
+        )
+
+    @staticmethod
+    def get_room_name(device: Any) -> str:
+        """Get the room name for a device"""
+        room = getattr(device, "room", None) or {}
+        return room.get("name", "Unknown Room")

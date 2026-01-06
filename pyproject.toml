@@ -5,6 +5,8 @@ description = "A PyQt based dashboard for IKEA Dirigera hubs"
 requires-python = ">=3.12"
 dependencies = [
     "dirigera>=1.2.5",
+    "getmac>=0.9.5",
+    "netifaces>=0.11.0",
     "pyqt6>=6.10.1",
 ]
 

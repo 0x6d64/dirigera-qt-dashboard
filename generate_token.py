@@ -12,6 +12,7 @@ You will be prompted to press the pairing button on your Dirigera hub.
 """
 
 import sys
+
 import dirigera
 
 
