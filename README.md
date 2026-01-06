@@ -4,6 +4,7 @@ A PyQt based dashboard for IKEA Dirigera hubs
 
 ## Features
 
+- **Network Discovery**: Automatically scans your local network to find Dirigera hubs
 - **Device Discovery**: Automatically discovers all devices connected to your Dirigera hub
 - **Room Organization**: Displays devices sorted by room for easy management
 - **Device Controls**: Provides appropriate controls for different device types:
@@ -61,8 +62,24 @@ Run the dashboard:
 uv run python main.py
 ```
 
-1. Enter your Dirigera hub's IP address
-2. Enter your authentication token
+### Finding Your Dirigera Hub
+
+The dashboard offers two ways to find your hub:
+
+1. **Automatic Discovery** (Recommended):
+   - Click the "Discover" button
+   - The app will scan your local network for Dirigera hubs
+   - If one hub is found, its IP will be filled in automatically
+   - If multiple hubs are found, you can select which one to use
+   - If no hubs are found, you can enter the IP manually
+
+2. **Manual Entry**:
+   - Enter your Dirigera hub's IP address directly in the text field
+
+### Connecting to Your Hub
+
+1. Click "Discover" to find your hub, or enter the IP address manually
+2. Enter your authentication token (see "Getting Your Dirigera Token" above)
 3. Click "Connect"
 4. Browse your devices organized by room in the "Devices" tab
 5. Trigger scenes in the "Scenes" tab
