@@ -1,4 +1,6 @@
 from typing import Optional, Dict, Any, List
+import configparser
+import os
 from PyQt6.QtWidgets import (
     QMainWindow,
     QWidget,
@@ -31,6 +33,24 @@ class DirigeraDashboard(QMainWindow):
         self.scenes: List[Scene] = []
         self.device_widgets: Dict[str, QWidget] = {}
         self.init_ui()
+        self.load_config()
+
+    def load_config(self):
+        """Load configuration from config.ini if it exists"""
+        config_path = "config.ini"
+        if os.path.exists(config_path):
+            try:
+                config = configparser.ConfigParser()
+                config.read(config_path)
+                if "hub" in config:
+                    if "ip_address" in config["hub"]:
+                        self.ip_input.setText(config["hub"]["ip_address"])
+                    if "token" in config["hub"]:
+                        token = config["hub"]["token"]
+                        if token and token != "YOUR_TOKEN_HERE":
+                            self.token_input.setText(token)
+            except Exception:
+                pass  # Silently ignore config errors
 
     def init_ui(self):
         self.setWindowTitle("Dirigera Dashboard")
