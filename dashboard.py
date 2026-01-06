@@ -440,7 +440,7 @@ class DirigeraDashboard(QMainWindow):
         position_slider = QSlider(Qt.Orientation.Horizontal)
         position_slider.setMinimum(0)
         position_slider.setMaximum(100)
-        current_position = getattr(blind.attributes, "blinds_current_level", 0) or 0
+        current_position = getattr(blind.attributes, "blinds_current_level", 0)
         position_slider.setValue(current_position)
         position_slider.setMaximumWidth(200)
         position_slider.valueChanged.connect(
