@@ -1,0 +1,20 @@
+[project]
+name = "dirigera-qt-dashboard"
+version = "0.1.0"
+description = "A PyQt based dashboard for IKEA Dirigera hubs"
+requires-python = ">=3.12"
+dependencies = [
+    "dirigera>=1.2.5",
+    "pyqt6>=6.10.1",
+]
+
+[dependency-groups]
+dev = [
+    "black>=25.12.0",
+    "mypy>=1.19.1",
+    "ruff>=0.14.10",
+]
+
+[tool.black]
+line-length = 88
+target-version = ['py312']
