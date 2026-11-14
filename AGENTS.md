@@ -30,6 +30,20 @@ development branch is `refactor`.
 - One implementation plan entry per task or coherent task group, with concrete
   steps, affected files, and verification steps.
 
+## Requirements
+
+- Requirements live in `reqs.md` at the repository root.
+- Every requirement has a unique ID in the form `req-<number>` (e.g. `req-3`).
+- **Never reuse a requirement number.** IDs are permanent, like todo IDs: they
+  survive edits, reordering, and removal.
+- New requirements get the next free number = highest existing number + 1.
+  Check the whole file before claiming an ID.
+- `reqs.md` has two sections: **Explicit** (stated by the user) and
+  **Inferred** (derived from tasks, code review, or discussion). Whenever
+  requirements are discovered while working, record them in the matching
+  section with their `req-` ID instead of relying on memory.
+- Tasks and plans may reference requirements by their `req-<number>` ID.
+
 ## Environment
 
 - `uv` is installed at `%APPDATA%\Python\Python311\Scripts\uv.exe` and is not on
