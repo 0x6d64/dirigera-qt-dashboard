@@ -6,7 +6,13 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Optional, Tuple, cast
 
 import netifaces
+import requests
+import urllib3
 from getmac import get_mac_address
+
+# The hub uses a self-signed certificate, so the identification probe must
+# skip TLS verification (same behavior as the dirigera library itself).
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # IKEA MAC address prefixes (OUI - Organizationally Unique Identifier)
 # IKEA devices typically use these MAC prefixes
@@ -19,6 +25,10 @@ IKEA_MAC_PREFIXES = [
 
 # Dirigera hub uses port 8443 for API
 DIRIGERA_PORT = 8443
+
+# The hub reports its API firmware version in this response header, even on
+# unauthenticated requests (verified against a real hub).
+DIRIGERA_API_VERSION_HEADER = "Api-Version"
 
 
 def get_local_networks() -> List[str]:
@@ -67,16 +77,44 @@ def check_dirigera_port(ip: str, timeout: float = 1.0) -> bool:
         return False
 
 
-def scan_ip(ip: str) -> Optional[Tuple[str, str]]:
+def looks_like_dirigera_api(ip: str, timeout: float = 1.0) -> bool:
+    """Identify a DIRIGERA hub by its unauthenticated API response.
+
+    The hub answers ``GET /v1/home`` with HTTP 401 (or 200 with a valid token)
+    and always includes an ``Api-Version`` response header. Other services
+    that happen to listen on 8443 do not (verified against a real hub and a
+    non-hub service). No hub state is changed by this request.
+    """
+    try:
+        response = requests.get(
+            f"https://{ip}:{DIRIGERA_PORT}/v1/home",
+            verify=False,
+            timeout=timeout,
+        )
+    except requests.RequestException:
+        return False
+    return DIRIGERA_API_VERSION_HEADER in response.headers and response.status_code in (
+        200,
+        401,
+    )
+
+
+def scan_ip(ip: str) -> Optional[Tuple[str, Optional[str]]]:
     """
     Scan a single IP address for Dirigera hub.
-    Returns (ip, mac) tuple if found, None otherwise.
+    Returns (ip, mac) tuple if found, None otherwise. The MAC may be None
+    when the hub was identified via its API but no MAC could be resolved.
     """
-    # First check if port 8443 is open (faster than MAC lookup)
+    # Fast check first: the hub's API port.
     if not check_dirigera_port(ip):
         return None
 
-    # Then check MAC address
+    # Preferred identification: unauthenticated API probe. Works even when
+    # the MAC is masked (routed segments, Wi-Fi bridges, virtualization).
+    if looks_like_dirigera_api(ip):
+        return (ip, get_mac_address(ip=ip))
+
+    # Fallback when HTTPS probing is impossible: MAC OUI check.
     mac = get_mac_address(ip=ip)
     if mac and is_ikea_device(mac):
         return (ip, mac)
@@ -86,12 +124,14 @@ def scan_ip(ip: str) -> Optional[Tuple[str, str]]:
 
 def discover_dirigera_hubs(
     max_workers: int = 50, timeout_per_ip: float = 1.0
-) -> List[Tuple[str, str]]:
+) -> List[Tuple[str, Optional[str]]]:
     """
     Discover Dirigera hubs on the local network.
 
     Returns:
-        List of tuples (ip_address, mac_address) for discovered hubs.
+        List of tuples (ip_address, mac_address) for discovered hubs. The MAC
+        is None when the hub was identified via its API but no MAC could be
+        resolved.
     """
     networks = get_local_networks()
     if not networks:

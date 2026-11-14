@@ -39,7 +39,7 @@ take the next free number (see `AGENTS.md`).
 
 ## Network discovery
 
-- [ ] **t-20 [B·M]** Make discovery less dependent on MAC OUI guessing — `54:EF:44` is generic Espressif and the list can go stale *(network_discovery.py:13)*. Prefer an API probe or mDNS/SSDP, keeping OUI as a fallback.
+- [x] **t-20 [B·M]** Make discovery less dependent on MAC OUI guessing — `54:EF:44` is generic Espressif and the list can go stale *(network_discovery.py:13)*. Prefer an API probe or mDNS/SSDP, keeping OUI as a fallback.
 - [ ] **t-21 [B·S]** Fix large-subnet scanning: for networks > 512 addresses only the first /24 is scanned *(network_discovery.py:108–111)*. Iterate all /24s with a total cap.
 - [ ] **t-22 [C·S]** Make worker count and per-IP timeout configurable, and add a user-visible scan scope.
 - [ ] **t-23 [C·S]** Avoid scanning VPN/virtual interfaces, or let the user pick the interface.

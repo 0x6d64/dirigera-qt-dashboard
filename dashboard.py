@@ -53,7 +53,7 @@ class DiscoveryThread(QThread):
 class HubSelectionDialog(QDialog):
     """Dialog for selecting a discovered hub or entering IP manually."""
 
-    def __init__(self, discovered_hubs: List[Tuple[str, str]], parent=None):
+    def __init__(self, discovered_hubs: List[Tuple[str, Optional[str]]], parent=None):
         super().__init__(parent)
         self.selected_ip: Optional[str] = None
         self.discovered_hubs = discovered_hubs
@@ -75,7 +75,8 @@ class HubSelectionDialog(QDialog):
 
             self.hub_list = QListWidget()
             for ip, mac in self.discovered_hubs:
-                item = QListWidgetItem(f"{ip} (MAC: {mac})")
+                mac_text = f" (MAC: {mac})" if mac else ""
+                item = QListWidgetItem(f"{ip}{mac_text}")
                 item.setData(Qt.ItemDataRole.UserRole, ip)
                 self.hub_list.addItem(item)
             self.hub_list.itemDoubleClicked.connect(self.on_hub_selected)
@@ -253,7 +254,9 @@ class DirigeraDashboard(QMainWindow):
         self.discovery_thread.start()
 
     def on_discovery_complete(
-        self, discovered_hubs: List[Tuple[str, str]], progress: QProgressDialog
+        self,
+        discovered_hubs: List[Tuple[str, Optional[str]]],
+        progress: QProgressDialog,
     ):
         """Handle completion of hub discovery."""
         progress.close()
@@ -267,10 +270,11 @@ class DirigeraDashboard(QMainWindow):
             # Exactly one hub found - use it automatically
             ip, mac = discovered_hubs[0]
             self.ip_input.setText(ip)
+            mac_text = f"\n(MAC: {mac})" if mac else ""
             QMessageBox.information(
                 self,
                 "Hub Discovered",
-                f"Found Dirigera hub at {ip}\n(MAC: {mac})\n\n"
+                f"Found Dirigera hub at {ip}{mac_text}\n\n"
                 "IP address has been filled in. Please enter your token and connect.",
             )
         else:
