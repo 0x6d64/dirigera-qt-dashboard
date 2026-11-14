@@ -11,10 +11,10 @@ take the next free number (see `AGENTS.md`).
 
 ## Correctness & runtime bugs
 
-- [ ] **t-1 [A·S]** Fix on/off toggle logic: `state == Qt.CheckState.Checked` compares `int` to an enum and is always `False` in PyQt6 6.12 (verified), so any toggle sends "off" — devices can never be switched on from the UI *(dashboard.py:404,461)*. Use the `toggled(bool)` signal or `Qt.CheckState(state)`.
-- [ ] **t-2 [A·S]** Fix `light.is_on` → `light.attributes.is_on` *(dashboard.py:403)* — raising `AttributeError` blocks every light widget.
-- [ ] **t-3 [A·S]** Fix `outlet.is_on` → `outlet.attributes.is_on` *(dashboard.py:460)* — same crash for outlets.
-- [ ] **t-4 [A·S]** Fix room lookup: `device.room` is a pydantic `Room`, not a dict, so `room.get("name")` raises *(dashboard.py:559)*. Use `device.room.name` and fall back to "Unknown Room" when `room is None`.
+- [x] **t-1 [A·S]** Fix on/off toggle logic: `state == Qt.CheckState.Checked` compares `int` to an enum and is always `False` in PyQt6 6.12 (verified), so any toggle sends "off" — devices can never be switched on from the UI *(dashboard.py:404,461)*. Use the `toggled(bool)` signal or `Qt.CheckState(state)`.
+- [x] **t-2 [A·S]** Fix `light.is_on` → `light.attributes.is_on` *(dashboard.py:403)* — raising `AttributeError` blocks every light widget.
+- [x] **t-3 [A·S]** Fix `outlet.is_on` → `outlet.attributes.is_on` *(dashboard.py:460)* — same crash for outlets.
+- [x] **t-4 [A·S]** Fix room lookup: `device.room` is a pydantic `Room`, not a dict, so `room.get("name")` raises *(dashboard.py:559)*. Use `device.room.name` and fall back to "Unknown Room" when `room is None`.
 - [ ] **t-5 [B·S]** Restore UI state when a command fails — checkboxes/sliders keep the new value after a failed PATCH *(dashboard.py:494–540)*. Reload the device or revert the control on error.
 - [ ] **t-6 [B·S]** `Hub()` construction never contacts the hub, so a wrong IP/token still shows "Connected" and only fails at refresh *(dashboard.py:282–303)*. Do a lightweight authenticated probe (e.g. `GET /home`) during connect.
 - [ ] **t-7 [B·S]** A failed Refresh leaves the dashboard blank because the lists are cleared before fetching *(dashboard.py:310–313)*. Build the new widgets first, then swap them in.

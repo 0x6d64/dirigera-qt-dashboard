@@ -400,9 +400,9 @@ class DirigeraDashboard(QMainWindow):
         """Add controls for a light device"""
         # On/Off toggle
         on_off_checkbox = QCheckBox("On")
-        on_off_checkbox.setChecked(light.is_on)
-        on_off_checkbox.stateChanged.connect(
-            lambda state: self.toggle_light(light, state == Qt.CheckState.Checked)
+        on_off_checkbox.setChecked(light.attributes.is_on)
+        on_off_checkbox.toggled.connect(
+            lambda checked: self.toggle_light(light, checked)
         )
         layout.addWidget(on_off_checkbox)
 
@@ -457,9 +457,9 @@ class DirigeraDashboard(QMainWindow):
     def add_outlet_controls(self, layout: QHBoxLayout, outlet: Outlet):
         """Add controls for an outlet device"""
         on_off_checkbox = QCheckBox("On")
-        on_off_checkbox.setChecked(outlet.is_on)
-        on_off_checkbox.stateChanged.connect(
-            lambda state: self.toggle_outlet(outlet, state == Qt.CheckState.Checked)
+        on_off_checkbox.setChecked(outlet.attributes.is_on)
+        on_off_checkbox.toggled.connect(
+            lambda checked: self.toggle_outlet(outlet, checked)
         )
         layout.addWidget(on_off_checkbox)
 
@@ -558,5 +558,8 @@ class DirigeraDashboard(QMainWindow):
     @staticmethod
     def get_room_name(device: Any) -> str:
         """Get the room name for a device"""
-        room = getattr(device, "room", None) or {}
-        return room.get("name", "Unknown Room")
+        # device.room is a pydantic Room model (or None), not a dict.
+        room = getattr(device, "room", None)
+        if room is None:
+            return "Unknown Room"
+        return room.name or "Unknown Room"
