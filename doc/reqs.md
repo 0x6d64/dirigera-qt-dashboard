@@ -43,4 +43,4 @@ during implementation. Each entry cites its origin.
   dialog's Cancel button must actually stop the scan. *(t-25, open)*
 - **req-12** — Token generation must use the auth flow that actually exists
   in the installed `dirigera` version (currently the `dirigera.hub.auth`
-  challenge flow). *(t-11, open)*
+  challenge flow). *(t-11, implemented)*

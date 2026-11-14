@@ -24,7 +24,7 @@ take the next free number (see `AGENTS.md`).
 
 ## dirigera 1.6.1 migration follow-ups
 
-- [ ] **t-11 [A·S]** Fix `generate_token.py`: `dirigera.create_token()` does not exist (also not in 1.2.x) *(generate_token.py:32)*. Use the `dirigera.hub.auth` flow (`send_challenge` + `get_token`) or call the library's `generate-token` console script. Update README usage accordingly.
+- [x] **t-11 [A·S]** Fix `generate_token.py`: `dirigera.create_token()` does not exist (also not in 1.2.x) *(generate_token.py:32)*. Use the `dirigera.hub.auth` flow (`send_challenge` + `get_token`) or call the library's `generate-token` console script. Update README usage accordingly.
 - [ ] **t-12 [C·S]** Add blind up/down/stop controls using the new `BlindsStateEnum` / `Blind.set_state()`.
 - [ ] **t-13 [C·M]** Give new `ElectricalSensor` devices a real widget (power, voltage, energy) instead of the generic "✓" branch *(dashboard.py:391)*.
 - [ ] **t-14 [C·M]** Add light color temperature / color controls (`set_color_temperature`, `set_light_color`).

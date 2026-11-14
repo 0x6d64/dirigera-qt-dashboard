@@ -53,7 +53,7 @@ For example:
 uv run python generate_token.py 192.168.1.100
 ```
 
-You'll need to press the pairing button on your Dirigera hub when prompted. The script will display your token, which you should save securely.
+When prompted, press the pairing button on your Dirigera hub and then press ENTER in the terminal. The script will display your token, which you should save securely.
 
 ## Usage
 

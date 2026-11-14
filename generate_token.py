@@ -8,15 +8,22 @@ Usage:
 Example:
     python generate_token.py 192.168.1.100
 
-You will be prompted to press the pairing button on your Dirigera hub.
+You will be prompted to press the pairing button on your Dirigera hub,
+then press ENTER in the terminal to retrieve your token.
 """
 
 import sys
 
-import dirigera
+from dirigera.hub.auth import (
+    ALPHABET,
+    CODE_LENGTH,
+    get_token,
+    random_code,
+    send_challenge,
+)
 
 
-def main():
+def main() -> None:
     if len(sys.argv) != 2:
         print("Usage: python generate_token.py <hub_ip_address>")
         print("Example: python generate_token.py 192.168.1.100")
@@ -25,11 +32,14 @@ def main():
     hub_ip = sys.argv[1]
 
     print(f"Generating token for Dirigera hub at {hub_ip}")
-    print("Please press the pairing button on your Dirigera hub when prompted...")
+    print("Starting authentication challenge...")
     print()
 
     try:
-        token = dirigera.create_token(hub_ip)
+        code_verifier = random_code(ALPHABET, CODE_LENGTH)
+        code = send_challenge(hub_ip, code_verifier)
+        input("Press the pairing button on your Dirigera hub, then press ENTER...")
+        token = get_token(hub_ip, code, code_verifier)
         print("✓ Token generated successfully!")
         print()
         print("=" * 70)

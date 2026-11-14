@@ -20,38 +20,6 @@ Plans use `###`, commits inside a plan use `####`.
 
 ## Active plans
 
-### Plan: fix token generation (t-11)
-
-Goal: Fix `generate_token.py` to use the working `dirigera.hub.auth` challenge-response
-flow present in `dirigera` 1.6.1 instead of the non-existent `dirigera.create_token()`,
-fulfilling req-12, and update documentation.
-
-Affected files: `generate_token.py`, `README.md`, `doc/reqs.md`, `agent-notes/todo.md`
-
-#### Commit 1 — "fix token generation" (t-11)
-
-1. In `generate_token.py`:
-   - Replace `import dirigera` with importing `ALPHABET`, `CODE_LENGTH`,
-     `random_code`, `send_challenge`, and `get_token` from `dirigera.hub.auth`.
-   - In `main()`:
-     - Generate `code_verifier = random_code(ALPHABET, CODE_LENGTH)`.
-     - Send challenge: `code = send_challenge(hub_ip, code_verifier)`.
-     - Prompt user: `input("Press the pairing button on your Dirigera hub, then press ENTER...")`.
-     - Fetch token: `token = get_token(hub_ip, code, code_verifier)`.
-   - Keep existing banner formatting and error handling.
-   - Update module docstring and usage messages to reflect the two-step pairing flow.
-2. In `README.md`:
-   - In "Getting Your Dirigera Token" (~lines 43–57), clarify that the user needs to
-     press the pairing button on the hub and then press ENTER in the terminal.
-3. Update tracking docs:
-   - Mark `req-12` as implemented in `doc/reqs.md`.
-   - Check off `t-11` in `agent-notes/todo.md`.
-4. Verification:
-   - `uv run python generate_token.py` with no args prints usage and exits with code 1.
-   - `uv run python -c "import generate_token"` succeeds without error.
-   - Run unit smoke test with mocked `send_challenge` and `get_token` to verify execution flow and output.
-   - Gates: `uv run black .`, `uv run ruff check .`, `uv run mypy .`.
-
 ### Plan: dirigera 1.6.1 migration follow-ups (t-12 … t-16)
 
 Goal: Adopt the capabilities added in `dirigera` 1.6.1 so the dashboard covers
@@ -131,9 +99,44 @@ Affected files: `dashboard.py`
 
 - Execute the "Correctness & runtime bugs" plan first: t-17 (worker threads)
   unblocks t-15/t-16, and t-1–t-4 must land before any real-hub testing.
-- t-11 is independent and can be committed at any time.
 
 ## Done
+
+### Plan: fix token generation (t-11)
+
+> **Executed 2026-11-14** — commit (t-11). Replaced non-existent
+> `dirigera.create_token` with `dirigera.hub.auth` challenge flow (`send_challenge`
+> + `get_token`). Verified script usage, imports, unit mock flow, and gate checks.
+
+Goal: Fix `generate_token.py` to use the working `dirigera.hub.auth` challenge-response
+flow present in `dirigera` 1.6.1 instead of the non-existent `dirigera.create_token()`,
+fulfilling req-12, and update documentation.
+
+Affected files: `generate_token.py`, `README.md`, `doc/reqs.md`, `agent-notes/todo.md`
+
+#### Commit 1 — "fix token generation" (t-11)
+
+1. In `generate_token.py`:
+   - Replace `import dirigera` with importing `ALPHABET`, `CODE_LENGTH`,
+     `random_code`, `send_challenge`, and `get_token` from `dirigera.hub.auth`.
+   - In `main()`:
+     - Generate `code_verifier = random_code(ALPHABET, CODE_LENGTH)`.
+     - Send challenge: `code = send_challenge(hub_ip, code_verifier)`.
+     - Prompt user: `input("Press the pairing button on your Dirigera hub, then press ENTER...")`.
+     - Fetch token: `token = get_token(hub_ip, code, code_verifier)`.
+   - Keep existing banner formatting and error handling.
+   - Update module docstring and usage messages to reflect the two-step pairing flow.
+2. In `README.md`:
+   - In "Getting Your Dirigera Token" (~lines 43–57), clarify that the user needs to
+     press the pairing button on the hub and then press ENTER in the terminal.
+3. Update tracking docs:
+   - Mark `req-12` as implemented in `doc/reqs.md`.
+   - Check off `t-11` in `agent-notes/todo.md`.
+4. Verification:
+   - `uv run python generate_token.py` with no args prints usage and exits with code 1.
+   - `uv run python -c "import generate_token"` succeeds without error.
+   - Run unit smoke test with mocked `send_challenge` and `get_token` to verify execution flow and output.
+   - Gates: `uv run black .`, `uv run ruff check .`, `uv run mypy .`.
 
 ### Plan: Correctness & runtime bugs (t-1 … t-10)
 
