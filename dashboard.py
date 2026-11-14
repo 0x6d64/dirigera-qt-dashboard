@@ -291,6 +291,9 @@ class DirigeraDashboard(QMainWindow):
 
         try:
             self.hub = Hub(token=token, ip_address=ip_address)
+            # Hub() never contacts the hub, so verify the credentials with a
+            # lightweight authenticated probe before claiming success.
+            self.hub.get("/home")
             self.status_label.setText(f"Connected to hub at {ip_address}")
             self.status_label.setStyleSheet("color: green; font-weight: bold;")
             self.refresh_button.setEnabled(True)
@@ -307,55 +310,59 @@ class DirigeraDashboard(QMainWindow):
             return
 
         try:
-            # Clear existing widgets
-            self.clear_layout(self.devices_layout)
-            self.clear_layout(self.scenes_layout)
-            self.device_widgets.clear()
-
-            # Get all devices
-            self.devices = self.hub.get_all_devices()
-
-            # Group devices by room
-            devices_by_room: Dict[str, List[Any]] = {}
-            for device in self.devices:
-                room_name = self.get_room_name(device)
-                if room_name not in devices_by_room:
-                    devices_by_room[room_name] = []
-                devices_by_room[room_name].append(device)
-
-            # Create UI for each room
-            for room_name in sorted(devices_by_room.keys()):
-                room_group = QGroupBox(room_name)
-                room_layout = QVBoxLayout()
-                room_group.setLayout(room_layout)
-
-                for device in devices_by_room[room_name]:
-                    device_widget = self.create_device_widget(device)
-                    if device_widget:
-                        room_layout.addWidget(device_widget)
-                        self.device_widgets[device.id] = device_widget
-
-                self.devices_layout.insertWidget(
-                    self.devices_layout.count() - 1, room_group
-                )
-
-            # Get and display scenes
-            self.scenes = self.hub.get_scenes()
-            for scene in self.scenes:
-                scene_widget = self.create_scene_widget(scene)
-                self.scenes_layout.insertWidget(
-                    self.scenes_layout.count() - 1, scene_widget
-                )
-
-            self.status_label.setText(
-                f"Found {len(self.devices)} devices in {len(devices_by_room)} rooms "
-                f"and {len(self.scenes)} scenes"
-            )
-
+            # Fetch everything before touching the UI, so a failed refresh
+            # keeps the current view instead of leaving it blank.
+            devices = self.hub.get_all_devices()
+            scenes = self.hub.get_scenes()
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to refresh devices: {str(e)}")
             self.status_label.setText(f"Refresh failed: {str(e)}")
             self.status_label.setStyleSheet("color: red; font-weight: bold;")
+            return
+
+        # Clear existing widgets and rebuild from the fetched data
+        self.clear_layout(self.devices_layout)
+        self.clear_layout(self.scenes_layout)
+        self.device_widgets.clear()
+
+        self.devices = devices
+        self.scenes = scenes
+
+        # Group devices by room
+        devices_by_room: Dict[str, List[Any]] = {}
+        for device in self.devices:
+            room_name = self.get_room_name(device)
+            if room_name not in devices_by_room:
+                devices_by_room[room_name] = []
+            devices_by_room[room_name].append(device)
+
+        # Create UI for each room
+        for room_name in sorted(devices_by_room.keys()):
+            room_group = QGroupBox(room_name)
+            room_layout = QVBoxLayout()
+            room_group.setLayout(room_layout)
+
+            for device in devices_by_room[room_name]:
+                device_widget = self.create_device_widget(device)
+                if device_widget:
+                    room_layout.addWidget(device_widget)
+                    self.device_widgets[device.id] = device_widget
+
+            self.devices_layout.insertWidget(
+                self.devices_layout.count() - 1, room_group
+            )
+
+        # Display scenes
+        for scene in self.scenes:
+            scene_widget = self.create_scene_widget(scene)
+            self.scenes_layout.insertWidget(
+                self.scenes_layout.count() - 1, scene_widget
+            )
+
+        self.status_label.setText(
+            f"Found {len(self.devices)} devices in {len(devices_by_room)} rooms "
+            f"and {len(self.scenes)} scenes"
+        )
 
     def create_device_widget(self, device: Any) -> Optional[QWidget]:
         """Create appropriate widget based on device type"""
@@ -402,7 +409,7 @@ class DirigeraDashboard(QMainWindow):
         on_off_checkbox = QCheckBox("On")
         on_off_checkbox.setChecked(light.attributes.is_on)
         on_off_checkbox.toggled.connect(
-            lambda checked: self.toggle_light(light, checked)
+            lambda checked: self.toggle_light(light, checked, on_off_checkbox)
         )
         layout.addWidget(on_off_checkbox)
 
@@ -422,7 +429,7 @@ class DirigeraDashboard(QMainWindow):
             )
             brightness_slider.setMaximumWidth(200)
             brightness_slider.valueChanged.connect(
-                lambda value: self.set_light_brightness(light, value)
+                lambda value: self.set_light_brightness(light, value, brightness_slider)
             )
             layout.addWidget(brightness_slider)
 
@@ -444,7 +451,7 @@ class DirigeraDashboard(QMainWindow):
         position_slider.setValue(current_position)
         position_slider.setMaximumWidth(200)
         position_slider.valueChanged.connect(
-            lambda value: self.set_blind_position(blind, value)
+            lambda value: self.set_blind_position(blind, value, position_slider)
         )
         layout.addWidget(position_slider)
 
@@ -459,7 +466,7 @@ class DirigeraDashboard(QMainWindow):
         on_off_checkbox = QCheckBox("On")
         on_off_checkbox.setChecked(outlet.attributes.is_on)
         on_off_checkbox.toggled.connect(
-            lambda checked: self.toggle_outlet(outlet, checked)
+            lambda checked: self.toggle_outlet(outlet, checked, on_off_checkbox)
         )
         layout.addWidget(on_off_checkbox)
 
@@ -491,24 +498,23 @@ class DirigeraDashboard(QMainWindow):
 
         return widget
 
-    def toggle_light(self, light: Light, turn_on: bool):
+    def toggle_light(self, light: Light, turn_on: bool, control: QCheckBox):
         """Toggle light on/off"""
         try:
-            if turn_on:
-                light.set_light(lamp_on=True)
-            else:
-                light.set_light(lamp_on=False)
+            light.set_light(lamp_on=turn_on)
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Failed to toggle light: {str(e)}")
+            self.sync_control_from_device(light, control)
 
-    def set_light_brightness(self, light: Light, brightness: int):
+    def set_light_brightness(self, light: Light, brightness: int, control: QSlider):
         """Set light brightness"""
         try:
             light.set_light_level(brightness)
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Failed to set brightness: {str(e)}")
+            self.sync_control_from_device(light, control)
 
-    def set_blind_position(self, blind: Blind, position: int):
+    def set_blind_position(self, blind: Blind, position: int, control: QSlider):
         """Set blind position"""
         try:
             blind.set_target_level(position)
@@ -516,16 +522,38 @@ class DirigeraDashboard(QMainWindow):
             QMessageBox.warning(
                 self, "Error", f"Failed to set blind position: {str(e)}"
             )
+            self.sync_control_from_device(blind, control)
 
-    def toggle_outlet(self, outlet: Outlet, turn_on: bool):
+    def toggle_outlet(self, outlet: Outlet, turn_on: bool, control: QCheckBox):
         """Toggle outlet on/off"""
         try:
-            if turn_on:
-                outlet.set_on(True)
-            else:
-                outlet.set_on(False)
+            outlet.set_on(turn_on)
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Failed to toggle outlet: {str(e)}")
+            self.sync_control_from_device(outlet, control)
+
+    def sync_control_from_device(self, device: Any, control: QWidget) -> None:
+        """Restore a control's value from the device's actual state.
+
+        Used after a failed command so the UI reflects reality instead of the
+        intended value. Reloads the device first; if that fails too, the
+        in-memory state is the best available truth.
+        """
+        try:
+            device.reload()
+        except Exception:
+            pass
+        if isinstance(control, QCheckBox):
+            control.blockSignals(True)
+            control.setChecked(bool(getattr(device.attributes, "is_on", False)))
+            control.blockSignals(False)
+        elif isinstance(control, QSlider):
+            level = getattr(device.attributes, "light_level", None)
+            if level is None:
+                level = getattr(device.attributes, "blinds_current_level", None)
+            control.blockSignals(True)
+            control.setValue(level or 0)
+            control.blockSignals(False)
 
     def trigger_scene(self, scene: Scene):
         """Trigger a scene"""
