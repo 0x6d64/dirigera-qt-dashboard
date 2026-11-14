@@ -62,6 +62,10 @@ development branch is `refactor`.
 
 ## Git
 
+- **Never stage or commit files unless promoted by the user.** An explicit
+  request to stage/commit (e.g. "commit this") counts as promotion; finishing
+  a task or running the gates does not. When unsure, propose a commit message
+  and wait.
 - Small, focused commits with short imperative messages (existing history is
   lowercase, e.g. "update packages").
 - The working branch is `refactor`; do not commit directly to `master`.
