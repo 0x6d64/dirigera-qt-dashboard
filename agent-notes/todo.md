@@ -25,11 +25,10 @@ take the next free number (see `AGENTS.md`).
 ## dirigera 1.6.1 migration follow-ups
 
 - [x] **t-11 [A·S]** Fix `generate_token.py`: `dirigera.create_token()` does not exist (also not in 1.2.x) *(generate_token.py:32)*. Use the `dirigera.hub.auth` flow (`send_challenge` + `get_token`) or call the library's `generate-token` console script. Update README usage accordingly.
-- [ ] **t-12 [C·S]** Add blind up/down/stop controls using the new `BlindsStateEnum` / `Blind.set_state()`.
-- [ ] **t-13 [C·M]** Give new `ElectricalSensor` devices a real widget (power, voltage, energy) instead of the generic "✓" branch *(dashboard.py:391)*.
-- [ ] **t-14 [C·M]** Add light color temperature / color controls (`set_color_temperature`, `set_light_color`).
+- [ ] **t-12 [C·S]** Add blind up/down/stop controls using the new `BlindsStateEnum` / `Blind.set_state()`. *(superseded by t-45 for the card design; implement the control logic here, visual polish in t-45)*
+- [ ] **t-14 [C·M]** Add light color temperature / color controls (`set_color_temperature`, `set_light_color`). *(control logic; visual polish in t-42 and t-45)*
 - [ ] **t-15 [C·L]** Expose adaptive light profiles via `hub.get_adaptive_profiles()` and `activate_adaptive_profile()`.
-- [ ] **t-16 [C·L]** Replace manual Refresh with live updates using `Hub.create_event_listener()` (websocket).
+- [ ] **t-16 [C·L]** Replace manual Refresh with live updates using `Hub.create_event_listener()` (websocket). *(schedule after t-17)*
 
 ## UI responsiveness
 
@@ -64,7 +63,27 @@ take the next free number (see `AGENTS.md`).
 ## Repository & documentation
 
 - [ ] **t-35 [B·S]** Get `refactor` merged: `master` is still at the initial commit while all work lives on `refactor`.
-- [ ] **t-36 [B·S]** Update README: `netifaces2` requirement, Python 3.12/uv setup, working token-generation command, and the known discovery limitations.
+- [ ] **t-36 [C·S]** Update README: `netifaces2` requirement, Python 3.12/uv setup, and known discovery limitations. *(token-generation docs were updated in t-11; this covers the remaining gaps)*
 - [ ] **t-37 [C·S]** Add a `[project.scripts]` entry point (e.g. `dirigera-dashboard = "main:main"`) so the app can be launched without `python main.py`.
 - [ ] **t-38 [C·M]** Add package metadata (license expression, classifiers, keywords) to `pyproject.toml`.
 - [ ] **t-39 [C·S]** Document the security model in the README: the hub uses a self-signed certificate and the `dirigera` library disables TLS verification, so the token should be treated as a network secret.
+
+## Design document implementation (v1.0)
+
+Design tasks build on each other. Recommended order: t-40 → t-43/t-44 → t-41/t-42 → t-45 → t-46/t-47/t-48 → t-49/t-51/t-52 → t-50/t-53. Run t-17 before t-49.
+
+- [ ] **t-40 [B·M]** Theme & design tokens: implement a central `theme.py` module with all colour tokens and spacing constants (`design-doc.md` §4.4, §5), and a `generate_stylesheet()` helper that produces a QSS string from those tokens. All other design tasks depend on this landing first.
+- [ ] **t-41 [B·M]** Custom switch widget: implement animated `QAbstractButton` toggle (44×24 px, 18 px thumb, 120 ms out-cubic animation, `thumb` pyqtProperty, accessible name) to replace the existing `QCheckBox` in device cards (`design-doc.md` §8.3). Depends on t-40.
+- [ ] **t-42 [B·M]** Redesigned slider: styled `QSlider` subclass/wrapper with fixed 13 px label column, 6 px track, 18 px thumb, 24 px minimum height, right-aligned fixed-width value label; avoid `QSlider:disabled::sub-page` (`design-doc.md` §8.4, §13.2). Depends on t-40. Subsumes the visual half of t-18 (debounce stays in t-18).
+- [ ] **t-43 [B·S]** Status chip component: `QLabel` subclass rendering a fully rounded 20 px chip in `ok`, `warn`, `danger`, or `neutral` token variant, for use in card headers and the connection bar (`design-doc.md` §8.2). Depends on t-40.
+- [ ] **t-44 [B·S]** Metric display component: composite widget showing a 28 px semibold value with a secondary unit label (caption size, `text-2`) and a caption beneath, for use in electrical-sensor and energy cards (`design-doc.md` §8.5). Depends on t-40.
+- [ ] **t-45 [B·L]** Redesigned device card: `DeviceCard` widget with min 280 px width, 10 px radius, 1 px border, 16 px padding; card sections — header row (name truncated with tooltip + type caption + status chip), control zone, footer caption; stable card order within rooms (lights → outlets → blinds → sensors → remotes) (`design-doc.md` §8.1). Integrates t-41, t-42, t-43; also covers the visual half of t-12 (blind buttons) and t-13 (electrical sensor metrics, t-44). Depends on t-40, t-41, t-42, t-43, t-44.
+- [ ] **t-13 [C·M]** ~~Give new `ElectricalSensor` devices a real widget~~ — **absorbed into t-45**: the electrical-sensor card body (using t-44 metrics) is part of the t-45 `DeviceCard` refactor. Close this when t-45 is done.
+- [ ] **t-46 [B·M]** Responsive card grid & room sections: replace current `QVBoxLayout`-of-`QGroupBox` layout with a width-driven flow grid (min 280 px cards, 16 px gaps) inside a `QScrollArea`; room labels use 13 px medium `text-2`; grid reflows at 760 px and 640 px breakpoints (`design-doc.md` §4.3, §11). Depends on t-45.
+- [ ] **t-47 [B·M]** Header bar & segmented view switcher: replace the current `QGroupBox`-based connection panel with a 56 px header containing the app title, hub status chip (t-43), 260 px search field, segmented Rooms/Scenes/Energy switcher, and ghost-style Refresh button; connection inputs move to the not-connected block (t-48) (`design-doc.md` §4.2, §8.6, §8.7). Depends on t-40, t-43.
+- [ ] **t-48 [B·M]** Not-connected state & centered connection block: when no hub is connected, show a centred card (heading, IP field, token field, Discover and Connect buttons) instead of empty tabs; disable search and view switcher (`design-doc.md` §8.12, §9.1). Depends on t-47.
+- [ ] **t-49 [B·M]** Energy view: third segment tab grouping power-metered outlets and `ElectricalSensor` devices by room, using t-44 metric widgets for live W, V, A, and total kWh; "No energy data" footer for unmetered outlets (`design-doc.md` §3.1, §8.11, §9.4). Depends on t-44, t-47. Schedule after t-17 (needs off-thread refresh).
+- [ ] **t-50 [C·M]** Search/filter: wire the header search field (t-47) to filter device cards and scene tiles in real-time as the user types; filtering is case-insensitive on device/scene name (`design-doc.md` §8.8). Depends on t-46, t-47.
+- [ ] **t-51 [C·M]** Redesigned scene tiles: 240 px min-width scene cards with a glyph, name, and primary Activate button; show inline "Activated" text in `ok` colour for ~2 s after activation, then revert — no modal dialog (`design-doc.md` §8.10). Depends on t-40, t-43.
+- [ ] **t-52 [C·M]** SVG icon system: `icons.py` module with inline SVG strings (monoline, 24 px grid, 1.5 px stroke, `currentColor`), loaded via `QSvgRenderer` and recoloured by substituting the token colour at load time (`design-doc.md` §7.3). Depends on t-40.
+- [ ] **t-53 [C·S]** Automated contrast tests: `pytest` test asserting all colour-token pairings in `theme.py` meet WCAG 4.5:1 for text and 3:1 for non-text indicators; run as part of CI (t-33) (`design-doc.md` §5.2). Depends on t-40, t-33.

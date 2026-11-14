@@ -16,7 +16,7 @@ development branch is `refactor`.
 - **Never reuse a todo number.** IDs are permanent: they survive edits,
   reordering, completion, and removal of tasks.
 - New tasks always get the next free number = highest existing number + 1
-  (currently `t-40`). Check both open and closed items before claiming an ID.
+  (currently `t-54`). Check both open and closed items before claiming an ID.
 - Every task carries a priority tag (`A` blocker, `B` should fix, `C` nice to
   have) and an effort tag (`S` < 1 h, `M` 1–4 h, `L` > 1 day). Update these tags
   if scope changes, but never change the ID.
