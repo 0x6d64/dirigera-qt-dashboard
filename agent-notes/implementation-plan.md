@@ -213,7 +213,7 @@ Create a `widgets/` package (`widgets/__init__.py` empty).
 
 ---
 
-#### Commit 4 — "redesigned device card" (t-45, closes t-13)
+#### Commit 4 — "redesigned device card" (t-45, closes t-13) ✓ executed 2026-11-14
 
 **New file: `widgets/card.py`; refactor `dashboard.py`**
 
