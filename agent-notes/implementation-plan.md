@@ -7,18 +7,20 @@ Reference tasks by their `t-<number>` ID — plans never get their own IDs
 ## Format
 
 ```
-## Plan: <short title> (t-<id>[, t-<id>])
+### Plan: <short title> (t-<id>[, t-<id>])
 
 Goal: <one or two sentences>
 Affected files: <paths>
-Steps:
+#### Commit N — "<message>" (t-<id>)
 1. <step>
 Verification: <commands / manual checks>
 ```
 
+Plans use `###`, commits inside a plan use `####`.
+
 ## Active plans
 
-## Plan: Correctness & runtime bugs (t-1 … t-10)
+### Plan: Correctness & runtime bugs (t-1 … t-10)
 
 Goal: Make the dashboard actually usable against a real hub: devices render,
 toggle in the right direction, failed commands don't corrupt the UI, and
@@ -28,7 +30,7 @@ t-11 content is folded in here / into the migration plan).
 
 Affected files: `dashboard.py` (all three commits)
 
-### Commit 1 — "fix device attribute and room lookups" (t-1, t-2, t-3, t-4)
+#### Commit 1 — "fix device attribute and room lookups" (t-1, t-2, t-3, t-4)
 
 1. `add_light_controls` *(dashboard.py:403)*:
    `on_off_checkbox.setChecked(light.attributes.is_on)`
@@ -58,7 +60,7 @@ Affected files: `dashboard.py` (all three commits)
    assert no `AttributeError` and that a checked toggle emits
    `toggle_light(light, True)`.
 
-### Commit 2 — "harden connect and refresh error handling" (t-5, t-6, t-7)
+#### Commit 2 — "harden connect and refresh error handling" (t-5, t-6, t-7)
 
 1. t-7 *(dashboard.py:305–358)*: in `refresh_devices`, fetch devices and
    scenes into local variables first; only clear the layouts and rebuild after
@@ -79,7 +81,7 @@ Affected files: `dashboard.py` (all three commits)
    `set_light`/`set_light_level` raises, assert the checkbox/slider reverts to
    the device's real state and no unhandled exception escapes.
 
-### Commit 3 — "small dashboard cleanups" (t-8, t-9, t-10)
+#### Commit 3 — "small dashboard cleanups" (t-8, t-9, t-10)
 
 1. t-8 *(dashboard.py:480–482)*: render scene icons via a small helper, e.g.
    `icon.value.removeprefix("scenes_").replace("_", " ")`
@@ -94,7 +96,7 @@ Affected files: `dashboard.py` (all three commits)
 4. Gates; mypy error count must stay at 3 (t-31 untouched); offscreen smoke
    test from commit 1 still passes.
 
-## Plan: dirigera 1.6.1 migration follow-ups (t-11 … t-16)
+### Plan: dirigera 1.6.1 migration follow-ups (t-11 … t-16)
 
 Goal: Adopt the capabilities added in `dirigera` 1.6.1 so the dashboard covers
 the new device types and controls, and fix the token generator that never
@@ -102,7 +104,7 @@ worked against any released version.
 
 Affected files: `generate_token.py`, `README.md`, `dashboard.py`
 
-### Commit 1 — "fix token generation" (t-11)
+#### Commit 1 — "fix token generation" (t-11)
 
 1. In `generate_token.py`, replace `dirigera.create_token(hub_ip)`
    *(generate_token.py:32)* with the `dirigera.hub.auth` flow:
@@ -126,7 +128,7 @@ Affected files: `generate_token.py`, `README.md`, `dashboard.py`
    Full end-to-end generation needs a real hub and the pairing button —
    manual check for the user.
 
-### Commit 2 — "device widgets for new device classes" (t-12, t-13)
+#### Commit 2 — "device widgets for new device classes" (t-12, t-13)
 
 1. t-12: in `add_blind_controls` *(dashboard.py:435–455)*, add Up / Down /
    Stop `QPushButton`s wired to a new
@@ -143,7 +145,7 @@ Affected files: `generate_token.py`, `README.md`, `dashboard.py`
 3. Gates; offscreen smoke test with `dict_to_electrical_sensor` and a `Blind`
    whose `capabilities.can_receive` contains `blindsState`.
 
-### Commit 3 — "light color and temperature controls" (t-14)
+#### Commit 3 — "light color and temperature controls" (t-14)
 
 1. In `add_light_controls`, when
    `"colorTemperature" in light.capabilities.can_receive` and min/max bounds
@@ -159,7 +161,7 @@ Affected files: `generate_token.py`, `README.md`, `dashboard.py`
    `AssertionError` otherwise.
 4. Gates; offscreen smoke test invoking the handlers against a stubbed light.
 
-### Commit 4 — "adaptive light profiles" (t-15) — schedule after t-17 if possible
+#### Commit 4 — "adaptive light profiles" (t-15) — schedule after t-17 if possible
 
 1. In `refresh_devices`, fetch `self.adaptive_profiles =
    self.hub.get_adaptive_profiles()` inside a guarded `try` (empty list on
@@ -176,7 +178,7 @@ Affected files: `generate_token.py`, `README.md`, `dashboard.py`
    because t-17 will move all of it into a worker; execute t-17 before this
    commit if scheduling allows.
 
-### Commit 5 — "live updates via websocket" (t-16) — large, after t-17 and t-10 decision
+#### Commit 5 — "live updates via websocket" (t-16) — large, after t-17 and t-10 decision
 
 1. Add an `EventListenerThread(QThread)` wrapping
    `hub.create_event_listener(on_message=..., on_error=..., on_close=...)`;
@@ -194,7 +196,7 @@ Affected files: `generate_token.py`, `README.md`, `dashboard.py`
 5. Gates; manual verification against a real hub (toggle a light from the
    IKEA app and watch the dashboard update without Refresh).
 
-### Ordering & dependencies
+#### Ordering & dependencies
 
 - Execute the "Correctness & runtime bugs" plan first: t-17 (worker threads)
   unblocks t-15/t-16, and t-1–t-4 must land before any real-hub testing.
