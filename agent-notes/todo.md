@@ -72,7 +72,7 @@ take the next free number (see `AGENTS.md`).
 
 Design tasks build on each other. Recommended order: t-40 → t-43/t-44 → t-41/t-42 → t-45 → t-46/t-47/t-48 → t-49/t-51/t-52 → t-50/t-53. Run t-17 before t-49.
 
-- [ ] **t-40 [B·M]** Theme & design tokens: implement a central `theme.py` module with all colour tokens and spacing constants (`design-doc.md` §4.4, §5), and a `generate_stylesheet()` helper that produces a QSS string from those tokens. All other design tasks depend on this landing first.
+- [x] **t-40 [B·M]** Theme & design tokens: implement a central `theme.py` module with all colour tokens and spacing constants (`design-doc.md` §4.4, §5), and a `generate_stylesheet()` helper that produces a QSS string from those tokens. All other design tasks depend on this landing first.
 - [ ] **t-41 [B·M]** Custom switch widget: implement animated `QAbstractButton` toggle (44×24 px, 18 px thumb, 120 ms out-cubic animation, `thumb` pyqtProperty, accessible name) to replace the existing `QCheckBox` in device cards (`design-doc.md` §8.3). Depends on t-40.
 - [ ] **t-42 [B·M]** Redesigned slider: styled `QSlider` subclass/wrapper with fixed 13 px label column, 6 px track, 18 px thumb, 24 px minimum height, right-aligned fixed-width value label; avoid `QSlider:disabled::sub-page` (`design-doc.md` §8.4, §13.2). Depends on t-40. Subsumes the visual half of t-18 (debounce stays in t-18).
 - [ ] **t-43 [B·S]** Status chip component: `QLabel` subclass rendering a fully rounded 20 px chip in `ok`, `warn`, `danger`, or `neutral` token variant, for use in card headers and the connection bar (`design-doc.md` §8.2). Depends on t-40.

@@ -122,7 +122,7 @@ relies on the files introduced before it:
 
 ---
 
-#### Commit 1 — "theme module and design tokens" (t-40)
+#### Commit 1 — "theme module and design tokens" (t-40) ✓ executed 2026-11-14
 
 **New file: `theme.py`**
 
