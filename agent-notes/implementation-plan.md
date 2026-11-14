@@ -100,6 +100,319 @@ Affected files: `dashboard.py`
 - Execute the "Correctness & runtime bugs" plan first: t-17 (worker threads)
   unblocks t-15/t-16, and t-1–t-4 must land before any real-hub testing.
 
+---
+
+### Plan: design document v1.0 implementation (t-40 … t-53)
+
+Goal: Implement the visual design described in `doc/design-doc.md` v1.0 —
+introducing a token-driven theme, purpose-built components, a redesigned card
+and grid layout, a header bar with segmented navigation, and three views
+(Rooms, Scenes, Energy).
+
+Affected files: `theme.py` (new), `widgets/switch.py` (new),
+`widgets/slider.py` (new), `widgets/chip.py` (new), `widgets/metric.py` (new),
+`widgets/card.py` (new), `widgets/icons.py` (new), `dashboard.py` (heavily
+refactored), `main.py` (stylesheet injection)
+
+#### Ordering note
+
+Execute commits in this order. Each commit is independently mergeable but
+relies on the files introduced before it:
+`t-40 → t-43 + t-44 → t-41 + t-42 → t-45 → t-46 + t-47 + t-48 → t-49 + t-51 + t-52 → t-50 + t-53`
+
+---
+
+#### Commit 1 — "theme module and design tokens" (t-40)
+
+**New file: `theme.py`**
+
+1. Define all 17 colour tokens from `design-doc.md` §5.1 as module-level
+   string constants (`WINDOW`, `SURFACE`, `SUNKEN`, `BORDER`, `TEXT`,
+   `TEXT2`, `ACCENT`, `ACCENT_HOVER`, `ON_ACCENT`, `ACCENT_SOFT`, `OFF`,
+   `OK`, `OK_BG`, `WARN`, `WARN_BG`, `DANGER`, `DANGER_BG`).
+2. Define spacing constants from §4.4: `SP4=4`, `SP8=8`, `SP12=12`,
+   `SP16=16`, `SP20=20`, `SP24=24` and radius constants: `RADIUS_CARD=10`,
+   `RADIUS_BUTTON=6`.
+3. Define font constants: `FONT_METRIC=28`, `FONT_TITLE=16`, `FONT_BODY=14`,
+   `FONT_LABEL=13`, `FONT_CAPTION=12`.
+4. Implement `generate_stylesheet() -> str` that returns a QSS string applying
+   the tokens to `QMainWindow`, `QWidget`, `QPushButton`, `QLineEdit`,
+   `QSlider`, `QLabel`, `QGroupBox`, and `QScrollArea`. Avoid per-widget
+   colour hard-coding in any other module.
+5. In `main.py`: call `app.setStyleSheet(theme.generate_stylesheet())` after
+   creating `QApplication`.
+6. Gates: `uv run black . && uv run ruff check . && uv run mypy .`; offscreen
+   smoke test that imports `theme` and asserts token values are non-empty
+   strings.
+
+---
+
+#### Commit 2 — "status chip and metric widgets" (t-43, t-44)
+
+**New files: `widgets/chip.py`, `widgets/metric.py`**
+
+Create a `widgets/` package (`widgets/__init__.py` empty).
+
+**t-43 — `widgets/chip.py`**
+
+1. `class StatusChip(QLabel)`:
+   - Constructor: `__init__(self, text: str, variant: str = "neutral")`.
+   - `variant` is one of `"ok"`, `"warn"`, `"danger"`, `"neutral"`.
+   - Sets fixed height 20 px, fully rounded (border-radius = 9 px for 18 px
+     font height + 2 px padding), caption font (12 px), and padding 2 px top/
+     bottom, 9 px left/right via QSS from `theme` tokens.
+   - `set_variant(variant: str) -> None`: updates colours with
+     `unpolish/polish` to force QSS re-evaluation.
+
+**t-44 — `widgets/metric.py`**
+
+1. `class MetricWidget(QWidget)`:
+   - Constructor: `__init__(self, caption: str)`.
+   - Layout: `QHBoxLayout` with a 28 px bold value `QLabel` and a caption-size
+     unit `QLabel` baseline-aligned, then a caption `QLabel` beneath the whole
+     group.
+   - `set_value(value: float | None, unit: str) -> None`: formats the number
+     (1 dp for floats, `"–"` for `None`) and updates both labels.
+2. Gates: offscreen smoke tests instantiating each widget; assert chip height
+   is 20 px and metric label text matches expected format.
+
+---
+
+#### Commit 3 — "custom switch and slider widgets" (t-41, t-42)
+
+**New files: `widgets/switch.py`, `widgets/slider.py`**
+
+**t-41 — `widgets/switch.py`**
+
+1. `class ToggleSwitch(QAbstractButton)`:
+   - Geometry: `sizeHint()` returns `QSize(44, 24)`.
+   - `thumb` `pyqtProperty(float)` drives the thumb X position from 3 px
+     (off) to 23 px (on). Do **not** name it `pos`.
+   - `QPropertyAnimation` on `thumb`, 120 ms, `QEasingCurve.Type.OutCubic`.
+   - `paintEvent`: draw the rounded track (`ACCENT` if checked, `OFF` if not)
+     and white thumb circle (18 px diameter, 3 px inset) using `QPainter`.
+   - After `setChecked`, call `setAccessibleName(label)` where `label` is
+     passed at construction.
+   - `toggled(bool)` signal emitted on click.
+
+**t-42 — `widgets/slider.py`**
+
+1. `class LabeledSlider(QWidget)`:
+   - Layout: `QHBoxLayout` with a fixed-width (60 px) `QLabel` for the label,
+     a `QSlider(Qt.Orientation.Horizontal)`, and a fixed-width (50 px)
+     right-aligned `QLabel` for the value.
+   - Slider: minimum height 24 px; track 6 px via QSS from `theme`; thumb
+     18 px. Do **not** use `QSlider:disabled::sub-page`.
+   - `valueChanged` emits a `value_changed(int)` pyqtSignal on each tick
+     (for live value display only). The `released(int)` pyqtSignal fires on
+     `sliderReleased` for sending hub commands (`req-6`).
+   - Disabled state: use a custom `active` property that swaps colours via
+     `unpolish/polish`.
+2. Gates: offscreen smoke test; assert slider minimum height ≥ 24 px; assert
+   `released` does not fire on value change, only on release.
+
+---
+
+#### Commit 4 — "redesigned device card" (t-45, closes t-13)
+
+**New file: `widgets/card.py`; refactor `dashboard.py`**
+
+1. `class DeviceCard(QFrame)`:
+   - Geometry: `setMinimumWidth(280)`, `setFrameShape(QFrame.Shape.StyledPanel)`.
+   - QSS (from `theme`): background `SURFACE`, border 1 px `BORDER`,
+     border-radius `RADIUS_CARD` px, padding `SP16` px.
+   - **Header row** (`QHBoxLayout`):
+     - Left column: device name (`QLabel`, 16 px bold, `elideRight`,
+       `setToolTip(full_name)`) over device type (`QLabel`, 12 px, `TEXT2`).
+     - Right: `StatusChip` (initially `"neutral"` / empty).
+   - **Control zone** (`QVBoxLayout`): populated by device-type helpers (see
+     below); empty for read-only/offline devices.
+   - **Footer** (`QLabel`, 12 px, `TEXT2`): battery, last-seen or hint text.
+   - `set_offline(offline: bool)`: sets background to `SUNKEN`, disables
+     controls, updates chip to `"neutral" / "Offline"`.
+   - Device-type control helpers:
+     - Light: `ToggleSwitch` for on/off + `LabeledSlider` for brightness
+       (1–100 %) + blind buttons if applicable.
+     - Outlet: `ToggleSwitch` only.
+     - Blind: position `LabeledSlider` + Up / Down / Stop buttons (t-12
+       logic, now visual).
+     - Electrical sensor: `MetricWidget` for power (W); captions for V and A;
+       footer with total kWh (closes t-13).
+     - Other: no control zone (read-only card).
+   - Stable ordering within rooms: lights → outlets → blinds → sensors →
+     remotes.
+2. In `dashboard.py`, replace `create_device_widget` calls with
+   `DeviceCard(device)`.
+3. Gates: offscreen smoke tests for each device type; assert no
+   `QCheckBox` or bare `QSlider` remains in the widget tree.
+
+---
+
+#### Commit 5 — "responsive card grid and room sections" (t-46)
+
+**Refactor `dashboard.py` devices tab layout**
+
+1. Implement `FlowLayout(QLayout)` (or use `QGridLayout` with dynamic column
+   count): on `resizeEvent`, recompute columns as
+   `max(1, floor(available_width / (280 + SP16)))` and rearrange cards.
+2. Replace the current `QVBoxLayout`-of-`QGroupBox` room layout with:
+   - For each room: a `QLabel` section header (13 px, medium weight, `TEXT2`,
+     sentence-case room name) followed by the `FlowLayout` of `DeviceCard`s.
+   - Room sections stacked in a single `QVBoxLayout` with 24 px gap between
+     them.
+3. Wrap the whole thing in a `QScrollArea` (widget already set;
+   `widgetResizable=True`).
+4. Preserve card order within rooms on refresh (`req-2`, t-19): do not sort
+   or shuffle cards between refresh cycles.
+5. Gates: resize the offscreen window to 1080, 760, and 640 px; assert column
+   count is 3, 2, 1 respectively; assert room label text is sentence-case.
+
+---
+
+#### Commit 6 — "header bar and segmented view switcher" (t-47)
+
+**Refactor `dashboard.py` top-level layout**
+
+1. Replace the `QGroupBox("Hub Connection")` section with a fixed-height
+   56 px `QWidget` header bar:
+   - Left: app title `QLabel` (18 px, semibold).
+   - Hub status `StatusChip` (initially neutral "Not connected").
+   - Flexible spacer.
+   - Search `QLineEdit` (260 px, `sunken` background, placeholder "Search
+     devices and scenes", disabled until connected).
+   - Segmented view switcher: three `QPushButton`s ("Rooms", "Scenes",
+     "Energy") joined visually; selected one gets `accent-soft` background
+     and `accent` text via a `selected` dynamic property + `unpolish/polish`.
+   - Ghost-style "Refresh" `QPushButton` (1 px border, `text` label).
+   - Bottom border 1 px `BORDER`.
+2. Remove the token and IP fields from the header — they move to the
+   not-connected block (t-48).
+3. Keep the existing `QTabWidget` logic for now but wire it to the new
+   segmented switcher (tab switching can migrate fully in t-48/t-49).
+4. Gates: offscreen test asserts header height == 56 px; chip text is
+   "Not connected" at startup; switcher buttons are exclusive.
+
+---
+
+#### Commit 7 — "not-connected state and connection block" (t-48)
+
+**Refactor `dashboard.py` connection logic**
+
+1. Add a `ConnectionBlock(QWidget)`: centred card (`SURFACE`, 400 px wide,
+   `RADIUS_CARD` radius) containing:
+   - Heading `QLabel` "Connect to your hub" (16 px bold).
+   - Help line `QLabel` (caption, `TEXT2`).
+   - IP `QLineEdit` (placeholder "e.g. 192.168.1.100").
+   - Token `QLineEdit` (placeholder "Authentication token",
+     `EchoMode.Password`).
+   - `QHBoxLayout` with ghost "Discover" and primary "Connect" buttons.
+2. When `self.hub is None`: show `ConnectionBlock` in the content area, hide
+   the view grid; set header chip to `"neutral" / "Not connected"`.
+3. When connecting: disable all `ConnectionBlock` inputs and buttons; set chip
+   to `"neutral" / "Connecting…"`.
+4. On success: hide `ConnectionBlock`, show view grid; set chip to
+   `"ok" / "Hub online · <ip>"`.
+5. On refresh failure: set chip to `"warn" / "Hub unreachable"` and show
+   "Showing data from <time>" in a content-area caption; keep device cards
+   in place (`req-2`).
+6. Load IP and token from `config.ini` into `ConnectionBlock` fields on start.
+7. Gates: offscreen tests covering each connection state; assert chip variant
+   and text match the spec; assert `ConnectionBlock` is hidden when connected.
+
+---
+
+#### Commit 8 — "Energy view" (t-49)
+
+*Schedule after t-17 (off-thread refresh) to avoid blocking the GUI thread.*
+
+**Add Energy tab to `dashboard.py`**
+
+1. Add a third segment ("Energy") to the switcher from t-47.
+2. `EnergyView(QWidget)`: same flow-grid layout as the Rooms view, populated
+   with `DeviceCard`s restricted to outlets and electrical sensors.
+3. For each device:
+   - If `ElectricalSensorAttributes` are present: show `MetricWidget` for
+     live power (W), secondary captions for voltage (V) and current (A),
+     footer with total energy (kWh).
+   - If outlet with no metering data: footer reads "No energy data"; no
+     empty metric row.
+4. Totals and grouping by room, same approach as Rooms view.
+5. Gates: offscreen smoke test with stub electrical sensor data; assert metric
+   labels contain the expected values and "No energy data" appears for
+   unmetered outlets.
+
+---
+
+#### Commit 9 — "scene tiles and SVG icon system" (t-51, t-52)
+
+**New file: `widgets/icons.py`; refactor scenes layout in `dashboard.py`**
+
+**t-52 — `widgets/icons.py`**
+
+1. `ICON_SVG: dict[str, str]` mapping icon names (`"light"`, `"outlet"`,
+   `"blind"`, `"scene"`, `"sensor"`, etc.) to SVG strings on a 24 px grid,
+   1.5 px stroke, `currentColor` fill/stroke.
+2. `render_icon(name: str, color: str, size: int = 24) -> QPixmap`: replaces
+   `currentColor` with the given hex token and uses `QSvgRenderer` to raster
+   to a `QPixmap`.
+3. Fallback: if name not found, return an empty `QPixmap`.
+
+**t-51 — scene tiles**
+
+1. `class SceneTile(QFrame)`:
+   - Min width 240 px; same surface/border/radius as `DeviceCard`.
+   - Glyph: `QLabel` with `render_icon("scene", theme.ACCENT)` (or scene-
+     specific icon if mapped).
+   - Name `QLabel` (16 px bold).
+   - Right/bottom-aligned primary "Activate" button.
+   - On activate: call `scene.trigger()` in a worker thread; on return show
+     "Activated" (`OK` text colour) for 2 s via `QTimer`, then revert.
+2. Replace the existing `QListWidget` scene list with a `FlowLayout` of
+   `SceneTile`s.
+3. Gates: offscreen smoke test; assert tile minimum width ≥ 240 px; assert
+   "Activated" label appears and reverts.
+
+---
+
+#### Commit 10 — "search filter and contrast tests" (t-50, t-53)
+
+**Wire search field; add test suite entry**
+
+**t-50 — search filter**
+
+1. Connect the header search `QLineEdit.textChanged` signal to a
+   `filter_devices(query: str)` slot that shows/hides `DeviceCard`s and
+   `SceneTile`s whose name contains the query (case-insensitive).
+2. Hiding a card does not change room-section visibility if at least one card
+   in the room matches; hide the whole room section only when zero cards match.
+3. Clear filter on empty query.
+4. Gates: offscreen test; populate 3 cards with names "Bookshelf", "Desk lamp",
+   "Ceiling"; filter "desk" → only "Desk lamp" visible.
+
+**t-53 — contrast tests**
+
+1. Add `tests/test_contrast.py`: for every token pairing listed in
+   `design-doc.md` §5.2, compute the WCAG relative-luminance contrast ratio
+   and `assert ratio >= threshold` (4.5 for text, 3.0 for non-text).
+2. Implement `wcag_contrast(hex_a: str, hex_b: str) -> float` as a pure
+   function in `tests/test_contrast.py` or a shared helper (no extra
+   dependencies beyond `pytest`).
+3. Gates: `uv run pytest tests/test_contrast.py -v` passes; all 10 pairings
+   from the spec assert at or above their threshold.
+
+---
+
+#### Cross-cutting gates (all commits)
+
+- `uv run black .` — no reformatting needed.
+- `uv run ruff check .` — zero warnings.
+- `uv run mypy .` — error count must not increase above the t-31 baseline (4).
+- Offscreen smoke test: `QT_QPA_PLATFORM=offscreen uv run python -m pytest`
+  with any per-commit smoke tests listed above.
+- No `QCheckBox` or bare `QSlider` instance must remain in the final widget
+  tree after commit 4.
+
+
 ## Done
 
 ### Plan: fix token generation (t-11)
