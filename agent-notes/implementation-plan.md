@@ -147,7 +147,7 @@ relies on the files introduced before it:
 
 ---
 
-#### Commit 2 — "status chip and metric widgets" (t-43, t-44)
+#### Commit 2 — "status chip and metric widgets" (t-43, t-44) ✓ executed 2026-11-14
 
 **New files: `widgets/chip.py`, `widgets/metric.py`**
 
