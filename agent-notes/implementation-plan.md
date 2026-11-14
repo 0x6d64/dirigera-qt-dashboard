@@ -20,39 +20,46 @@ Plans use `###`, commits inside a plan use `####`.
 
 ## Active plans
 
-### Plan: dirigera 1.6.1 migration follow-ups (t-11 … t-16)
+### Plan: fix token generation (t-11)
 
-Goal: Adopt the capabilities added in `dirigera` 1.6.1 so the dashboard covers
-the new device types and controls, and fix the token generator that never
-worked against any released version.
+Goal: Fix `generate_token.py` to use the working `dirigera.hub.auth` challenge-response
+flow present in `dirigera` 1.6.1 instead of the non-existent `dirigera.create_token()`,
+fulfilling req-12, and update documentation.
 
-Affected files: `generate_token.py`, `README.md`, `dashboard.py`
+Affected files: `generate_token.py`, `README.md`, `doc/reqs.md`, `agent-notes/todo.md`
 
 #### Commit 1 — "fix token generation" (t-11)
 
-1. In `generate_token.py`, replace `dirigera.create_token(hub_ip)`
-   *(generate_token.py:32)* with the `dirigera.hub.auth` flow:
-   ```python
-   from dirigera.hub.auth import (
-       ALPHABET, CODE_LENGTH, random_code, send_challenge, get_token,
-   )
-   code_verifier = random_code(ALPHABET, CODE_LENGTH)
-   code = send_challenge(hub_ip, code_verifier)
-   input("Press the pairing button on your Dirigera hub, then press ENTER...")
-   token = get_token(hub_ip, code, code_verifier)
-   ```
-   Keep the script's existing output wording. Rationale over calling the
-   library's `generate-token` console script: we control the prompts and the
-   script name/UX stays the same.
-2. Drop the now-unused `import dirigera` *(generate_token.py:16)*.
-3. Adjust the module docstring and the README token section (~lines 43–56):
-   same command, but describe the new "press ENTER after pairing" step.
-4. Verify: `uv run python generate_token.py` with no args prints usage and
-   exits 1; imports resolve (`uv run python -c "import generate_token"`).
-   Full end-to-end generation needs a real hub and the pairing button —
-   manual check for the user.
+1. In `generate_token.py`:
+   - Replace `import dirigera` with importing `ALPHABET`, `CODE_LENGTH`,
+     `random_code`, `send_challenge`, and `get_token` from `dirigera.hub.auth`.
+   - In `main()`:
+     - Generate `code_verifier = random_code(ALPHABET, CODE_LENGTH)`.
+     - Send challenge: `code = send_challenge(hub_ip, code_verifier)`.
+     - Prompt user: `input("Press the pairing button on your Dirigera hub, then press ENTER...")`.
+     - Fetch token: `token = get_token(hub_ip, code, code_verifier)`.
+   - Keep existing banner formatting and error handling.
+   - Update module docstring and usage messages to reflect the two-step pairing flow.
+2. In `README.md`:
+   - In "Getting Your Dirigera Token" (~lines 43–57), clarify that the user needs to
+     press the pairing button on the hub and then press ENTER in the terminal.
+3. Update tracking docs:
+   - Mark `req-12` as implemented in `doc/reqs.md`.
+   - Check off `t-11` in `agent-notes/todo.md`.
+4. Verification:
+   - `uv run python generate_token.py` with no args prints usage and exits with code 1.
+   - `uv run python -c "import generate_token"` succeeds without error.
+   - Run unit smoke test with mocked `send_challenge` and `get_token` to verify execution flow and output.
+   - Gates: `uv run black .`, `uv run ruff check .`, `uv run mypy .`.
 
-#### Commit 2 — "device widgets for new device classes" (t-12, t-13)
+### Plan: dirigera 1.6.1 migration follow-ups (t-12 … t-16)
+
+Goal: Adopt the capabilities added in `dirigera` 1.6.1 so the dashboard covers
+the new device types and controls.
+
+Affected files: `dashboard.py`
+
+#### Commit 1 — "device widgets for new device classes" (t-12, t-13)
 
 1. t-12: in `add_blind_controls` *(dashboard.py:435–455)*, add Up / Down /
    Stop `QPushButton`s wired to a new
@@ -69,7 +76,7 @@ Affected files: `generate_token.py`, `README.md`, `dashboard.py`
 3. Gates; offscreen smoke test with `dict_to_electrical_sensor` and a `Blind`
    whose `capabilities.can_receive` contains `blindsState`.
 
-#### Commit 3 — "light color and temperature controls" (t-14)
+#### Commit 2 — "light color and temperature controls" (t-14)
 
 1. In `add_light_controls`, when
    `"colorTemperature" in light.capabilities.can_receive` and min/max bounds
@@ -85,7 +92,7 @@ Affected files: `generate_token.py`, `README.md`, `dashboard.py`
    `AssertionError` otherwise.
 4. Gates; offscreen smoke test invoking the handlers against a stubbed light.
 
-#### Commit 4 — "adaptive light profiles" (t-15) — schedule after t-17 if possible
+#### Commit 3 — "adaptive light profiles" (t-15) — schedule after t-17 if possible
 
 1. In `refresh_devices`, fetch `self.adaptive_profiles =
    self.hub.get_adaptive_profiles()` inside a guarded `try` (empty list on
@@ -102,7 +109,7 @@ Affected files: `generate_token.py`, `README.md`, `dashboard.py`
    because t-17 will move all of it into a worker; execute t-17 before this
    commit if scheduling allows.
 
-#### Commit 5 — "live updates via websocket" (t-16) — large, after t-17 and t-10 decision
+#### Commit 4 — "live updates via websocket" (t-16) — large, after t-17 and t-10 decision
 
 1. Add an `EventListenerThread(QThread)` wrapping
    `hub.create_event_listener(on_message=..., on_error=..., on_close=...)`;
