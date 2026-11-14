@@ -32,7 +32,7 @@ development branch is `refactor`.
 
 ## Requirements
 
-- Requirements live in `reqs.md` at the repository root.
+- Requirements live in `doc/reqs.md`.
 - Every requirement has a unique ID in the form `req-<number>` (e.g. `req-3`).
 - **Never reuse a requirement number.** IDs are permanent, like todo IDs: they
   survive edits, reordering, and removal.
