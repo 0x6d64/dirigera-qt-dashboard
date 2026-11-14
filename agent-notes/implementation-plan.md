@@ -178,7 +178,7 @@ Create a `widgets/` package (`widgets/__init__.py` empty).
 
 ---
 
-#### Commit 3 — "custom switch and slider widgets" (t-41, t-42)
+#### Commit 3 — "custom switch and slider widgets" (t-41, t-42) ✓ executed 2026-11-14
 
 **New files: `widgets/switch.py`, `widgets/slider.py`**
 

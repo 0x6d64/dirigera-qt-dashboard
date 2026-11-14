@@ -45,27 +45,23 @@ class MetricWidget(QWidget):
         )
 
         self._value_label = QLabel()
-        self._value_label.setStyleSheet(
-            f"""
+        self._value_label.setStyleSheet(f"""
             QLabel {{
                 color: {theme.TEXT};
                 font-size: {theme.FONT_METRIC}px;
                 font-weight: 600;
                 background-color: transparent;
             }}
-            """
-        )
+            """)
 
         self._unit_label = QLabel(unit)
-        self._unit_label.setStyleSheet(
-            f"""
+        self._unit_label.setStyleSheet(f"""
             QLabel {{
                 color: {theme.TEXT2};
                 font-size: {theme.FONT_CAPTION}px;
                 background-color: transparent;
             }}
-            """
-        )
+            """)
 
         value_layout.addWidget(self._value_label)
         value_layout.addWidget(self._unit_label)
@@ -73,15 +69,13 @@ class MetricWidget(QWidget):
 
         # Bottom row: Caption label
         self._caption_label = QLabel(caption)
-        self._caption_label.setStyleSheet(
-            f"""
+        self._caption_label.setStyleSheet(f"""
             QLabel {{
                 color: {theme.TEXT2};
                 font-size: {theme.FONT_CAPTION}px;
                 background-color: transparent;
             }}
-            """
-        )
+            """)
 
         outer_layout.addWidget(value_row)
         outer_layout.addWidget(self._caption_label)
