@@ -3,7 +3,7 @@
 import ipaddress
 import socket
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, cast
 
 import netifaces
 from getmac import get_mac_address
@@ -25,11 +25,14 @@ def get_local_networks() -> List[str]:
     """Get all local network ranges from all interfaces."""
     networks = []
     for interface in netifaces.interfaces():
-        addrs = netifaces.ifaddresses(interface)
+        # netifaces2 ships type hints that do not match its runtime API, so cast
+        # to the plain dict shape both netifaces and netifaces2 return.
+        addrs = cast(Dict[int, List[Dict[str, str]]], netifaces.ifaddresses(interface))
         if netifaces.AF_INET in addrs:
             for addr_info in addrs[netifaces.AF_INET]:
                 ip_addr = addr_info.get("addr")
-                netmask = addr_info.get("netmask")
+                # netifaces calls it "netmask", netifaces2 calls it "mask".
+                netmask = addr_info.get("netmask") or addr_info.get("mask")
                 if ip_addr and netmask and not ip_addr.startswith("127."):
                     try:
                         network = ipaddress.IPv4Network(
