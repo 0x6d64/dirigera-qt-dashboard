@@ -38,15 +38,16 @@ DEFAULT_BRIGHTNESS = 50
 class DiscoveryThread(QThread):
     """Background thread for network discovery."""
 
-    finished = pyqtSignal(list)  # List of (ip, mac) tuples
+    # Named discovery_done to avoid shadowing the built-in QThread.finished.
+    discovery_done = pyqtSignal(list)  # List of (ip, mac) tuples
 
     def run(self):
         """Run the discovery process."""
         try:
             hubs = discover_dirigera_hubs()
-            self.finished.emit(hubs)
+            self.discovery_done.emit(hubs)
         except Exception:
-            self.finished.emit([])
+            self.discovery_done.emit([])
 
 
 class HubSelectionDialog(QDialog):
@@ -130,7 +131,6 @@ class DirigeraDashboard(QMainWindow):
         self.hub: Optional[Hub] = None
         self.devices: List[Any] = []
         self.scenes: List[Scene] = []
-        self.device_widgets: Dict[str, QWidget] = {}
         self.init_ui()
         self.load_config()
 
@@ -247,7 +247,7 @@ class DirigeraDashboard(QMainWindow):
 
         # Create and start discovery thread
         self.discovery_thread = DiscoveryThread()
-        self.discovery_thread.finished.connect(
+        self.discovery_thread.discovery_done.connect(
             lambda hubs: self.on_discovery_complete(hubs, progress)
         )
         self.discovery_thread.start()
@@ -323,7 +323,6 @@ class DirigeraDashboard(QMainWindow):
         # Clear existing widgets and rebuild from the fetched data
         self.clear_layout(self.devices_layout)
         self.clear_layout(self.scenes_layout)
-        self.device_widgets.clear()
 
         self.devices = devices
         self.scenes = scenes
@@ -346,7 +345,6 @@ class DirigeraDashboard(QMainWindow):
                 device_widget = self.create_device_widget(device)
                 if device_widget:
                     room_layout.addWidget(device_widget)
-                    self.device_widgets[device.id] = device_widget
 
             self.devices_layout.insertWidget(
                 self.devices_layout.count() - 1, room_group
@@ -484,8 +482,9 @@ class DirigeraDashboard(QMainWindow):
         layout.addWidget(name_label)
 
         # Scene icon if available
-        if hasattr(scene.info, "icon") and scene.info.icon:
-            icon_label = QLabel(f"[{scene.info.icon}]")
+        icon_text = self.format_scene_icon(scene.info.icon)
+        if icon_text:
+            icon_label = QLabel(f"[{icon_text}]")
             icon_label.setStyleSheet("color: gray;")
             layout.addWidget(icon_label)
 
@@ -573,6 +572,14 @@ class DirigeraDashboard(QMainWindow):
             item = layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
+
+    @staticmethod
+    def format_scene_icon(icon: Any) -> str:
+        """Convert a scene icon enum value into a readable label."""
+        if not icon:
+            return ""
+        value = str(icon.value)
+        return value.removeprefix("scenes_").replace("_", " ")
 
     @staticmethod
     def get_device_name(device: Any) -> str:
