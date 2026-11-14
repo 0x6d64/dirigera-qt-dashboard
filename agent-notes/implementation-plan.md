@@ -20,82 +20,6 @@ Plans use `###`, commits inside a plan use `####`.
 
 ## Active plans
 
-### Plan: Correctness & runtime bugs (t-1 … t-10)
-
-Goal: Make the dashboard actually usable against a real hub: devices render,
-toggle in the right direction, failed commands don't corrupt the UI, and
-connect/refresh failures are visible instead of silent.
-Supersedes the earlier "Fix the priority-A blockers" plan entry (t-1–t-4 and
-t-11 content is folded in here / into the migration plan).
-
-Affected files: `dashboard.py` (all three commits)
-
-#### Commit 1 — "fix device attribute and room lookups" (t-1, t-2, t-3, t-4)
-
-1. `add_light_controls` *(dashboard.py:403)*:
-   `on_off_checkbox.setChecked(light.attributes.is_on)`
-2. `add_light_controls` *(dashboard.py:404)* and `add_outlet_controls`
-   *(dashboard.py:461)*: replace the `stateChanged` int/enum comparison with
-   the `toggled(bool)` signal:
-   ```python
-   on_off_checkbox.toggled.connect(
-       lambda checked: self.toggle_light(light, checked)
-   )
-   ```
-   (analogous for `self.toggle_outlet(outlet, checked)`); handler signatures
-   stay as they are.
-3. `get_room_name` *(dashboard.py:559–562)*: replace the dict access with
-   ```python
-   room = getattr(device, "room", None)
-   if room is None:
-       return "Unknown Room"
-   return room.name or "Unknown Room"
-   ```
-4. Gates: `uv run black . && uv run ruff check . && uv run mypy .`
-   — mypy must drop from 6 to 3 errors in `dashboard.py` (the remaining 3 are
-   t-31 scope).
-5. Offscreen smoke check (no hub): with `QT_QPA_PLATFORM=offscreen`, build a
-   `Light` and an `Outlet` via `dict_to_light` / `dict_to_outlet` with a stub
-   client, call `create_device_widget(device)` and `get_room_name(device)`;
-   assert no `AttributeError` and that a checked toggle emits
-   `toggle_light(light, True)`.
-
-#### Commit 2 — "harden connect and refresh error handling" (t-5, t-6, t-7)
-
-1. t-7 *(dashboard.py:305–358)*: in `refresh_devices`, fetch devices and
-   scenes into local variables first; only clear the layouts and rebuild after
-   both fetches succeed. On fetch failure: show the error and keep the current
-   UI as-is.
-2. t-6 *(dashboard.py:282–303)*: in `connect_to_hub`, after constructing
-   `Hub(...)`, probe with `self.hub.get("/home")` inside the same `try`; only
-   set the green status and enable Refresh when the probe succeeds. Note: this
-   is still blocking I/O on the GUI thread by design — t-17 will move it into
-   a worker; do not solve that here.
-3. t-5 *(dashboard.py:494–540)*: pass the owning control into each handler's
-   lambda closure. On command failure: call `device.reload()` inside a guarded
-   `try`, then resync the control from the reloaded attributes
-   (checkbox from `.attributes.is_on`, sliders from
-   `.attributes.light_level` / `.attributes.blinds_current_level`), and keep
-   the existing `QMessageBox` warning.
-4. Gates; extend the offscreen smoke test: stub client whose
-   `set_light`/`set_light_level` raises, assert the checkbox/slider reverts to
-   the device's real state and no unhandled exception escapes.
-
-#### Commit 3 — "small dashboard cleanups" (t-8, t-9, t-10)
-
-1. t-8 *(dashboard.py:480–482)*: render scene icons via a small helper, e.g.
-   `icon.value.removeprefix("scenes_").replace("_", " ")`
-   → "arrive home"; drop the label if the value is empty.
-2. t-9 *(dashboard.py:41,250)*: rename `DiscoveryThread.finished` to
-   `discovery_done` and update the `connect(...)` call in `discover_hubs`
-   (removes the shadowing of the built-in `QThread.finished`).
-3. t-10 *(dashboard.py:133,313,336)*: delete the unused `device_widgets`
-   registry. Note: t-16 (live updates) will likely reintroduce a registry —
-   if t-16 is scheduled first, skip t-10 instead and record the decision in
-   `todo.md`.
-4. Gates; mypy error count must stay at 3 (t-31 untouched); offscreen smoke
-   test from commit 1 still passes.
-
 ### Plan: dirigera 1.6.1 migration follow-ups (t-11 … t-16)
 
 Goal: Adopt the capabilities added in `dirigera` 1.6.1 so the dashboard covers
@@ -201,3 +125,85 @@ Affected files: `generate_token.py`, `README.md`, `dashboard.py`
 - Execute the "Correctness & runtime bugs" plan first: t-17 (worker threads)
   unblocks t-15/t-16, and t-1–t-4 must land before any real-hub testing.
 - t-11 is independent and can be committed at any time.
+
+## Done
+
+### Plan: Correctness & runtime bugs (t-1 … t-10)
+
+> **Executed 2026-11-14** — commits `f0740fd` (t-1–t-4), `365ffce`
+> (t-5–t-7), `c9290d2` (t-8–t-10). Offscreen smoke checks passed; mypy
+> settled at 4 remaining errors, all t-31 scope.
+
+Goal: Make the dashboard actually usable against a real hub: devices render,
+toggle in the right direction, failed commands don't corrupt the UI, and
+connect/refresh failures are visible instead of silent.
+Supersedes the earlier "Fix the priority-A blockers" plan entry (t-1–t-4 and
+t-11 content is folded in here / into the migration plan).
+
+Affected files: `dashboard.py` (all three commits)
+
+#### Commit 1 — "fix device attribute and room lookups" (t-1, t-2, t-3, t-4)
+
+1. `add_light_controls` *(dashboard.py:403)*:
+   `on_off_checkbox.setChecked(light.attributes.is_on)`
+2. `add_light_controls` *(dashboard.py:404)* and `add_outlet_controls`
+   *(dashboard.py:461)*: replace the `stateChanged` int/enum comparison with
+   the `toggled(bool)` signal:
+   ```python
+   on_off_checkbox.toggled.connect(
+       lambda checked: self.toggle_light(light, checked)
+   )
+   ```
+   (analogous for `self.toggle_outlet(outlet, checked)`); handler signatures
+   stay as they are.
+3. `get_room_name` *(dashboard.py:559–562)*: replace the dict access with
+   ```python
+   room = getattr(device, "room", None)
+   if room is None:
+       return "Unknown Room"
+   return room.name or "Unknown Room"
+   ```
+4. Gates: `uv run black . && uv run ruff check . && uv run mypy .`
+   — mypy must drop to only the t-31 errors (`pyqtSignal` at dashboard.py:41
+   and the two `clear_layout` guards, 4 errors total).
+5. Offscreen smoke check (no hub): with `QT_QPA_PLATFORM=offscreen`, build a
+   `Light` and an `Outlet` via `dict_to_light` / `dict_to_outlet` with a stub
+   client, call `create_device_widget(device)` and `get_room_name(device)`;
+   assert no `AttributeError` and that a checked toggle emits
+   `toggle_light(light, True)`.
+
+#### Commit 2 — "harden connect and refresh error handling" (t-5, t-6, t-7)
+
+1. t-7 *(dashboard.py:305–358)*: in `refresh_devices`, fetch devices and
+   scenes into local variables first; only clear the layouts and rebuild after
+   both fetches succeed. On fetch failure: show the error and keep the current
+   UI as-is.
+2. t-6 *(dashboard.py:282–303)*: in `connect_to_hub`, after constructing
+   `Hub(...)`, probe with `self.hub.get("/home")` inside the same `try`; only
+   set the green status and enable Refresh when the probe succeeds. Note: this
+   is still blocking I/O on the GUI thread by design — t-17 will move it into
+   a worker; do not solve that here.
+3. t-5 *(dashboard.py:494–540)*: pass the owning control into each handler's
+   lambda closure. On command failure: call `device.reload()` inside a guarded
+   `try`, then resync the control from the reloaded attributes
+   (checkbox from `.attributes.is_on`, sliders from
+   `.attributes.light_level` / `.attributes.blinds_current_level`), and keep
+   the existing `QMessageBox` warning.
+4. Gates; extend the offscreen smoke test: stub client whose
+   `set_light`/`set_light_level` raises, assert the checkbox/slider reverts to
+   the device's real state and no unhandled exception escapes.
+
+#### Commit 3 — "small dashboard cleanups" (t-8, t-9, t-10)
+
+1. t-8 *(dashboard.py:480–482)*: render scene icons via a small helper, e.g.
+   `icon.value.removeprefix("scenes_").replace("_", " ")`
+   → "arrive home"; drop the label if the value is empty.
+2. t-9 *(dashboard.py:41,250)*: rename `DiscoveryThread.finished` to
+   `discovery_done` and update the `connect(...)` call in `discover_hubs`
+   (removes the shadowing of the built-in `QThread.finished`).
+3. t-10 *(dashboard.py:133,313,336)*: delete the unused `device_widgets`
+   registry. Note: t-16 (live updates) will likely reintroduce a registry —
+   if t-16 is scheduled first, skip t-10 instead and record the decision in
+   `todo.md`.
+4. Gates; mypy error count must stay at 4 (t-31 untouched); offscreen smoke
+   test from commit 1 still passes.
