@@ -62,7 +62,7 @@ take the next free number (see `AGENTS.md`).
 
 ## Repository & documentation
 
-- [ ] **t-35 [B·S]** Get `refactor` merged: `master` is still at the initial commit while all work lives on `refactor`.
+- [x] **t-35 [B·S]** Get `refactor` merged: `master` is still at the initial commit while all work lives on `refactor`. *(done: `master` merged `rc1` as `4031d1e`, so all work through the design-doc backlog is on `master`; the working branch is now `improve-ui`)*
 - [ ] **t-36 [C·S]** Update README: `netifaces2` requirement, Python 3.12/uv setup, and known discovery limitations. *(token-generation docs were updated in t-11; this covers the remaining gaps)*
 - [ ] **t-37 [C·S]** Add a `[project.scripts]` entry point (e.g. `dirigera-dashboard = "main:main"`) so the app can be launched without `python main.py`.
 - [ ] **t-38 [C·M]** Add package metadata (license expression, classifiers, keywords) to `pyproject.toml`.

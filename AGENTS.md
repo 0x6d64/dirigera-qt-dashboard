@@ -7,7 +7,7 @@ Read this file before making changes.
 
 PyQt6 desktop dashboard for IKEA DIRIGERA hubs. Python 3.12, managed with `uv`;
 talks to the hub through the `dirigera` library (currently 1.6.1). The active
-development branch is `refactor`.
+development branch is `improve-ui`.
 
 ## Task management
 
@@ -101,4 +101,4 @@ development branch is `refactor`.
   and wait.
 - Small, focused commits with short imperative messages (existing history is
   lowercase, e.g. "update packages").
-- The working branch is `refactor`; do not commit directly to `master`.
+- The working branch is `improve-ui`; do not commit directly to `master`.
