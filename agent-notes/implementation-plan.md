@@ -29,9 +29,11 @@ profiles, and live updates.
 
 Affected files: `widgets/card.py`, `dashboard.py`
 
-#### Commit 1 — "verify blind controls" (t-12)
+#### Commit 1 — "verify blind controls" (t-12) ✓ executed 2026-11-15
 
-Status: implemented alongside t-45; this commit only verifies and closes it.
+> Capability guard fixed in the same pass: `hasattr(attributes, "blinds_state")`
+> was always true on the pydantic model, so every blind got Up/Down/Stop; it
+> now requires an actual value. Verified offscreen — see step 3.
 
 1. `widgets/card.py` renders Up / Down / Stop buttons for `blinds` devices
    when the device reports the capability (`"blindsState"` in

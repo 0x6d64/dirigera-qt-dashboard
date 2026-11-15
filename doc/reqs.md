@@ -19,15 +19,19 @@ during implementation. Each entry cites its origin.
   may only be cleared and rebuilt after devices and scenes have both been
   fetched successfully. *(t-7, implemented)*
 - **req-3** — After a failed device command, the affected control
-  (checkbox/slider) must be resynchronized with the device's actual state so
-  the UI reflects reality, not the intended value. *(t-5, implemented)*
+  (switch/slider) must be resynchronized with the device's actual state so
+  the UI reflects reality, not the intended value. *(t-5, implemented;
+  wording updated after the t-45 card refactor replaced checkboxes with
+  switches)*
 - **req-4** — Blocking network I/O must run in a worker thread, never on the
   GUI thread. *(t-17; also stated as a rule in `AGENTS.md`)*
 - **req-5** — Hub discovery must not depend solely on a static MAC OUI list;
   hubs must be identified by their unauthenticated API response, with the OUI
   list kept only as a fallback. *(t-20, implemented)*
 - **req-6** — Slider-based controls must not send one hub command per tick;
-  commands must be debounced or sent on release. *(t-18, open)*
+  commands must be debounced or sent on release. *(t-18; the "sent on release"
+  half is implemented via `LabeledSlider.released` in `widgets/card.py`;
+  t-18 stays open for the debounce leftovers)*
 - **req-7** — The hub token must not be stored in plaintext as the primary
   mechanism; an environment variable or OS keyring is preferred, with
   `config.ini` as fallback. *(t-29, open)*

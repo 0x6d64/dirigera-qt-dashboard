@@ -25,7 +25,7 @@ take the next free number (see `AGENTS.md`).
 ## dirigera 1.6.1 migration follow-ups
 
 - [x] **t-11 [A·S]** Fix `generate_token.py`: `dirigera.create_token()` does not exist (also not in 1.2.x) *(generate_token.py:32)*. Use the `dirigera.hub.auth` flow (`send_challenge` + `get_token`) or call the library's `generate-token` console script. Update README usage accordingly.
-- [ ] **t-12 [C·S]** Add blind up/down/stop controls using the new `BlindsStateEnum` / `Blind.set_state()`. *(superseded by t-45 for the card design; implement the control logic here, visual polish in t-45)*
+- [x] **t-12 [C·S]** Add blind up/down/stop controls using the new `BlindsStateEnum` / `Blind.set_state()`. *(superseded by t-45 for the card design; implemented there, capability guard fixed and verified offscreen)*
 - [ ] **t-14 [C·M]** Add light color temperature / color controls (`set_color_temperature`, `set_light_color`). *(control logic; visual polish in t-42 and t-45)*
 - [ ] **t-15 [C·L]** Expose adaptive light profiles via `hub.get_adaptive_profiles()` and `activate_adaptive_profile()`.
 - [ ] **t-16 [C·L]** Replace manual Refresh with live updates using `Hub.create_event_listener()` (websocket). *(schedule after t-17)*
