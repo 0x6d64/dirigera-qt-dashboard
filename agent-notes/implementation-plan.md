@@ -126,8 +126,9 @@ and grid layout, a header bar with segmented navigation, and three views
 Affected files: `theme.py` (new), `widgets/switch.py` (new),
 `widgets/slider.py` (new), `widgets/chip.py` (new), `widgets/metric.py` (new),
 `widgets/card.py` (new), `widgets/grid.py` (new), `widgets/segments.py` (new),
-`widgets/connection.py` (new), `widgets/icons.py` (new),
-`dashboard.py` (heavily refactored), `main.py` (stylesheet injection)
+`widgets/connection.py` (new), `widgets/energy.py` (new),
+`widgets/icons.py` (new), `dashboard.py` (heavily refactored), `main.py`
+(stylesheet injection)
 
 #### Ordering note
 
@@ -390,10 +391,24 @@ Create a `widgets/` package (`widgets/__init__.py` empty).
 
 ---
 
-#### Commit 8 — "Energy view" (t-49)
+#### Commit 8 — "Energy view" (t-49) ✓ executed 2026-11-15
 
 > The plan's original note said "schedule after t-17"; t-17 is done (commit
 > 7a), so the refresh that feeds this view no longer blocks the GUI thread.
+>
+> Deviations from the plan text:
+> - `EnergyCard` is its own widget in `widgets/energy.py` instead of a
+>   `DeviceCard`: the content zone is a power metric plus an A/V caption, not
+>   on/off controls, and an unmetered device must show no metric row at all.
+> - The tab bar is hidden: with three views the segmented switcher is the only
+>   navigation, and a visible tab bar duplicated it (`design-doc.md` §4.2).
+> - No totals are shown: §9.4 leaves per-home versus per-room totals `[open]`.
+> - An empty home shows a centred "No energy data" caption instead of an empty
+>   grid.
+>
+> Metering is gated on `current_active_power` being present; both
+> `OutletAttributes` and `ElectricalSensorAttributes` carry it in 1.6.1, so the
+> same card works for both device types.
 
 **Add Energy tab to `dashboard.py`**
 

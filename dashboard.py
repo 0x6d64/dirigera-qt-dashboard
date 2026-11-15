@@ -33,6 +33,7 @@ from network_discovery import discover_dirigera_hubs
 from widgets.card import DeviceCard, device_sort_key
 from widgets.chip import StatusChip
 from widgets.connection import ConnectionBlock
+from widgets.energy import EnergyView
 from widgets.grid import CardGrid
 from widgets.segments import SegmentedControl
 from widgets.slider import LabeledSlider
@@ -293,6 +294,14 @@ class DirigeraDashboard(QMainWindow):
         scenes_tab_layout.addWidget(self.scenes_scroll)
         self.tab_widget.addTab(self.scenes_tab, "Scenes")
 
+        # Energy tab (t-49)
+        self.energy_view = EnergyView()
+        self.tab_widget.addTab(self.energy_view, "Energy")
+
+        # The segmented switcher is the only navigation; a visible tab bar
+        # would duplicate it (design-doc.md §4.2).
+        self.tab_widget.tabBar().hide()
+
         # Views page: stale-data caption above the tabs, so a failed refresh
         # can say how old the visible data is (design-doc.md §3.1 row 4).
         self.views_page = QWidget()
@@ -341,10 +350,6 @@ class DirigeraDashboard(QMainWindow):
 
         self.view_switcher = SegmentedControl(["Rooms", "Scenes", "Energy"])
         self.view_switcher.current_changed.connect(self.on_view_selected)
-        energy = self.view_switcher.button(VIEW_ENERGY)
-        # The Energy view itself is t-49; keep the segment visible but inert.
-        energy.setEnabled(False)
-        energy.setToolTip("Energy view arrives in t-49")
         layout.addWidget(self.view_switcher)
 
         self.refresh_button = QPushButton("Refresh")
@@ -376,9 +381,7 @@ class DirigeraDashboard(QMainWindow):
         The search field stays disabled until t-50 wires filtering: an enabled
         field that filters nothing would be worse than an inert one.
         """
-        for index, button in enumerate(self.view_switcher.buttons()):
-            if index == VIEW_ENERGY:
-                continue  # the Energy view arrives in t-49
+        for button in self.view_switcher.buttons():
             button.setEnabled(enabled)
 
     def on_view_selected(self, index: int) -> None:
@@ -564,6 +567,20 @@ class DirigeraDashboard(QMainWindow):
             self.scenes_layout.insertWidget(
                 self.scenes_layout.count() - 1, scene_widget
             )
+
+        # Energy view: outlets and electrical sensors grouped by room (§9.4).
+        energy_by_room: Dict[str, List[Any]] = {}
+        for device in self.devices:
+            if not self.is_energy_device(device):
+                continue
+            room_name = self.get_room_name(device)
+            energy_by_room.setdefault(room_name, []).append(device)
+        self.energy_view.set_rooms(
+            [
+                (self.format_room_label(room), sorted(devices, key=device_sort_key))
+                for room, devices in sorted(energy_by_room.items())
+            ]
+        )
 
         self.set_status_text(
             f"Found {len(self.devices)} devices in {len(devices_by_room)} rooms "
@@ -780,6 +797,11 @@ class DirigeraDashboard(QMainWindow):
         if not name:
             return "Unknown room"
         return name[0].upper() + name[1:]
+
+    @staticmethod
+    def is_energy_device(device: Any) -> bool:
+        """Return True for devices that can report energy data (§9.4)."""
+        return getattr(device, "device_type", "") in ("outlet", "electrical_sensor")
 
     @staticmethod
     def get_room_name(device: Any) -> str:
