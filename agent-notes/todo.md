@@ -59,6 +59,7 @@ take the next free number (see `AGENTS.md`).
 - [ ] **t-32 [B·M]** Add a small test suite (also adds `pytest` to the dev group): discovery helpers (`is_ikea_device`, network parsing with mocked `netifaces`) and mocked-hub smoke tests for `refresh_devices`.
 - [ ] **t-33 [B·S]** Add CI (GitHub Actions) running `ruff check`, `black --check`, `mypy` and `pytest` on Python 3.12.
 - [ ] **t-34 [C·M]** Enable `check_untyped_defs` and annotate the GUI methods so mypy actually checks their bodies.
+- [ ] **t-55 [B·M]** Create a small smoke test suite: port the ad-hoc offscreen scripts written during the design work (`t-1`, `t-2`, `t-12`, `t-17`, `t-46`, `t-47`, `t-48`, `t-49`) into `pytest` under `tests/`, with a shared `QT_QPA_PLATFORM=offscreen` `QApplication` fixture, silent `QMessageBox` stub, and the worker `settle()` helper. Complements t-32 (which adds `pytest` and covers discovery helpers plus `refresh_devices`) rather than replacing it: this one keeps the widget/state assertions that already exist as throwaway scripts. Depends on t-32 for the dev-dependency and layout; feeds t-33.
 
 ## Repository & documentation
 
