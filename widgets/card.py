@@ -261,9 +261,12 @@ class DeviceCard(QFrame):
             can_receive = getattr(
                 getattr(self.device, "capabilities", None), "can_receive", []
             )
-            if "blindsState" in can_receive or hasattr(
-                self.device.attributes, "blinds_state"
-            ):
+            # pydantic models always expose the field, so hasattr() would be
+            # true even without support — check for an actual value instead.
+            supports_state = (
+                getattr(self.device.attributes, "blinds_state", None) is not None
+            )
+            if "blindsState" in can_receive or supports_state:
                 btn_row = QHBoxLayout()
                 btn_row.setContentsMargins(0, 0, 0, 0)
                 btn_row.setSpacing(theme.SP8)
