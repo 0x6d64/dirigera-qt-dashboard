@@ -6,8 +6,7 @@ Read this file before making changes.
 ## Project
 
 PyQt6 desktop dashboard for IKEA DIRIGERA hubs. Python 3.12, managed with `uv`;
-talks to the hub through the `dirigera` library (currently 1.6.1). The active
-development branch is `improve-ui`.
+talks to the hub through the `dirigera` library (currently 1.6.1).
 
 ## Task management
 
@@ -101,4 +100,7 @@ development branch is `improve-ui`.
   and wait.
 - Small, focused commits with short imperative messages (existing history is
   lowercase, e.g. "update packages").
-- The working branch is `improve-ui`; do not commit directly to `master`.
+- **Do not switch branches unless the user asks for it.** The plan workflow
+  above is the only exception: create the `plan/<slug>` branch when a plan
+  starts, and switch back to merge it when the plan is complete.
+- Do not commit directly to `master`.
