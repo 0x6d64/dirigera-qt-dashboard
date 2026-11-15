@@ -428,9 +428,9 @@ Create a `widgets/` package (`widgets/__init__.py` empty).
 
 ---
 
-#### Commit 9 — "scene tiles and SVG icon system" (t-51, t-52)
+#### Commit 9 — "scene tiles and SVG icon system" (t-51, t-52) ✓ executed 2026-11-15
 
-**New file: `widgets/icons.py`; refactor scenes layout in `dashboard.py`**
+**New file: `widgets/icons.py`; refactor scenes layout in `dashboard.py`; new `widgets/scene.py`**
 
 **t-52 — `widgets/icons.py`**
 
