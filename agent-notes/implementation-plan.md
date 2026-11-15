@@ -20,54 +20,59 @@ Plans use `###`, commits inside a plan use `####`.
 
 ## Active plans
 
-### Plan: dirigera 1.6.1 migration follow-ups (t-12 … t-16)
+### Plan: dirigera 1.6.1 migration follow-ups (t-12, t-14 … t-16)
 
-Goal: Adopt the capabilities added in `dirigera` 1.6.1 so the dashboard covers
-the new device types and controls.
+Goal: Adopt the capabilities added in `dirigera` 1.6.1 that the card UI does
+not expose yet. t-12 and t-13 landed with the `DeviceCard` refactor (design
+plan commit 4); what remains is colour/temperature controls, adaptive
+profiles, and live updates.
 
-Affected files: `dashboard.py`
+Affected files: `widgets/card.py`, `dashboard.py`
 
-#### Commit 1 — "device widgets for new device classes" (t-12, t-13)
+#### Commit 1 — "verify blind controls" (t-12)
 
-1. t-12: in `add_blind_controls` *(dashboard.py:435–455)*, add Up / Down /
-   Stop `QPushButton`s wired to a new
-   `set_blind_state(blind, state: BlindsStateEnum)` handler calling
-   `blind.set_state(state)` (existing warning-on-error pattern). Import
-   `BlindsStateEnum` from `dirigera.devices.blinds`. Enable the buttons only
-   when `"blindsState" in blind.capabilities.can_receive`.
-2. t-13 *(dashboard.py:391)*: add an `electricalSensor` branch to
-   `create_device_widget` that calls a new read-only
-   `add_electrical_sensor_controls(layout, device)` showing labels from
-   `ElectricalSensorAttributes`: `current_active_power` (W),
-   `current_voltage` (V), `current_amps` (A), `total_energy_consumed` (kWh),
-   `–` when `None`. No controls — the device cannot receive anything.
-3. Gates; offscreen smoke test with `dict_to_electrical_sensor` and a `Blind`
-   whose `capabilities.can_receive` contains `blindsState`.
+Status: implemented alongside t-45; this commit only verifies and closes it.
+
+1. `widgets/card.py` renders Up / Down / Stop buttons for `blinds` devices
+   when the device reports the capability (`"blindsState"` in
+   `capabilities.can_receive`, or a `blinds_state` attribute exists), and
+   emits the action label through the `on_blind_state` callback.
+2. `dashboard.py` `set_blind_state()` maps `"Up"` / `"Down"` / `"Stop"` to
+   `BlindsStateEnum.UP` / `DOWN` / `STOPPED` and calls `blind.set_state(...)`,
+   keeping the warning-on-error pattern.
+3. Offscreen smoke test: a `Blind` with `blindsState` in `can_receive` renders
+   three buttons, and each triggers `set_state` with the matching enum; a
+   `Blind` without the capability renders none.
+4. Close t-12 in `todo.md` once the smoke test passes.
 
 #### Commit 2 — "light color and temperature controls" (t-14)
 
-1. In `add_light_controls`, when
-   `"colorTemperature" in light.capabilities.can_receive` and min/max bounds
-   are present: add a color-temperature slider spanning
-   `attributes.color_temperature_min` … `color_temperature_max` (Kelvin; the
-   library normalizes mireds internally) and send on `sliderReleased` via
-   `light.set_color_temperature(value)`.
-2. When `"colorHue"` / `"colorSaturation"` are in `can_receive`: add a
+1. In the light control zone of `widgets/card.py`, add an optional
+   `on_color_temperature` callback (same pattern as `on_brightness`). When
+   `"colorTemperature" in capabilities.can_receive` and min/max bounds are
+   present, add a `LabeledSlider` spanning `attributes.color_temperature_min`
+   … `color_temperature_max` (Kelvin; the library normalizes mireds
+   internally) that emits on release (`released`), per req-6.
+2. When `"colorHue"` / `"colorSaturation"` are in `can_receive`, add a
    "Color…" button opening `QColorDialog`; convert the picked color with
-   `color.getHsvF()` (hue × 360, saturation × 100) and call
-   `light.set_light_color(hue, saturation)`.
-3. Every control behind a capability check — the library raises
+   `color.getHsvF()` (hue × 360, saturation × 100).
+3. Handlers in `dashboard.py` (`set_light_color_temperature`,
+   `set_light_color`) call `light.set_color_temperature(value)` and
+   `light.set_light_color(hue, saturation)`, reusing the
+   `sync_control_from_device` revert-on-failure pattern.
+4. Every control behind a capability check — the library raises
    `AssertionError` otherwise.
-4. Gates; offscreen smoke test invoking the handlers against a stubbed light.
+5. Gates; offscreen smoke test invoking the handlers against a stubbed light.
 
 #### Commit 3 — "adaptive light profiles" (t-15) — schedule after t-17 if possible
 
 1. In `refresh_devices`, fetch `self.adaptive_profiles =
    self.hub.get_adaptive_profiles()` inside a guarded `try` (empty list on
    failure — older hubs don't expose profiles).
-2. In `add_light_controls`, if profiles exist: add a `QComboBox` per light
-   with "(manual)" plus profile names, preselecting the profile from
-   `light.adaptive_profile.id` (new 1.6.1 field).
+2. Extend `DeviceCard` (constructor + factory call in `dashboard.py`) to
+   accept the available profiles and, in the light control zone, add a
+   `QComboBox` with "(manual)" plus profile names, preselecting the profile
+   from `light.adaptive_profile.id` (new 1.6.1 field).
 3. Handler `set_light_profile(light, profile_id)`: activating calls
    `light.activate_adaptive_profile(profile_id)` then `light.reload()`;
    choosing "(manual)" is a no-op (any manual change already ends adaptive
@@ -97,8 +102,16 @@ Affected files: `dashboard.py`
 
 #### Ordering & dependencies
 
-- Execute the "Correctness & runtime bugs" plan first: t-17 (worker threads)
-  unblocks t-15/t-16, and t-1–t-4 must land before any real-hub testing.
+- The "Correctness & runtime bugs" plan (t-1 … t-10) and token generation
+  (t-11) are done; no prerequisite work remains there.
+- Design plan commits 1–4 are done (t-40 … t-45); t-13 was closed by t-45 and
+  t-12 by this plan's commit 1.
+- Next up is the design plan's commits 5–10 (t-46 … t-53). Execute t-46 before
+  the remaining migration commits: it rewrites the room/grid layout these
+  controls render into, and its stable card ordering is the prerequisite for
+  reflows that keep `req-2` intact.
+- t-17 (worker threads) still gates t-15 and t-16, both of which add blocking
+  hub calls to the connect/refresh flow.
 
 ---
 
@@ -243,6 +256,9 @@ Create a `widgets/` package (`widgets/__init__.py` empty).
      remotes.
 2. In `dashboard.py`, replace `create_device_widget` calls with
    `DeviceCard(device)`.
+   Note: in the executed refactor, `create_device_widget()` was kept as a thin
+   factory that injects the action handlers into `DeviceCard` — keep that
+   indirection for later commits that add callbacks.
 3. Gates: offscreen smoke tests for each device type; assert no
    `QCheckBox` or bare `QSlider` remains in the widget tree.
 
