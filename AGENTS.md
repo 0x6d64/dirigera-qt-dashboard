@@ -30,6 +30,25 @@ development branch is `refactor`.
 - One implementation plan entry per task or coherent task group, with concrete
   steps, affected files, and verification steps.
 
+### Plan workflow (branches)
+
+- **Executing a plan happens on a dedicated branch.** Before the first plan
+  commit, create `plan/<short-slug>` (e.g. `plan/responsive-grid`,
+  `plan/light-color-controls`) from the current working branch.
+- Commit each plan step to that branch. Bookkeeping that belongs to the plan
+  (checking off `t-` items, execution markers in the plan) goes on the same
+  branch.
+- When the plan is complete — all commits done and the gates green — merge the
+  branch back into the branch it was created from **with a merge commit**
+  (`git merge --no-ff`; the repo config already defaults to `merge.ff=false`),
+  then delete the merged branch (`git branch -d <branch>`).
+- Starting a plan is the standing promotion for commits made under this rule.
+  It does **not** promote unrelated changes: keep the branch limited to the
+  plan's scope.
+- If a plan is abandoned or partially executed, do not merge; report the state
+  and leave the decision to the user.
+- One plan per branch. Do not mix commits from two plans on one branch.
+
 ## Requirements
 
 - Requirements live in `doc/reqs.md`.
