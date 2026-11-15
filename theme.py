@@ -189,6 +189,20 @@ QLabel[role="caption"][tone="danger"] {{
     color: {DANGER};
 }}
 
+/* ── Connection block (design-doc.md §8.12) ─────────────────────────── */
+QFrame[role="connectionCard"] {{
+    background-color: {SURFACE};
+    border: 1px solid {BORDER};
+    border-radius: {RADIUS_CARD}px;
+}}
+
+QLabel[role="cardTitle"] {{
+    background-color: transparent;
+    color: {TEXT};
+    font-size: {FONT_TITLE}px;
+    font-weight: 600;
+}}
+
 /* ── Line edits / search field ──────────────────────────────────────── */
 QLineEdit {{
     background-color: {SUNKEN};

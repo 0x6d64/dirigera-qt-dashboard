@@ -1,5 +1,6 @@
 import configparser
 import os
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from dirigera import Hub
@@ -21,6 +22,7 @@ from PyQt6.QtWidgets import (
     QProgressDialog,
     QPushButton,
     QScrollArea,
+    QStackedWidget,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -30,6 +32,7 @@ import theme
 from network_discovery import discover_dirigera_hubs
 from widgets.card import DeviceCard, device_sort_key
 from widgets.chip import StatusChip
+from widgets.connection import ConnectionBlock
 from widgets.grid import CardGrid
 from widgets.segments import SegmentedControl
 from widgets.slider import LabeledSlider
@@ -37,6 +40,11 @@ from widgets.switch import ToggleSwitch
 
 # Constants
 DEFAULT_BRIGHTNESS = 50
+
+# View switcher segments, in display order (design-doc.md §4.2).
+VIEW_ROOMS = 0
+VIEW_SCENES = 1
+VIEW_ENERGY = 2
 
 
 class DiscoveryThread(QThread):
@@ -143,6 +151,8 @@ class DirigeraDashboard(QMainWindow):
         self.hub: Optional[Hub] = None
         self.devices: List[Any] = []
         self.scenes: List[Scene] = []
+        self._hub_ip: Optional[str] = None
+        self._last_refresh: Optional[datetime] = None
         self.init_ui()
         self.load_config()
 
@@ -155,11 +165,13 @@ class DirigeraDashboard(QMainWindow):
                 config.read(config_path)
                 if "hub" in config:
                     if "ip_address" in config["hub"]:
-                        self.ip_input.setText(config["hub"]["ip_address"])
+                        self.connection_block.ip_input.setText(
+                            config["hub"]["ip_address"]
+                        )
                     if "token" in config["hub"]:
                         token = config["hub"]["token"]
                         if token and token != "YOUR_TOKEN_HERE":
-                            self.token_input.setText(token)
+                            self.connection_block.token_input.setText(token)
             except Exception:
                 pass  # Silently ignore config errors
 
@@ -188,11 +200,17 @@ class DirigeraDashboard(QMainWindow):
         status_row_layout.addStretch()
         main_layout.addWidget(status_row)
 
-        # Connection inputs stay reachable until t-48 moves them into the
-        # centred not-connected block.
-        main_layout.addWidget(self.build_connection_row())
+        # Content area: the centred connection block until a hub is
+        # connected, then the device and scene views (design-doc.md §9.1).
+        self.content_stack = QStackedWidget()
+        main_layout.addWidget(self.content_stack, 1)
 
-        # Tabs for Devices and Scenes (become views with t-48 / t-49)
+        self.connection_block = ConnectionBlock()
+        self.connection_block.discover_requested.connect(self.discover_hubs)
+        self.connection_block.connect_requested.connect(self.connect_to_hub)
+        self.content_stack.addWidget(self.connection_block)
+
+        # Tabs for Devices and Scenes (become views with t-49)
         self.tab_widget = QTabWidget()
         self.tab_widget.currentChanged.connect(self.on_tab_changed)
 
@@ -228,7 +246,23 @@ class DirigeraDashboard(QMainWindow):
         scenes_tab_layout.addWidget(self.scenes_scroll)
         self.tab_widget.addTab(self.scenes_tab, "Scenes")
 
-        main_layout.addWidget(self.tab_widget, 1)
+        # Views page: stale-data caption above the tabs, so a failed refresh
+        # can say how old the visible data is (design-doc.md §3.1 row 4).
+        self.views_page = QWidget()
+        views_layout = QVBoxLayout(self.views_page)
+        views_layout.setContentsMargins(0, 0, 0, 0)
+        views_layout.setSpacing(0)
+
+        self.stale_label = QLabel("")
+        self.stale_label.setProperty("role", "caption")
+        self.stale_label.setContentsMargins(theme.SP24, theme.SP12, theme.SP24, 0)
+        self.stale_label.hide()
+        views_layout.addWidget(self.stale_label)
+        views_layout.addWidget(self.tab_widget, 1)
+        self.content_stack.addWidget(self.views_page)
+
+        # Start in the not-connected state (design-doc.md §9.1).
+        self.show_connection_block()
 
     def build_header(self) -> QWidget:
         """Build the fixed-height header bar (design-doc.md §4.2)."""
@@ -260,7 +294,7 @@ class DirigeraDashboard(QMainWindow):
 
         self.view_switcher = SegmentedControl(["Rooms", "Scenes", "Energy"])
         self.view_switcher.current_changed.connect(self.on_view_selected)
-        energy = self.view_switcher.button(2)
+        energy = self.view_switcher.button(VIEW_ENERGY)
         # The Energy view itself is t-49; keep the segment visible but inert.
         energy.setEnabled(False)
         energy.setToolTip("Energy view arrives in t-49")
@@ -273,38 +307,32 @@ class DirigeraDashboard(QMainWindow):
 
         return header
 
-    def build_connection_row(self) -> QWidget:
-        """Connection inputs, kept below the header until t-48 replaces them."""
-        row = QWidget()
-        layout = QHBoxLayout(row)
-        layout.setContentsMargins(theme.SP20, 0, theme.SP20, theme.SP8)
-        layout.setSpacing(theme.SP8)
+    def show_connection_block(self, busy: bool = False) -> None:
+        """Show the not-connected block instead of the views (§9.1).
 
-        self.ip_label = QLabel("Hub IP:")
-        layout.addWidget(self.ip_label)
+        `busy` keeps the form visible but disabled while a connection attempt
+        is in flight.
+        """
+        self.connection_block.set_busy(busy)
+        self.content_stack.setCurrentWidget(self.connection_block)
+        self._set_view_controls_enabled(False)
 
-        self.ip_input = QLineEdit()
-        self.ip_input.setPlaceholderText("e.g., 192.168.1.100")
-        layout.addWidget(self.ip_input)
+    def show_views(self) -> None:
+        """Switch the content area to the device and scene views."""
+        self.connection_block.set_busy(False)
+        self.content_stack.setCurrentWidget(self.views_page)
+        self._set_view_controls_enabled(True)
 
-        self.discover_button = QPushButton("Discover")
-        self.discover_button.clicked.connect(self.discover_hubs)
-        layout.addWidget(self.discover_button)
+    def _set_view_controls_enabled(self, enabled: bool) -> None:
+        """Enable the view switcher only while a hub is connected (§9.1).
 
-        self.token_label = QLabel("Token:")
-        layout.addWidget(self.token_label)
-
-        self.token_input = QLineEdit()
-        self.token_input.setPlaceholderText("Dirigera authentication token")
-        self.token_input.setEchoMode(QLineEdit.EchoMode.Password)
-        layout.addWidget(self.token_input)
-
-        self.connect_button = QPushButton("Connect")
-        self.connect_button.setProperty("buttonVariant", "primary")
-        self.connect_button.clicked.connect(self.connect_to_hub)
-        layout.addWidget(self.connect_button)
-
-        return row
+        The search field stays disabled until t-50 wires filtering: an enabled
+        field that filters nothing would be worse than an inert one.
+        """
+        for index, button in enumerate(self.view_switcher.buttons()):
+            if index == VIEW_ENERGY:
+                continue  # the Energy view arrives in t-49
+            button.setEnabled(enabled)
 
     def on_view_selected(self, index: int) -> None:
         """Drive the tab widget from the segmented view switcher."""
@@ -373,7 +401,7 @@ class DirigeraDashboard(QMainWindow):
         if len(discovered_hubs) == 1:
             # Single hub found - use it directly
             ip, mac = discovered_hubs[0]
-            self.ip_input.setText(ip)
+            self.connection_block.ip_input.setText(ip)
             mac_info = f" ({mac})" if mac else ""
             self.set_status_text(f"Discovered hub at {ip}{mac_info}")
             QMessageBox.information(
@@ -387,11 +415,10 @@ class DirigeraDashboard(QMainWindow):
             # Multiple hubs found - let user choose
             dialog = HubSelectionDialog(discovered_hubs, self)
             if dialog.exec() == QDialog.DialogCode.Accepted and dialog.selected_ip:
-                self.ip_input.setText(dialog.selected_ip)
+                self.connection_block.ip_input.setText(dialog.selected_ip)
 
     def connect_to_hub(self):
-        ip_address = self.ip_input.text().strip()
-        token = self.token_input.text().strip()
+        ip_address, token = self.connection_block.credentials()
 
         if not ip_address or not token:
             QMessageBox.warning(
@@ -399,21 +426,33 @@ class DirigeraDashboard(QMainWindow):
             )
             return
 
+        # State 2 of design-doc.md §3.1: the form is disabled and the chip
+        # reports progress while the credentials are verified.
+        self.status_chip.set_status("Connecting…", "neutral")
+        self.show_connection_block(busy=True)
+
         try:
             self.hub = Hub(token=token, ip_address=ip_address)
             # Hub() never contacts the hub, so verify the credentials with a
             # lightweight authenticated probe before claiming success.
             self.hub.get("/home")
-            self.status_chip.set_status(f"Hub online · {ip_address}", "ok")
-            self.set_status_text(f"Connected to hub at {ip_address}", "ok")
-            self.refresh_button.setEnabled(True)
-            self.refresh_devices()
         except Exception as e:
+            # A half-built hub must not look connected.
+            self.hub = None
+            self.show_connection_block()
+            self.status_chip.set_status("Hub unreachable", "warn")
+            self.set_status_text(f"Connection failed: {str(e)}", "danger")
             QMessageBox.critical(
                 self, "Connection Error", f"Failed to connect to hub: {str(e)}"
             )
-            self.status_chip.set_status("Hub unreachable", "warn")
-            self.set_status_text(f"Connection failed: {str(e)}", "danger")
+            return
+
+        self._hub_ip = ip_address
+        self.status_chip.set_status(f"Hub online · {ip_address}", "ok")
+        self.set_status_text(f"Connected to hub at {ip_address}", "ok")
+        self.refresh_button.setEnabled(True)
+        self.show_views()
+        self.refresh_devices()
 
     def refresh_devices(self):
         if not self.hub:
@@ -425,10 +464,22 @@ class DirigeraDashboard(QMainWindow):
             devices = self.hub.get_all_devices()
             scenes = self.hub.get_scenes()
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to refresh devices: {str(e)}")
+            # State 4 of design-doc.md §3.1: the last good data stays on
+            # screen and the caption says how old it is.
             self.status_chip.set_status("Hub unreachable", "warn")
             self.set_status_text(f"Refresh failed: {str(e)}", "danger")
+            if self._last_refresh is not None:
+                self.stale_label.setText(
+                    f"Showing data from {self._last_refresh:%H:%M}"
+                )
+                self.stale_label.show()
+            QMessageBox.critical(self, "Error", f"Failed to refresh devices: {str(e)}")
             return
+
+        self._last_refresh = datetime.now()
+        self.stale_label.hide()
+        if self._hub_ip:
+            self.status_chip.set_status(f"Hub online · {self._hub_ip}", "ok")
 
         # Clear existing widgets and rebuild from the fetched data
         self.clear_layout(self.devices_layout)

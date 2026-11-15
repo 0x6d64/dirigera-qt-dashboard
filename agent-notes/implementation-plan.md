@@ -127,8 +127,8 @@ and grid layout, a header bar with segmented navigation, and three views
 Affected files: `theme.py` (new), `widgets/switch.py` (new),
 `widgets/slider.py` (new), `widgets/chip.py` (new), `widgets/metric.py` (new),
 `widgets/card.py` (new), `widgets/grid.py` (new), `widgets/segments.py` (new),
-`widgets/icons.py` (new), `dashboard.py` (heavily refactored), `main.py`
-(stylesheet injection)
+`widgets/connection.py` (new), `widgets/icons.py` (new),
+`dashboard.py` (heavily refactored), `main.py` (stylesheet injection)
 
 #### Ordering note
 
@@ -330,7 +330,18 @@ Create a `widgets/` package (`widgets/__init__.py` empty).
 
 ---
 
-#### Commit 7 — "not-connected state and connection block" (t-48)
+#### Commit 7 — "not-connected state and connection block" (t-48) ✓ executed 2026-11-15
+
+> The block lives in `widgets/connection.py` and the content area is a
+> `QStackedWidget` (connection block / views page), so nothing is drawn behind
+> the form. Three notes:
+> - The search field stays disabled even when connected; an enabled field that
+>   filters nothing would be worse than an inert one until t-50.
+> - A failed connect attempt shows the warn chip "Hub unreachable" — §3.1 has
+>   no connect-failed row, and it describes the situation better than
+>   "Not connected".
+> - The credential probe still runs on the GUI thread, so "Connecting…" is a
+>   brief state; t-17 moves the hub I/O into a worker thread.
 
 **Refactor `dashboard.py` connection logic**
 
