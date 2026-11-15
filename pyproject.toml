@@ -1,0 +1,38 @@
+[project]
+name = "dirigera-qt-dashboard"
+version = "0.1.0"
+description = "A PyQt based dashboard for IKEA Dirigera hubs"
+requires-python = ">=3.12"
+dependencies = [
+    "dirigera>=1.6.1",
+    "getmac>=0.9.6",
+    "netifaces2>=0.0.22",
+    "pyqt6>=6.12.1",
+]
+
+[dependency-groups]
+dev = [
+    "black>=26.10.1",
+    "mypy>=2.4.1",
+    "ruff>=0.17.5",
+    "types-requests>=2.31.0",
+]
+
+[tool.black]
+line-length = 88
+target-version = ['py312']
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W"]
+ignore = []
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+

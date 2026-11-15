@@ -1,0 +1,11 @@
+# Example configuration file for Dirigera Qt Dashboard
+# Copy this file to config.ini and fill in your details
+# DO NOT commit config.ini to version control!
+
+[hub]
+# Your Dirigera hub IP address
+ip_address = 192.168.1.100
+
+# Your authentication token (keep this secret!)
+# Generate using: uv run python generate_token.py <hub_ip>
+token = YOUR_TOKEN_HERE
