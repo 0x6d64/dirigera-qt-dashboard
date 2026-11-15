@@ -1,7 +1,7 @@
 import configparser
 import os
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, override
 
 from dirigera import Hub
 from dirigera.devices.blinds import Blind, BlindsStateEnum
@@ -9,7 +9,7 @@ from dirigera.devices.light import Light
 from dirigera.devices.outlet import Outlet
 from dirigera.devices.scene import Scene
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QCloseEvent, QFont
 from PyQt6.QtWidgets import (
     QDialog,
     QHBoxLayout,
@@ -60,6 +60,51 @@ class DiscoveryThread(QThread):
             self.discovery_done.emit(hubs)
         except Exception:
             self.discovery_done.emit([])
+
+
+class ConnectWorker(QThread):
+    """Verify hub credentials off the GUI thread (req-1, req-4)."""
+
+    connected = pyqtSignal(object, str)  # type: ignore[call-arg]
+    failed = pyqtSignal(str)  # type: ignore[call-arg]
+
+    def __init__(self, token: str, ip_address: str, parent=None):
+        super().__init__(parent)
+        self._token = token
+        self._ip_address = ip_address
+
+    def run(self):
+        """Probe the hub and emit either the verified hub or the error text."""
+        try:
+            hub = Hub(token=self._token, ip_address=self._ip_address)
+            # Hub() never contacts the hub, so verify the credentials with a
+            # lightweight authenticated probe before claiming success (req-1).
+            hub.get("/home")
+        except Exception as e:
+            self.failed.emit(str(e))
+            return
+        self.connected.emit(hub, self._ip_address)
+
+
+class RefreshWorker(QThread):
+    """Fetch devices and scenes off the GUI thread (req-2, req-4)."""
+
+    refreshed = pyqtSignal(list, list)  # type: ignore[call-arg]
+    failed = pyqtSignal(str)  # type: ignore[call-arg]
+
+    def __init__(self, hub: Hub, parent=None):
+        super().__init__(parent)
+        self._hub = hub
+
+    def run(self):
+        """Fetch both collections and emit them together, or the error text."""
+        try:
+            devices = self._hub.get_all_devices()
+            scenes = self._hub.get_scenes()
+        except Exception as e:
+            self.failed.emit(str(e))
+            return
+        self.refreshed.emit(devices, scenes)
 
 
 class HubSelectionDialog(QDialog):
@@ -153,6 +198,8 @@ class DirigeraDashboard(QMainWindow):
         self.scenes: List[Scene] = []
         self._hub_ip: Optional[str] = None
         self._last_refresh: Optional[datetime] = None
+        self._connect_worker: Optional[ConnectWorker] = None
+        self._refresh_worker: Optional[RefreshWorker] = None
         self.init_ui()
         self.load_config()
 
@@ -418,6 +465,10 @@ class DirigeraDashboard(QMainWindow):
                 self.connection_block.ip_input.setText(dialog.selected_ip)
 
     def connect_to_hub(self):
+        """Verify the entered credentials in a background thread (t-17)."""
+        if self._connect_worker is not None:
+            return  # a probe is already in flight
+
         ip_address, token = self.connection_block.credentials()
 
         if not ip_address or not token:
@@ -431,22 +482,16 @@ class DirigeraDashboard(QMainWindow):
         self.status_chip.set_status("Connecting…", "neutral")
         self.show_connection_block(busy=True)
 
-        try:
-            self.hub = Hub(token=token, ip_address=ip_address)
-            # Hub() never contacts the hub, so verify the credentials with a
-            # lightweight authenticated probe before claiming success.
-            self.hub.get("/home")
-        except Exception as e:
-            # A half-built hub must not look connected.
-            self.hub = None
-            self.show_connection_block()
-            self.status_chip.set_status("Hub unreachable", "warn")
-            self.set_status_text(f"Connection failed: {str(e)}", "danger")
-            QMessageBox.critical(
-                self, "Connection Error", f"Failed to connect to hub: {str(e)}"
-            )
-            return
+        worker = ConnectWorker(token, ip_address, self)
+        worker.connected.connect(self._on_connected)
+        worker.failed.connect(self._on_connect_failed)
+        worker.finished.connect(self._on_connect_worker_done)
+        self._connect_worker = worker
+        worker.start()
 
+    def _on_connected(self, hub: Hub, ip_address: str) -> None:
+        """Adopt the verified hub and load its data."""
+        self.hub = hub
         self._hub_ip = ip_address
         self.status_chip.set_status(f"Hub online · {ip_address}", "ok")
         self.set_status_text(f"Connected to hub at {ip_address}", "ok")
@@ -454,28 +499,40 @@ class DirigeraDashboard(QMainWindow):
         self.show_views()
         self.refresh_devices()
 
+    def _on_connect_failed(self, message: str) -> None:
+        """Report a failed attempt and hand the form back to the user."""
+        # A half-built hub must not look connected.
+        self.hub = None
+        self.show_connection_block()
+        self.status_chip.set_status("Hub unreachable", "warn")
+        self.set_status_text(f"Connection failed: {message}", "danger")
+        QMessageBox.critical(
+            self, "Connection Error", f"Failed to connect to hub: {message}"
+        )
+
+    def _on_connect_worker_done(self) -> None:
+        self._connect_worker = None
+
     def refresh_devices(self):
-        if not self.hub:
+        """Start a background refresh (t-17)."""
+        hub = self.hub
+        if hub is None:
             return
+        if self._refresh_worker is not None:
+            return  # one fetch at a time
 
-        try:
-            # Fetch everything before touching the UI, so a failed refresh
-            # keeps the current view instead of leaving it blank.
-            devices = self.hub.get_all_devices()
-            scenes = self.hub.get_scenes()
-        except Exception as e:
-            # State 4 of design-doc.md §3.1: the last good data stays on
-            # screen and the caption says how old it is.
-            self.status_chip.set_status("Hub unreachable", "warn")
-            self.set_status_text(f"Refresh failed: {str(e)}", "danger")
-            if self._last_refresh is not None:
-                self.stale_label.setText(
-                    f"Showing data from {self._last_refresh:%H:%M}"
-                )
-                self.stale_label.show()
-            QMessageBox.critical(self, "Error", f"Failed to refresh devices: {str(e)}")
-            return
+        # Disable Refresh while loading so clicks cannot stack up fetches.
+        self.refresh_button.setEnabled(False)
 
+        worker = RefreshWorker(hub, self)
+        worker.refreshed.connect(self._on_refreshed)
+        worker.failed.connect(self._on_refresh_failed)
+        worker.finished.connect(self._on_refresh_worker_done)
+        self._refresh_worker = worker
+        worker.start()
+
+    def _on_refreshed(self, devices: List[Any], scenes: List[Scene]) -> None:
+        """Rebuild the views from a successful fetch."""
         self._last_refresh = datetime.now()
         self.stale_label.hide()
         if self._hub_ip:
@@ -512,6 +569,19 @@ class DirigeraDashboard(QMainWindow):
             f"Found {len(self.devices)} devices in {len(devices_by_room)} rooms "
             f"and {len(self.scenes)} scenes"
         )
+
+    def _on_refresh_failed(self, message: str) -> None:
+        """Keep the last good data and say how old it is (§3.1 row 4)."""
+        self.status_chip.set_status("Hub unreachable", "warn")
+        self.set_status_text(f"Refresh failed: {message}", "danger")
+        if self._last_refresh is not None:
+            self.stale_label.setText(f"Showing data from {self._last_refresh:%H:%M}")
+            self.stale_label.show()
+        QMessageBox.critical(self, "Error", f"Failed to refresh devices: {message}")
+
+    def _on_refresh_worker_done(self) -> None:
+        self._refresh_worker = None
+        self.refresh_button.setEnabled(self.hub is not None)
 
     def create_room_section(self, room_name: str, devices: List[Any]) -> QWidget:
         """Build one room section: section label plus reflowing card grid."""
@@ -671,6 +741,15 @@ class DirigeraDashboard(QMainWindow):
             item = layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
+
+    @override
+    def closeEvent(self, event: Optional[QCloseEvent]) -> None:
+        """Wait for in-flight hub calls so no worker outlives the window."""
+        for worker in (self._connect_worker, self._refresh_worker):
+            if worker is not None and worker.isRunning():
+                worker.requestInterruption()
+                worker.wait(2000)
+        super().closeEvent(event)
 
     @staticmethod
     def format_scene_icon(icon: Any) -> str:

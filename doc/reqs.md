@@ -24,7 +24,7 @@ during implementation. Each entry cites its origin.
   wording updated after the t-45 card refactor replaced checkboxes with
   switches)*
 - **req-4** — Blocking network I/O must run in a worker thread, never on the
-  GUI thread. *(t-17; also stated as a rule in `AGENTS.md`)*
+  GUI thread. *(t-17, implemented; also stated as a rule in `AGENTS.md`)*
 - **req-5** — Hub discovery must not depend solely on a static MAC OUI list;
   hubs must be identified by their unauthenticated API response, with the OUI
   list kept only as a fallback. *(t-20, implemented)*

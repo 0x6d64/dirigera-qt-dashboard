@@ -32,7 +32,7 @@ take the next free number (see `AGENTS.md`).
 
 ## UI responsiveness
 
-- [ ] **t-17 [B·M]** Move `connect_to_hub()` and `refresh_devices()` network I/O off the GUI thread *(dashboard.py:282–358)*. Use a worker `QThread` and disable buttons while loading.
+- [x] **t-17 [B·M]** Move `connect_to_hub()` and `refresh_devices()` network I/O off the GUI thread *(dashboard.py:282-358)*. Use a worker `QThread` and disable buttons while loading. *(done: `ConnectWorker` / `RefreshWorker`; widgets are only touched in GUI-thread slots; `closeEvent` waits for a running worker)*
 - [ ] **t-18 [B·S]** Debounce slider commands: `valueChanged` currently fires one PATCH per tick *(dashboard.py:424,446)*. Send on `sliderReleased` or via a short `QTimer`.
 - [ ] **t-19 [C·S]** Preserve scroll position and avoid a full widget rebuild on Refresh.
 

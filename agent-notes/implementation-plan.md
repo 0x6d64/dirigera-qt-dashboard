@@ -66,9 +66,9 @@ Affected files: `widgets/card.py`, `dashboard.py`
    `AssertionError` otherwise.
 5. Gates; offscreen smoke test invoking the handlers against a stubbed light.
 
-#### Commit 3 — "adaptive light profiles" (t-15) — schedule after t-17 if possible
+#### Commit 3 — "adaptive light profiles" (t-15) — t-17 prerequisite is done
 
-1. In `refresh_devices`, fetch `self.adaptive_profiles =
+1. In `RefreshWorker.run`, fetch `self.adaptive_profiles =
    self.hub.get_adaptive_profiles()` inside a guarded `try` (empty list on
    failure — older hubs don't expose profiles).
 2. Extend `DeviceCard` (constructor + factory call in `dashboard.py`) to
@@ -80,9 +80,8 @@ Affected files: `widgets/card.py`, `dashboard.py`
    choosing "(manual)" is a no-op (any manual change already ends adaptive
    mode).
 4. Gates; offscreen smoke test with a stub hub returning one profile.
-5. Note: adds blocking calls to the existing refresh flow — acceptable only
-   because t-17 will move all of it into a worker; execute t-17 before this
-   commit if scheduling allows.
+5. Note: adds blocking calls to the refresh flow — they belong in
+   `RefreshWorker.run()` (t-17, done), never on the GUI thread.
 
 #### Commit 4 — "live updates via websocket" (t-16) — large, after t-17 and t-10 decision
 
@@ -112,8 +111,8 @@ Affected files: `widgets/card.py`, `dashboard.py`
   the remaining migration commits: it rewrites the room/grid layout these
   controls render into, and its stable card ordering is the prerequisite for
   reflows that keep `req-2` intact.
-- t-17 (worker threads) still gates t-15 and t-16, both of which add blocking
-  hub calls to the connect/refresh flow.
+- t-17 (worker threads) is done: connect and refresh run in worker threads, so
+  t-15 and t-16 are unblocked.
 
 ---
 
@@ -341,7 +340,7 @@ Create a `widgets/` package (`widgets/__init__.py` empty).
 >   no connect-failed row, and it describes the situation better than
 >   "Not connected".
 > - The credential probe still runs on the GUI thread, so "Connecting…" is a
->   brief state; t-17 moves the hub I/O into a worker thread.
+>   brief state; t-17 moved the hub I/O into a worker thread.
 
 **Refactor `dashboard.py` connection logic**
 
@@ -368,9 +367,33 @@ Create a `widgets/` package (`widgets/__init__.py` empty).
 
 ---
 
+#### Commit 7a — "off-thread hub calls" (t-17) ✓ executed 2026-11-15
+
+> Prerequisite for commit 8, recorded here because commit 8 depended on it: the
+> Energy view is only useful if the refresh that feeds it does not freeze the
+> window. Not part of the design plan's commit list.
+
+**`dashboard.py`: worker threads for connect and refresh**
+
+1. `ConnectWorker(QThread)` — constructs `Hub(...)` and probes `get("/home")`
+   in `run()`; emits `connected(hub, ip)` or `failed(message)`.
+2. `RefreshWorker(QThread)` — fetches devices and scenes in `run()`; emits
+   `refreshed(devices, scenes)` or `failed(message)`.
+3. `connect_to_hub()` / `refresh_devices()` only start a worker. While one
+   runs the other is refused, so clicks cannot stack up network calls.
+   Refresh is disabled while loading and re-enabled when the worker finishes.
+4. Widget updates happen exclusively in the GUI-thread slots
+   (`_on_connected`, `_on_connect_failed`, `_on_refreshed`,
+   `_on_refresh_failed`); the workers never touch widgets.
+5. `closeEvent` waits for an in-flight worker (bounded 2 s) so no `QThread`
+   outlives the window.
+
+---
+
 #### Commit 8 — "Energy view" (t-49)
 
-*Schedule after t-17 (off-thread refresh) to avoid blocking the GUI thread.*
+> The plan's original note said "schedule after t-17"; t-17 is done (commit
+> 7a), so the refresh that feeds this view no longer blocks the GUI thread.
 
 **Add Energy tab to `dashboard.py`**
 
@@ -550,9 +573,9 @@ Affected files: `dashboard.py` (all three commits)
    UI as-is.
 2. t-6 *(dashboard.py:282–303)*: in `connect_to_hub`, after constructing
    `Hub(...)`, probe with `self.hub.get("/home")` inside the same `try`; only
-   set the green status and enable Refresh when the probe succeeds. Note: this
-   is still blocking I/O on the GUI thread by design — t-17 will move it into
-   a worker; do not solve that here.
+   set the green status and enable Refresh when the probe succeeds. Note: at
+   the time this was blocking I/O on the GUI thread by design; t-17 has since
+   moved the whole probe into `ConnectWorker`.
 3. t-5 *(dashboard.py:494–540)*: pass the owning control into each handler's
    lambda closure. On command failure: call `device.reload()` inside a guarded
    `try`, then resync the control from the reloaded attributes
