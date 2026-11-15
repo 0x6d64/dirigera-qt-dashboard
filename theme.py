@@ -161,6 +161,34 @@ QLabel[role="section"] {{
     font-weight: 500;
 }}
 
+/* ── Header bar (design-doc.md §4.2) ────────────────────────────────── */
+QWidget[role="header"] {{
+    background-color: {SURFACE};
+    border-bottom: 1px solid {BORDER};
+}}
+
+QLabel[role="appTitle"] {{
+    background-color: transparent;
+    color: {TEXT};
+    font-size: {FONT_APP_TITLE}px;
+    font-weight: 600;
+}}
+
+/* Caption line under the header (status details, "showing data from…") */
+QLabel[role="caption"] {{
+    background-color: transparent;
+    color: {TEXT2};
+    font-size: {FONT_CAPTION}px;
+}}
+
+QLabel[role="caption"][tone="ok"] {{
+    color: {OK};
+}}
+
+QLabel[role="caption"][tone="danger"] {{
+    color: {DANGER};
+}}
+
 /* ── Line edits / search field ──────────────────────────────────────── */
 QLineEdit {{
     background-color: {SUNKEN};
@@ -226,6 +254,49 @@ QPushButton:disabled {{
 
 QPushButton:pressed {{
     background-color: {BORDER};
+}}
+
+/* ── Segmented control (design-doc.md §8.6) ─────────────────────────── */
+QFrame[role="segmented"] {{
+    background-color: {SURFACE};
+    border: 1px solid {BORDER};
+    border-radius: {RADIUS_BUTTON}px;
+}}
+
+QPushButton[segment="true"] {{
+    background-color: transparent;
+    color: {TEXT};
+    border: 1px solid transparent;
+    border-radius: 0;
+    padding: 6px 12px;
+    font-size: {FONT_BODY}px;
+}}
+
+QPushButton[segment="true"]:hover {{
+    background-color: {SUNKEN};
+}}
+
+QPushButton[segment="true"]:disabled {{
+    color: {TEXT2};
+    border-color: transparent;
+}}
+
+QPushButton[segment="true"][selected="true"] {{
+    background-color: {ACCENT_SOFT};
+    color: {ACCENT};
+    border: 1px solid {ACCENT};
+    font-weight: 600;
+}}
+
+/* Only the outer corners are rounded; inner corners stay square. */
+QPushButton[segment="true"][first="true"] {{
+    border-top-left-radius: 5px;
+    border-bottom-left-radius: 5px;
+}}
+
+QPushButton[segment="true"][last="true"] {{
+    border-top-right-radius: 5px;
+    border-bottom-right-radius: 5px;
 }}
 
 /* ── Sliders ────────────────────────────────────────────────────────── */

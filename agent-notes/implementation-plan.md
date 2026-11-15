@@ -126,8 +126,9 @@ and grid layout, a header bar with segmented navigation, and three views
 
 Affected files: `theme.py` (new), `widgets/switch.py` (new),
 `widgets/slider.py` (new), `widgets/chip.py` (new), `widgets/metric.py` (new),
-`widgets/card.py` (new), `widgets/grid.py` (new), `widgets/icons.py` (new),
-`dashboard.py` (heavily refactored), `main.py` (stylesheet injection)
+`widgets/card.py` (new), `widgets/grid.py` (new), `widgets/segments.py` (new),
+`widgets/icons.py` (new), `dashboard.py` (heavily refactored), `main.py`
+(stylesheet injection)
 
 #### Ordering note
 
@@ -293,7 +294,18 @@ Create a `widgets/` package (`widgets/__init__.py` empty).
 
 ---
 
-#### Commit 6 — "header bar and segmented view switcher" (t-47)
+#### Commit 6 — "header bar and segmented view switcher" (t-47) ✓ executed 2026-11-15
+
+> Two interim decisions, both reversed by later commits:
+> - The IP/token inputs stay in a temporary row under the header instead of
+>   disappearing, so connecting still works until t-48 replaces them with the
+>   not-connected block.
+> - The Energy segment is shown but disabled (tooltip "arrives in t-49"), since
+>   there is no Energy view before t-49.
+>
+> The fixed 56 px single row sets a ~870 px minimum window width, so t-46's
+> 640 px breakpoint is not reachable by resizing yet — recorded as t-54
+> (two-row header, `design-doc.md` §11 row 3).
 
 **Refactor `dashboard.py` top-level layout**
 
