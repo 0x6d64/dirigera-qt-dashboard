@@ -9,7 +9,7 @@ from dirigera.devices.light import Light
 from dirigera.devices.outlet import Outlet
 from dirigera.devices.scene import Scene
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
-from PyQt6.QtGui import QCloseEvent, QFont
+from PyQt6.QtGui import QCloseEvent
 from PyQt6.QtWidgets import (
     QDialog,
     QHBoxLayout,
@@ -35,6 +35,7 @@ from widgets.chip import StatusChip
 from widgets.connection import ConnectionBlock
 from widgets.energy import EnergyView
 from widgets.grid import CardGrid
+from widgets.scene import SceneTile
 from widgets.segments import SegmentedControl
 from widgets.slider import LabeledSlider
 from widgets.switch import ToggleSwitch
@@ -85,6 +86,26 @@ class ConnectWorker(QThread):
             self.failed.emit(str(e))
             return
         self.connected.emit(hub, self._ip_address)
+
+
+class SceneTriggerWorker(QThread):
+    """Trigger a scene off the GUI thread (req-4, t-51)."""
+
+    triggered = pyqtSignal(object)  # type: ignore[call-arg]
+    failed = pyqtSignal(object, str)  # type: ignore[call-arg]
+
+    def __init__(self, scene: Scene, parent=None):
+        super().__init__(parent)
+        self._scene = scene
+
+    def run(self):
+        """Trigger the scene and emit it back, or the scene plus the error."""
+        try:
+            self._scene.trigger()
+        except Exception as e:
+            self.failed.emit(self._scene, str(e))
+            return
+        self.triggered.emit(self._scene)
 
 
 class RefreshWorker(QThread):
@@ -201,6 +222,7 @@ class DirigeraDashboard(QMainWindow):
         self._last_refresh: Optional[datetime] = None
         self._connect_worker: Optional[ConnectWorker] = None
         self._refresh_worker: Optional[RefreshWorker] = None
+        self._scene_workers: List[SceneTriggerWorker] = []
         self.init_ui()
         self.load_config()
 
@@ -281,12 +303,18 @@ class DirigeraDashboard(QMainWindow):
         devices_tab_layout.addWidget(self.devices_scroll)
         self.tab_widget.addTab(self.devices_tab, "Devices")
 
-        # Scenes tab
+        # Scenes tab: same flow grid as the rooms view (§8.10, §4.3).
         self.scenes_tab = QWidget()
         self.scenes_scroll = QScrollArea()
         self.scenes_scroll.setWidgetResizable(True)
         self.scenes_content = QWidget()
         self.scenes_layout = QVBoxLayout(self.scenes_content)
+        self.scenes_layout.setContentsMargins(
+            theme.SP24, theme.SP20, theme.SP24, theme.SP24
+        )
+        self.scenes_layout.setSpacing(theme.SP24)
+        self.scenes_grid = CardGrid()
+        self.scenes_layout.addWidget(self.scenes_grid)
         self.scenes_layout.addStretch()
         self.scenes_scroll.setWidget(self.scenes_content)
 
@@ -543,7 +571,7 @@ class DirigeraDashboard(QMainWindow):
 
         # Clear existing widgets and rebuild from the fetched data
         self.clear_layout(self.devices_layout)
-        self.clear_layout(self.scenes_layout)
+        self.scenes_grid.clear()
 
         self.devices = devices
         self.scenes = scenes
@@ -561,12 +589,10 @@ class DirigeraDashboard(QMainWindow):
             section = self.create_room_section(room_name, devices_by_room[room_name])
             self.devices_layout.insertWidget(self.devices_layout.count() - 1, section)
 
-        # Display scenes
-        for scene in self.scenes:
-            scene_widget = self.create_scene_widget(scene)
-            self.scenes_layout.insertWidget(
-                self.scenes_layout.count() - 1, scene_widget
-            )
+        # Display scenes as tiles in the same reflowing grid as the rooms.
+        self.scenes_grid.set_cards(
+            [self.create_scene_tile(scene) for scene in self.scenes]
+        )
 
         # Energy view: outlets and electrical sensors grouped by room (§9.4).
         energy_by_room: Dict[str, List[Any]] = {}
@@ -633,34 +659,9 @@ class DirigeraDashboard(QMainWindow):
             on_blind_state=self.set_blind_state,
         )
 
-    def create_scene_widget(self, scene: Scene) -> QWidget:
-        """Create widget for a scene"""
-        widget = QWidget()
-        layout = QHBoxLayout(widget)
-
-        # Scene name
-        name_label = QLabel(scene.info.name)
-        name_label.setMinimumWidth(300)
-        font = QFont()
-        font.setBold(True)
-        name_label.setFont(font)
-        layout.addWidget(name_label)
-
-        # Scene icon if available
-        icon_text = self.format_scene_icon(scene.info.icon)
-        if icon_text:
-            icon_label = QLabel(f"[{icon_text}]")
-            icon_label.setStyleSheet("color: gray;")
-            layout.addWidget(icon_label)
-
-        layout.addStretch()
-
-        # Trigger button
-        trigger_button = QPushButton("Activate")
-        trigger_button.clicked.connect(lambda: self.trigger_scene(scene))
-        layout.addWidget(trigger_button)
-
-        return widget
+    def create_scene_tile(self, scene: Scene) -> SceneTile:
+        """Create a scene tile wired to the activation handler (§8.10)."""
+        return SceneTile(scene, on_activate=self.trigger_scene)
 
     def toggle_device_power(self, device: Any, turn_on: bool, control: ToggleSwitch):
         """Toggle power for a light or outlet device."""
@@ -740,17 +741,39 @@ class DirigeraDashboard(QMainWindow):
             control.set_value(level or 0)
             control.blockSignals(False)
 
-    def trigger_scene(self, scene: Scene):
-        """Trigger a scene"""
-        try:
-            scene.trigger()
-            QMessageBox.information(
-                self,
-                "Scene Activated",
-                f"Scene '{scene.info.name}' has been activated.",
-            )
-        except Exception as e:
-            QMessageBox.warning(self, "Error", f"Failed to trigger scene: {str(e)}")
+    def trigger_scene(self, tile: SceneTile) -> None:
+        """Trigger a scene in a worker thread (req-4, t-51).
+
+        Feedback stays inline in the tile: the design forbids a modal dialog
+        for scene activation (§8.10.3).
+        """
+        self._scene_workers = [w for w in self._scene_workers if w.isRunning()]
+        tile.set_busy(True)
+
+        worker = SceneTriggerWorker(tile.scene, self)
+        worker.triggered.connect(self._on_scene_triggered)
+        worker.failed.connect(self._on_scene_failed)
+        self._scene_workers.append(worker)
+        worker.start()
+
+    def _on_scene_triggered(self, scene: Scene) -> None:
+        """Show the transient "Activated" confirmation on the tile."""
+        tile = self._scene_tile_for(scene)
+        if tile is not None:
+            tile.show_activated()
+
+    def _on_scene_failed(self, scene: Scene, message: str) -> None:
+        """Report a failed activation inline instead of with a dialog."""
+        tile = self._scene_tile_for(scene)
+        if tile is not None:
+            tile.show_error(message)
+
+    def _scene_tile_for(self, scene: Scene) -> Optional[SceneTile]:
+        """Return the tile displaying `scene`, if it is still on screen."""
+        for card in self.scenes_grid.cards():
+            if isinstance(card, SceneTile) and card.scene is scene:
+                return card
+        return None
 
     def clear_layout(self, layout: QVBoxLayout):
         """Clear all widgets from a layout"""
@@ -762,20 +785,16 @@ class DirigeraDashboard(QMainWindow):
     @override
     def closeEvent(self, event: Optional[QCloseEvent]) -> None:
         """Wait for in-flight hub calls so no worker outlives the window."""
-        for worker in (self._connect_worker, self._refresh_worker):
+        workers: List[Optional[QThread]] = [
+            self._connect_worker,
+            self._refresh_worker,
+            *self._scene_workers,
+        ]
+        for worker in workers:
             if worker is not None and worker.isRunning():
                 worker.requestInterruption()
                 worker.wait(2000)
         super().closeEvent(event)
-
-    @staticmethod
-    def format_scene_icon(icon: Any) -> str:
-        """Convert a scene icon enum value into a readable label."""
-        if not icon:
-            return ""
-        val = getattr(icon, "value", str(icon))
-        clean = str(val).removeprefix("scenes_").replace("_", " ").strip()
-        return clean
 
     @staticmethod
     def get_device_name(device: Any) -> str:

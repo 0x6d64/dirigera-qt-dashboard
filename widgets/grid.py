@@ -154,6 +154,16 @@ class CardGrid(QWidget):
             self._flow.addWidget(card)
         self.updateGeometry()
 
+    def clear(self) -> None:
+        """Remove every card from the grid and schedule it for deletion."""
+        while self._flow.count():
+            item = self._flow.takeAt(0)
+            widget = item.widget() if item is not None else None
+            if widget is not None:
+                widget.hide()
+                widget.deleteLater()
+        self.updateGeometry()
+
     @override
     def hasHeightForWidth(self) -> bool:
         return True
