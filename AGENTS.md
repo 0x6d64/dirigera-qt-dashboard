@@ -75,6 +75,9 @@ development branch is `refactor`.
 
 ## Code conventions
 
+- Line endings are LF in every tracked file: source, docs, and notes alike.
+  `.gitattributes` (`* text=auto eol=lf`) enforces this; when a script writes
+  files, pass `newline="\n"` or write bytes so nothing converts them to CRLF.
 - Formatting/linting/type-checking are enforced; run before you finish:
   - `uv run black .`
   - `uv run ruff check .`
