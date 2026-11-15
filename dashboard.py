@@ -27,8 +27,10 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+import theme
 from network_discovery import discover_dirigera_hubs
 from widgets.card import DeviceCard, device_sort_key
+from widgets.grid import CardGrid
 from widgets.slider import LabeledSlider
 from widgets.switch import ToggleSwitch
 
@@ -217,6 +219,12 @@ class DirigeraDashboard(QMainWindow):
         self.devices_scroll.setWidgetResizable(True)
         self.devices_content = QWidget()
         self.devices_layout = QVBoxLayout(self.devices_content)
+        # Content padding 24/20/24 and 24 px between room sections
+        # (design-doc.md §4.3).
+        self.devices_layout.setContentsMargins(
+            theme.SP24, theme.SP20, theme.SP24, theme.SP24
+        )
+        self.devices_layout.setSpacing(theme.SP24)
         self.devices_layout.addStretch()
         self.devices_scroll.setWidget(self.devices_content)
 
@@ -363,21 +371,8 @@ class DirigeraDashboard(QMainWindow):
 
         # Create UI for each room
         for room_name in sorted(devices_by_room.keys()):
-            room_group = QGroupBox(room_name)
-            room_layout = QVBoxLayout()
-            room_group.setLayout(room_layout)
-
-            # Sort devices in room for stable order (design-doc.md §8.1 rule 3)
-            room_devices = sorted(devices_by_room[room_name], key=device_sort_key)
-
-            for device in room_devices:
-                card = self.create_device_widget(device)
-                if card:
-                    room_layout.addWidget(card)
-
-            self.devices_layout.insertWidget(
-                self.devices_layout.count() - 1, room_group
-            )
+            section = self.create_room_section(room_name, devices_by_room[room_name])
+            self.devices_layout.insertWidget(self.devices_layout.count() - 1, section)
 
         # Display scenes
         for scene in self.scenes:
@@ -390,6 +385,29 @@ class DirigeraDashboard(QMainWindow):
             f"Found {len(self.devices)} devices in {len(devices_by_room)} rooms "
             f"and {len(self.scenes)} scenes"
         )
+
+    def create_room_section(self, room_name: str, devices: List[Any]) -> QWidget:
+        """Build one room section: section label plus reflowing card grid."""
+        section = QWidget()
+        layout = QVBoxLayout(section)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(theme.SP12)  # label-to-grid gap (design-doc.md §4.3)
+
+        label = QLabel(self.format_room_label(room_name))
+        label.setProperty("role", "section")
+        layout.addWidget(label)
+
+        # Sort devices in room for stable order (design-doc.md §8.1 rule 3);
+        # the sort key is deterministic, so refresh cycles keep the same order.
+        cards = [
+            self.create_device_widget(device)
+            for device in sorted(devices, key=device_sort_key)
+        ]
+        grid = CardGrid()
+        grid.set_cards([card for card in cards if card is not None])
+        layout.addWidget(grid)
+
+        return section
 
     def create_device_widget(self, device: Any) -> Optional[QWidget]:
         """Create a DeviceCard instance with connected action handlers."""
@@ -544,6 +562,18 @@ class DirigeraDashboard(QMainWindow):
             or getattr(getattr(device, "attributes", None), "custom_name", None)
             or "Unknown Device"
         )
+
+    @staticmethod
+    def format_room_label(room_name: str) -> str:
+        """Sentence-case a room name for a section label (design-doc.md §8.9).
+
+        Only the first character is capitalised so acronyms and proper nouns a
+        user typed into the IKEA app keep their casing.
+        """
+        name = room_name.strip()
+        if not name:
+            return "Unknown room"
+        return name[0].upper() + name[1:]
 
     @staticmethod
     def get_room_name(device: Any) -> str:

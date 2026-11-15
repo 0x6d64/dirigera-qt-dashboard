@@ -126,8 +126,8 @@ and grid layout, a header bar with segmented navigation, and three views
 
 Affected files: `theme.py` (new), `widgets/switch.py` (new),
 `widgets/slider.py` (new), `widgets/chip.py` (new), `widgets/metric.py` (new),
-`widgets/card.py` (new), `widgets/icons.py` (new), `dashboard.py` (heavily
-refactored), `main.py` (stylesheet injection)
+`widgets/card.py` (new), `widgets/grid.py` (new), `widgets/icons.py` (new),
+`dashboard.py` (heavily refactored), `main.py` (stylesheet injection)
 
 #### Ordering note
 
@@ -266,7 +266,13 @@ Create a `widgets/` package (`widgets/__init__.py` empty).
 
 ---
 
-#### Commit 5 — "responsive card grid and room sections" (t-46)
+#### Commit 5 — "responsive card grid and room sections" (t-46) ✓ executed 2026-11-15
+
+> `FlowLayout` lives in `widgets/grid.py` (new file) as a height-for-width
+> layout. A plain `QGridLayout` with a recomputed column count was tried first
+> and rejected: every card's 280 px minimum pinned the row, so the grid kept
+> its column count while the window shrank instead of reflowing. Verified
+> offscreen — 3 / 2 / 1 columns at 1080 / 760 / 640 px.
 
 **Refactor `dashboard.py` devices tab layout**
 

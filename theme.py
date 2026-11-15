@@ -153,6 +153,14 @@ QLabel {{
     color: {TEXT};
 }}
 
+/* Section label above each room's card grid (design-doc.md §8.9) */
+QLabel[role="section"] {{
+    background-color: transparent;
+    color: {TEXT2};
+    font-size: {FONT_LABEL}px;
+    font-weight: 500;
+}}
+
 /* ── Line edits / search field ──────────────────────────────────────── */
 QLineEdit {{
     background-color: {SUNKEN};
