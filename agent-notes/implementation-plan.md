@@ -105,14 +105,17 @@ Affected files: `widgets/card.py`, `dashboard.py`
 
 - The "Correctness & runtime bugs" plan (t-1 … t-10) and token generation
   (t-11) are done; no prerequisite work remains there.
-- Design plan commits 1–4 are done (t-40 … t-45); t-13 was closed by t-45 and
-  t-12 by this plan's commit 1.
-- Next up is the design plan's commits 5–10 (t-46 … t-53). Execute t-46 before
-  the remaining migration commits: it rewrites the room/grid layout these
-  controls render into, and its stable card ordering is the prerequisite for
-  reflows that keep `req-2` intact.
+- Design plan commits 1–9 are done (t-40 … t-45, t-46 … t-49, t-51, t-52);
+  t-13 was closed by t-45 and t-12 by this plan's commit 1.
+- Only design commit 10 remains, split into 10a (t-50, ready) and 10b (t-53,
+  blocked on t-32/t-33). t-46 landed before this plan's remaining commits, so
+  the room/grid layout these controls render into is in place and its stable
+  card ordering keeps `req-2` intact.
 - t-17 (worker threads) is done: connect and refresh run in worker threads, so
   t-15 and t-16 are unblocked.
+- t-56 adds a periodic refresh that today would rebuild the whole widget tree;
+  land t-19 (plan "automated refresh", below) before commit 3 (t-15) so the
+  profile combo it adds is not reset every poll.
 
 ---
 
@@ -135,6 +138,11 @@ Affected files: `theme.py` (new), `widgets/switch.py` (new),
 Execute commits in this order. Each commit is independently mergeable but
 relies on the files introduced before it:
 `t-40 → t-43 + t-44 → t-41 + t-42 → t-45 → t-46 + t-47 + t-48 → t-49 + t-51 + t-52 → t-50 + t-53`
+
+**Status (2026-11-17):** commits 1–9 are executed. Only commit 10 is left, and
+it is split: commit 10a (t-50, search filter) is ready to run, commit 10b
+(t-53, contrast tests) is blocked until t-32 adds `pytest` and `tests/` and
+t-33 adds CI — the task's own acceptance criterion is "run as part of CI".
 
 ---
 
@@ -459,22 +467,27 @@ Create a `widgets/` package (`widgets/__init__.py` empty).
 
 ---
 
-#### Commit 10 — "search filter and contrast tests" (t-50, t-53)
+#### Commit 10a — "search filter" (t-50)
 
-**Wire search field; add test suite entry**
+> Split from the original commit 10 on 2026-11-17: t-53 asserts that the
+> contrast suite runs in CI, and neither `pytest` nor CI exists yet (t-32,
+> t-33). Running t-50 alone keeps the last design commit moving without
+> inventing a second, throwaway test layout.
 
-**t-50 — search filter**
+**Wire search field**
 
 1. Connect the header search `QLineEdit.textChanged` signal to a
    `filter_devices(query: str)` slot that shows/hides `DeviceCard`s and
    `SceneTile`s whose name contains the query (case-insensitive).
 2. Hiding a card does not change room-section visibility if at least one card
    in the room matches; hide the whole room section only when zero cards match.
-3. Clear filter on empty query.
+3. Clear filter on empty query; enable the field when a hub connects (it is
+   deliberately disabled today, see commit 7's note) and keep it enabled across
+   refreshes, re-applying the current query to newly built cards.
 4. Gates: offscreen test; populate 3 cards with names "Bookshelf", "Desk lamp",
    "Ceiling"; filter "desk" → only "Desk lamp" visible.
 
-**t-53 — contrast tests**
+#### Commit 10b — "contrast tests" (t-53) — blocked on t-32 and t-33
 
 1. Add `tests/test_contrast.py`: for every token pairing listed in
    `design-doc.md` §5.2, compute the WCAG relative-luminance contrast ratio
@@ -482,7 +495,8 @@ Create a `widgets/` package (`widgets/__init__.py` empty).
 2. Implement `wcag_contrast(hex_a: str, hex_b: str) -> float` as a pure
    function in `tests/test_contrast.py` or a shared helper (no extra
    dependencies beyond `pytest`).
-3. Gates: `uv run pytest tests/test_contrast.py -v` passes; all 10 pairings
+3. Add the test to the CI workflow created by t-33.
+4. Gates: `uv run pytest tests/test_contrast.py -v` passes; all 10 pairings
    from the spec assert at or above their threshold.
 
 ---
@@ -493,10 +507,127 @@ Create a `widgets/` package (`widgets/__init__.py` empty).
 - `uv run ruff check .` — zero warnings.
 - `uv run mypy .` — error count must not increase above the t-31 baseline (4).
 - Offscreen smoke test: `QT_QPA_PLATFORM=offscreen uv run python -m pytest`
-  with any per-commit smoke tests listed above.
+  with any per-commit smoke tests listed above. Until t-32 adds `pytest` and
+  `tests/`, the per-commit checks were ad-hoc offscreen scripts; keep using
+  that pattern rather than introducing a second test layout.
 - No `QCheckBox` or bare `QSlider` instance must remain in the final widget
   tree after commit 4.
 
+---
+
+### Plan: automated refresh (t-19, t-56)
+
+Goal: stop the dashboard showing stale values. Poll the hub every 30 s and
+update existing cards in place, so a poll keeps scroll position, card order,
+focus, and an in-progress slider drag (`req-13`, `design-doc.md` §10.2,
+`req-2`). t-56 is priority A and explicitly depends on t-19's incremental
+update; if t-19 slips, ship t-56 with at least the unchanged-data skip so a
+poll with identical data is a no-op.
+
+Affected files: `dashboard.py`, `widgets/card.py`, `widgets/energy.py`,
+`widgets/scene.py`, `doc/design-doc.md` §10.2, `doc/reqs.md`,
+`agent-notes/todo.md`
+
+#### Commit 1 — "update cards without rebuilding" (t-19)
+
+1. `widgets/card.py`: add `update_from_device(device: Any) -> None`. Reassign
+   `self.device`, then resync the *existing* controls from the new attributes —
+   switch state, brightness/blind slider values, status chip, footer, offline
+   state — without recreating widgets. Never overwrite a control that is
+   currently focused or being dragged (`QSlider.isSliderDown()`,
+   `QApplication.focusWidget()`).
+2. `widgets/scene.py`: tiles only render name and glyph, so a scene update is a
+   no-op; document that in the method (or omit it) rather than rebuilding.
+3. `dashboard.py` `_on_refreshed`: match fetched devices and scenes to the
+   existing cards by `device.id` / `scene.id`. Update matches in place, insert
+   cards for new ids at their sorted position (`device_sort_key`), and remove
+   cards whose ids disappeared. Do not clear `self.devices_layout`,
+   `self.scenes_grid`, or the energy rooms on a normal poll.
+4. Preserve view state around the update: capture
+   `devices_scroll.verticalScrollBar().value()` (same for scenes and energy) and
+   the focused widget, restore both after the update when the widget survived.
+5. `widgets/energy.py`: add `update_rooms(...)` following the same in-place rule
+   (match by device id), or — if that is disproportionate — document that the
+   energy view rebuilds and that only its scroll position is preserved.
+6. Early-out: compute a cheap signature of the fetched data (sorted
+   `(device.id, is_reachable, repr(attributes))` plus scene ids) and return
+   without touching the widget tree or the caption when it is unchanged.
+
+Verification: offscreen script (no `pytest` until t-32) — stub hub whose
+attributes change between fetches; feed `_on_refreshed` twice and assert the
+same `DeviceCard` objects (identity, not recreated), an unchanged scrollbar
+value, an unreleased slider still holding the dragged value, and that an
+identical payload leaves the status caption untouched. Gates: black, ruff,
+mypy at the t-31 baseline (4).
+
+#### Commit 2 — "periodic background refresh" (t-56)
+
+1. `dashboard.py` `__init__`: `self.refresh_timer = QTimer(self)` with a
+   30_000 ms interval, `timeout -> self._poll`, and `self._poll_interval = 30`.
+2. `_poll()`: skip when `self.hub is None`, when `_connect_worker` or
+   `_refresh_worker` is running (a poll must not stack on a manual refresh),
+   and when the window is minimised. Otherwise call `refresh_devices()`.
+3. Start the timer in `_on_connected` (after the first successful refresh) and
+   stop it in the disconnect path and in `closeEvent`, next to the existing
+   worker shutdown.
+4. Minimise handling: `changeEvent(QEvent)` for `QEvent.Type.WindowStateChange`
+   — stop the timer when `isMinimized()`, restart it when restored and fire one
+   immediate poll so the view is current again.
+5. Caption: show the schedule and the last successful update in the status row,
+   e.g. `Updated 21:42 · every 30 s`, refreshed in `_on_refreshed`. Keep the
+   existing stale caption for failures; when the last success is older than two
+   intervals, surface it in warn tone without a modal dialog — a silent poll
+   failure must not raise a `QMessageBox` every 30 s, so suppress the dialog for
+   timer-driven refreshes and keep it for manual ones.
+6. Docs: record polling in `design-doc.md` §10.2 (interval, pause rules,
+   last-update caption, no modal on background failure); mark `req-13`
+   implemented in `reqs.md`; check off t-19 and t-56 in `todo.md`.
+
+Verification: offscreen script — connect with a stub hub, assert the timer is
+active with a 30 s interval, that a poll during an in-flight manual refresh is
+skipped, that a minimised window does not fire, and that a failed background
+poll sets the warn caption without creating a dialog. Gates as above.
+
+---
+
+### Plan: responsive header under 640 px (t-54)
+
+Goal: remove the ~970 px minimum window width set by the fixed 56 px single-row
+header (design commit 6), so the window can actually reach t-46's 640 px
+single-column breakpoint by resizing (`design-doc.md` §11 row 3, minimum window
+640 × 480).
+
+Affected files: `dashboard.py` (`build_header`, `init_ui`, `resizeEvent`),
+`widgets/segments.py` (only if the control needs a compact variant),
+`doc/design-doc.md` §4.2/§11, `agent-notes/todo.md`
+
+#### Commit 1 — "two-row header below 640 px" (t-54)
+
+1. Define `HEADER_BREAKPOINT = 640`, `HEADER_HEIGHT = 56`, and
+   `HEADER_HEIGHT_COMPACT = 96` (two 48 px rows) as module constants in
+   `dashboard.py`.
+2. Split `build_header()` into a widget that owns two layouts: row 1 (title,
+   status chip, stretch, search field, Refresh) and row 2 (view switcher). At
+   normal widths row 2 is hidden and the switcher lives in row 1 — move the one
+   instance with `QLayout.removeWidget(w)` then `addWidget(w)`; a widget can
+   only have one parent, so do not create a second copy.
+3. `_apply_header_layout(compact: bool)`: toggles row membership, header fixed
+   height, and alignment; call it from `resizeEvent` only when the boolean
+   changes, to avoid relayout churn during a drag.
+4. Keep the 760 px behaviour intact: the search field still shrinks to about
+   180 px before the compact switch. In compact mode the switcher sits on row 2
+   left-aligned and the search field takes the remaining row-1 width.
+5. Set `setMinimumWidth(640)` and `setMinimumHeight(480)` on the main window
+   once the header no longer forces more, and assert
+   `minimumSizeHint().width() <= 640`.
+
+Verification: offscreen — resize to 1080 / 760 / 640 / 639 px and assert header
+height is 56 px above the breakpoint and 96 px below it, the switcher is on
+row 2 only in compact mode, card columns are 3 / 2 / 1 / 1, and
+`minimumSizeHint().width() <= 640`. Manual: drag the window narrow on Windows;
+check the 150 % scaling note in §11. Gates: black, ruff, mypy at baseline.
+
+---
 
 ## Done
 
