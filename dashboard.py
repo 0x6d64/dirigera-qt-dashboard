@@ -49,6 +49,11 @@ VIEW_SCENES = 1
 VIEW_ENERGY = 2
 
 
+def widget_name(widget: QWidget) -> str:
+    """Return the display name a card or scene tile is filtered by (t-50)."""
+    return str(getattr(widget, "full_name", "") or "")
+
+
 class DiscoveryThread(QThread):
     """Background thread for network discovery."""
 
@@ -223,6 +228,8 @@ class DirigeraDashboard(QMainWindow):
         self._connect_worker: Optional[ConnectWorker] = None
         self._refresh_worker: Optional[RefreshWorker] = None
         self._scene_workers: List[SceneTriggerWorker] = []
+        # (room section, its card grid), in display order, for search filtering.
+        self._room_sections: List[Tuple[QWidget, CardGrid]] = []
         self.init_ui()
         self.load_config()
 
@@ -372,8 +379,10 @@ class DirigeraDashboard(QMainWindow):
         # 260 px at rest, shrinking at narrow widths (design-doc.md §8.8, §11).
         self.search_input.setMinimumWidth(160)
         self.search_input.setMaximumWidth(260)
-        # Filtering is wired in t-50; until then the field stays inert.
+        # Live filtering; the field stays disabled until a hub is connected,
+        # which is when there is something to filter (design-doc.md §9.1).
         self.search_input.setEnabled(False)
+        self.search_input.textChanged.connect(self.filter_devices)
         layout.addWidget(self.search_input)
 
         self.view_switcher = SegmentedControl(["Rooms", "Scenes", "Energy"])
@@ -404,13 +413,17 @@ class DirigeraDashboard(QMainWindow):
         self._set_view_controls_enabled(True)
 
     def _set_view_controls_enabled(self, enabled: bool) -> None:
-        """Enable the view switcher only while a hub is connected (§9.1).
+        """Enable view controls only while a hub is connected (§9.1).
 
-        The search field stays disabled until t-50 wires filtering: an enabled
-        field that filters nothing would be worse than an inert one.
+        The search field is inert without data, so it is disabled and cleared
+        in the not-connected state; clearing also drops any active filter so
+        reconnecting starts from the full list.
         """
         for button in self.view_switcher.buttons():
             button.setEnabled(enabled)
+        self.search_input.setEnabled(enabled)
+        if not enabled:
+            self.search_input.clear()
 
     def on_view_selected(self, index: int) -> None:
         """Drive the tab widget from the segmented view switcher."""
@@ -585,9 +598,14 @@ class DirigeraDashboard(QMainWindow):
             devices_by_room[room_name].append(device)
 
         # Create UI for each room
+        sections: List[Tuple[QWidget, CardGrid]] = []
         for room_name in sorted(devices_by_room.keys()):
-            section = self.create_room_section(room_name, devices_by_room[room_name])
+            section, grid = self.create_room_section(
+                room_name, devices_by_room[room_name]
+            )
             self.devices_layout.insertWidget(self.devices_layout.count() - 1, section)
+            sections.append((section, grid))
+        self._room_sections = sections
 
         # Display scenes as tiles in the same reflowing grid as the rooms.
         self.scenes_grid.set_cards(
@@ -613,6 +631,31 @@ class DirigeraDashboard(QMainWindow):
             f"and {len(self.scenes)} scenes"
         )
 
+        # A rebuild resets every card to visible, so put the active filter back
+        # on the fresh widgets (t-50).
+        self.filter_devices(self.search_input.text())
+
+    def filter_devices(self, query: str) -> None:
+        """Filter device cards and scene tiles by name as the user types (§8.8).
+
+        Matching is case-insensitive and applies to the whole name. A room
+        section hides only when none of its cards match, and hidden cards keep
+        their position so clearing the filter restores the previous order.
+        Scenes are filtered on their own grid; the Energy view is unaffected.
+        """
+        needle = query.strip().casefold()
+
+        def matches(name: str) -> bool:
+            return not needle or needle in name.casefold()
+
+        for section, grid in self._room_sections:
+            visible = grid.apply_filter(lambda card: matches(widget_name(card)))
+            section.setVisible(visible > 0 or not needle)
+
+        for tile in self.scenes_grid.cards():
+            tile.setVisible(matches(widget_name(tile)))
+        self.scenes_grid.updateGeometry()
+
     def _on_refresh_failed(self, message: str) -> None:
         """Keep the last good data and say how old it is (§3.1 row 4)."""
         self.status_chip.set_status("Hub unreachable", "warn")
@@ -626,7 +669,9 @@ class DirigeraDashboard(QMainWindow):
         self._refresh_worker = None
         self.refresh_button.setEnabled(self.hub is not None)
 
-    def create_room_section(self, room_name: str, devices: List[Any]) -> QWidget:
+    def create_room_section(
+        self, room_name: str, devices: List[Any]
+    ) -> Tuple[QWidget, CardGrid]:
         """Build one room section: section label plus reflowing card grid."""
         section = QWidget()
         layout = QVBoxLayout(section)
@@ -647,7 +692,7 @@ class DirigeraDashboard(QMainWindow):
         grid.set_cards([card for card in cards if card is not None])
         layout.addWidget(grid)
 
-        return section
+        return section, grid
 
     def create_device_widget(self, device: Any) -> Optional[QWidget]:
         """Create a DeviceCard instance with connected action handlers."""

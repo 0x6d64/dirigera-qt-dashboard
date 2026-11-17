@@ -357,7 +357,9 @@ the primary and ghost styles; disabled colour `[proposed]`.
 1. 260 px wide, 6 px radius, `sunken` background, 1 px transparent border. `[verified]`
 2. On focus: `surface` background and 1 px `accent` border. `[verified]`
 3. Placeholder "Search devices and scenes". Filters both devices and scenes as you type.
-   `[proposed]`
+   `[verified]` — case-insensitive on the full name, in the Rooms and Scenes views.
+   A room section hides when none of its cards match; hidden cards keep their
+   position so clearing the query restores the previous order. `[verified]`
 
 ### 8.9 Section label
 

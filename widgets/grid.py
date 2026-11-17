@@ -12,7 +12,7 @@ single column: a plain `QGridLayout` would pin the row to the sum of every
 card's minimum width and never reflow.
 """
 
-from typing import List, Optional, override
+from typing import Callable, List, Optional, override
 
 from PyQt6.QtCore import QPoint, QRect, QSize, Qt
 from PyQt6.QtWidgets import QLayout, QLayoutItem, QSizePolicy, QWidget
@@ -96,6 +96,7 @@ class FlowLayout(QLayout):
         effective = rect.adjusted(
             margins.left(), margins.top(), -margins.right(), -margins.bottom()
         )
+        items = self._visible_items()
         columns = grid_columns_for_width(effective.width())
         column_width = max(
             CARD_MIN_WIDTH,
@@ -106,7 +107,7 @@ class FlowLayout(QLayout):
         y = effective.y()
         row_height = 0
 
-        for index, item in enumerate(self._items):
+        for index, item in enumerate(items):
             column = index % columns
             if column == 0 and index > 0:
                 y += row_height + self._gap
@@ -118,6 +119,20 @@ class FlowLayout(QLayout):
             row_height = max(row_height, height)
 
         return y + row_height - rect.y() + margins.bottom()
+
+    def _visible_items(self) -> List[QLayoutItem]:
+        """Return the items that take a grid slot.
+
+        Filtering hides cards instead of deleting them, so hidden widgets must
+        not reserve a slot or the grid would keep empty holes (t-50).
+        """
+        items: List[QLayoutItem] = []
+        for item in self._items:
+            widget = item.widget()
+            if widget is not None and widget.isHidden():
+                continue
+            items.append(item)
+        return items
 
 
 class CardGrid(QWidget):
@@ -145,6 +160,20 @@ class CardGrid(QWidget):
     def columns(self) -> int:
         """Return the column count for the current width."""
         return grid_columns_for_width(self.width())
+
+    def apply_filter(self, predicate: Callable[[QWidget], bool]) -> int:
+        """Show only the cards matching `predicate`; return how many are shown.
+
+        Filtering hides cards instead of removing them, so clearing the filter
+        restores the previous order without rebuilding the grid (t-50).
+        """
+        visible = 0
+        for card in self.cards():
+            matches = predicate(card)
+            card.setVisible(matches)
+            visible += int(matches)
+        self.updateGeometry()
+        return visible
 
     def set_cards(self, cards: List[QWidget]) -> None:
         """Replace the grid contents, keeping the given order."""

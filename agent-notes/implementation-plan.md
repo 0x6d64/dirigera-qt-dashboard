@@ -139,10 +139,10 @@ Execute commits in this order. Each commit is independently mergeable but
 relies on the files introduced before it:
 `t-40 → t-43 + t-44 → t-41 + t-42 → t-45 → t-46 + t-47 + t-48 → t-49 + t-51 + t-52 → t-50 + t-53`
 
-**Status (2026-11-17):** commits 1–9 are executed. Only commit 10 is left, and
-it is split: commit 10a (t-50, search filter) is ready to run, commit 10b
-(t-53, contrast tests) is blocked until t-32 adds `pytest` and `tests/` and
-t-33 adds CI — the task's own acceptance criterion is "run as part of CI".
+**Status (2026-11-17):** commits 1–9 are executed, and commit 10a (t-50, search
+filter) landed on 2026-11-17. Only commit 10b (t-53, contrast tests) is left,
+and it stays blocked until t-32 adds `pytest` and `tests/` and t-33 adds CI —
+the task's own acceptance criterion is "run as part of CI".
 
 ---
 
@@ -467,12 +467,25 @@ Create a `widgets/` package (`widgets/__init__.py` empty).
 
 ---
 
-#### Commit 10a — "search filter" (t-50)
+#### Commit 10a — "search filter" (t-50) ✓ executed 2026-11-17
 
 > Split from the original commit 10 on 2026-11-17: t-53 asserts that the
 > contrast suite runs in CI, and neither `pytest` nor CI exists yet (t-32,
 > t-33). Running t-50 alone keeps the last design commit moving without
 > inventing a second, throwaway test layout.
+>
+> Notes from execution:
+> - `FlowLayout` gained `_visible_items()`: filtering hides cards instead of
+>   deleting them, and the old layout gave every hidden card a slot, leaving
+>   holes in the grid. `CardGrid.apply_filter(predicate)` wraps that and
+>   returns the number of visible cards.
+> - Room sections are tracked as `(section, grid)` pairs so hiding a section
+>   is a one-liner; the filter runs again at the end of `_on_refreshed` so a
+>   rebuild keeps the active query.
+> - Enabling the field moved into `_set_view_controls_enabled()`; leaving the
+>   connected state clears the text, which also drops the filter (§9.1).
+> - The Energy view is intentionally not filtered: §8.8 covers devices and
+>   scenes only.
 
 **Wire search field**
 
