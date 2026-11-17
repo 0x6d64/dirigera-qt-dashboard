@@ -56,7 +56,7 @@ take the next free number (see `AGENTS.md`).
 
 ## Typing, tests & CI
 
-- [ ] **t-31 [B·S]** Fix the remaining `mypy` errors: `pyqtSignal(list)` stub call *(dashboard.py:41)* and missing `None` guards in `clear_layout` *(dashboard.py:542–547)*.
+- [x] **t-31 [B·S]** Fix the remaining `mypy` errors: `pyqtSignal(list)` stub call *(dashboard.py:41)* and missing `None` guards in `clear_layout` *(dashboard.py:542–547)*. *(done: typed the signal with the same `# type: ignore[call-arg]` used by the other signals; `clear_layout` now takes `Optional[QLayoutItem]` into account and annotates its return; `mypy` is clean in all 17 files)*
 - [ ] **t-32 [B·M]** Add a small test suite (also adds `pytest` to the dev group): discovery helpers (`is_ikea_device`, network parsing with mocked `netifaces`) and mocked-hub smoke tests for `refresh_devices`.
 - [ ] **t-33 [B·S]** Add CI (GitHub Actions) running `ruff check`, `black --check`, `mypy` and `pytest` on Python 3.12.
 - [ ] **t-34 [C·M]** Enable `check_untyped_defs` and annotate the GUI methods so mypy actually checks their bodies.

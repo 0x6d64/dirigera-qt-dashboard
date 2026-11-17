@@ -53,7 +53,7 @@ class DiscoveryThread(QThread):
     """Background thread for network discovery."""
 
     # Named discovery_done to avoid shadowing the built-in QThread.finished.
-    discovery_done = pyqtSignal(list)  # List of (ip, mac) tuples
+    discovery_done = pyqtSignal(list)  # type: ignore[call-arg]  # (ip, mac)
 
     def run(self):
         """Run the discovery process."""
@@ -775,12 +775,15 @@ class DirigeraDashboard(QMainWindow):
                 return card
         return None
 
-    def clear_layout(self, layout: QVBoxLayout):
-        """Clear all widgets from a layout"""
+    def clear_layout(self, layout: QVBoxLayout) -> None:
+        """Clear all widgets from a layout."""
         while layout.count() > 1:  # Keep the stretch at the end
             item = layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
+            if item is None:
+                break
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
 
     @override
     def closeEvent(self, event: Optional[QCloseEvent]) -> None:

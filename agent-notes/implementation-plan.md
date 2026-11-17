@@ -505,7 +505,7 @@ Create a `widgets/` package (`widgets/__init__.py` empty).
 
 - `uv run black .` — no reformatting needed.
 - `uv run ruff check .` — zero warnings.
-- `uv run mypy .` — error count must not increase above the t-31 baseline (4).
+- `uv run mypy .` — must stay clean; t-31 removed the last 4 errors.
 - Offscreen smoke test: `QT_QPA_PLATFORM=offscreen uv run python -m pytest`
   with any per-commit smoke tests listed above. Until t-32 adds `pytest` and
   `tests/`, the per-commit checks were ad-hoc offscreen scripts; keep using
@@ -558,7 +558,7 @@ attributes change between fetches; feed `_on_refreshed` twice and assert the
 same `DeviceCard` objects (identity, not recreated), an unchanged scrollbar
 value, an unreleased slider still holding the dragged value, and that an
 identical payload leaves the status caption untouched. Gates: black, ruff,
-mypy at the t-31 baseline (4).
+mypy clean.
 
 #### Commit 2 — "periodic background refresh" (t-56)
 
@@ -625,7 +625,7 @@ Verification: offscreen — resize to 1080 / 760 / 640 / 639 px and assert heade
 height is 56 px above the breakpoint and 96 px below it, the switcher is on
 row 2 only in compact mode, card columns are 3 / 2 / 1 / 1, and
 `minimumSizeHint().width() <= 640`. Manual: drag the window narrow on Windows;
-check the 150 % scaling note in §11. Gates: black, ruff, mypy at baseline.
+check the 150 % scaling note in §11. Gates: black, ruff, mypy clean.
 
 ---
 
