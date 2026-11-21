@@ -38,7 +38,7 @@ from widgets.chip import StatusChip
 from widgets.connection import ConnectionBlock
 from widgets.energy import EnergyView
 from widgets.grid import CardGrid
-from widgets.scene import SceneTile
+from widgets.scene import SCENE_MIN_WIDTH, SceneTile
 from widgets.segments import SegmentedControl
 
 log = logging.getLogger(__name__)
@@ -412,7 +412,7 @@ class DirigeraDashboard(QMainWindow):
             theme.SP24, theme.SP20, theme.SP24, theme.SP24
         )
         self.scenes_layout.setSpacing(theme.SP24)
-        self.scenes_grid = CardGrid()
+        self.scenes_grid = CardGrid(min_width=SCENE_MIN_WIDTH)
         self.scenes_layout.addWidget(self.scenes_grid)
         self.scenes_layout.addStretch()
         self.scenes_scroll.setWidget(self.scenes_content)
