@@ -107,9 +107,10 @@ class Fan(Enum):
     AUTO = "auto"
 
 
-def test_air_purifier_shows_pm25_and_fan_mode_word() -> None:
+def test_air_purifier_shows_pm25_and_its_fan_control() -> None:
     card = DeviceCard(make_device("airPurifier", current_p_m25=12, fan_mode=Fan.AUTO))
-    assert readings(card) == {"PM2.5": ("12", ""), "Fan mode": ("Auto", "")}
+    assert readings(card) == {"PM2.5": ("12", "")}
+    assert card.fan_speed.current_index() == 1
     assert card.status_chip.isHidden()
     card.update_from_device(
         make_device("airPurifier", current_p_m25=3, fan_mode=Fan.AUTO)
