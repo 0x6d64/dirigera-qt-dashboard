@@ -175,6 +175,12 @@ def window(
 
     win = DirigeraDashboard()
     yield win
+    # Let in-flight workers deliver their signals now, not during the next test.
+    end = time.monotonic() + 5
+    while win._running_workers() and time.monotonic() < end:
+        qapp.processEvents()
+        time.sleep(0.005)
+    qapp.processEvents()
     win._close_pending = False
     win.hide()
     win.deleteLater()

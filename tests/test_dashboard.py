@@ -129,8 +129,7 @@ def test_failed_command_resyncs_card_and_reports(
 ) -> None:
     lamp = StubLight(fail=True)
     card = _card(window, lamp)
-    card.switch.setChecked(True)  # user intent; the hub will refuse
-    window.toggle_device_power(card, True)
+    card.switch.setChecked(True)  # the user flips the switch; the hub refuses
     wait_until(lambda: bool(dialogs))
     assert card.switch.isChecked() is False  # shows the real state
     assert "hub said no" in dialogs[0][1]
