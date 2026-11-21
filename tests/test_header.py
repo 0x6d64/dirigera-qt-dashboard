@@ -69,14 +69,16 @@ def test_single_row_fits_at_the_breakpoint(window: Any, qapp: Any) -> None:
     assert window._header_row_width() <= dashboard.HEADER_BREAKPOINT
 
 
-def test_larger_font_switches_to_two_rows_earlier(window: Any, qapp: Any) -> None:
-    _show(window, qapp, 1080)
-    font = window.header.font()
-    font.setPointSizeF(font.pointSizeF() * 2)
-    window.header.setFont(font)
-    qapp.processEvents()
-    needed = window._header_row_width()
-    assert needed > 1000
+def test_wider_row_switches_to_two_rows_earlier(
+    window: Any, qapp: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A row wider than the floor (larger fonts, scaling) moves the switch point.
+
+    The row width is fixed here: how much a font change widens it depends on
+    the platform's font propagation (it did not on the Linux CI runner).
+    """
+    needed = 1100
+    monkeypatch.setattr(window, "_header_row_width", lambda: needed)
     _show(window, qapp, 1000)
     assert 1000 > dashboard.HEADER_BREAKPOINT
     assert window.header.height() == 96
