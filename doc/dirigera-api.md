@@ -79,7 +79,7 @@ routes are undocumented in the library `[unverified]`. Rooms only appear as
 | 3 | `is_reachable` | Use for the offline state; reliability on battery devices `[unverified]` |
 | 4 | `last_seen`, `created_at` | Datetimes |
 | 5 | `room` | Optional `Room(id, name, color, icon)`; value formats of `color` and `icon` `[unverified]` |
-| 6 | `is_hidden` | Optional bool; whether the IKEA app hides these `[unverified]` |
+| 6 | `is_hidden` | Optional bool; the dashboard hides these devices like the IKEA app (owner decision, t-89) |
 | 7 | `capabilities` | `can_send`, `can_receive` (lists of camelCase attribute names) |
 | 8 | `device_set`, `remote_links` | Untyped lists; meaning `[unverified]` |
 | 9 | `attributes` (common) | `custom_name`, `model`, `manufacturer`, `firmware_version`, `hardware_version`, optional `serial_number`, `product_code`, `ota_*` |
@@ -188,10 +188,10 @@ for d in hub.get("/devices"):
 | 1 | Blind level 0 means open or closed? | Move a real blind and read `blinds_current_level` |
 | 2 | Units of PM2.5, illuminance, filter times; meaning of `motor_state` | Compare against the IKEA app's displayed values |
 | 3 | Is a plug's energy on the outlet or a separate electrical sensor? | Dump shows whether an `electricalSensor` shares its `relationId` |
-| 4 | Should `is_hidden` devices be shown? | Compare the dump with what the IKEA app lists |
-| 5 | Values of `color_mode`, `room.icon`, `room.color` | Read from the dump |
-| 6 | Does `light_level` stay populated while a light is off? | Read from the dump with a light off |
-| 7 | Event shapes for button presses, add/remove, reachability | Log raw events from a listener while pressing a remote |
+| 4 | Should `is_hidden` devices be shown? | Decided: no, hide them (t-89) |
+| 5 | Values of `color_mode`, `room.icon`, `room.color` | Read from the dump; room colours get best-guess RGB values (t-86) |
+| 6 | Does `light_level` stay populated while a light is off? | Answered by the owner: yes, the hub keeps the last value |
+| 7 | Event shapes for button presses, add/remove, reachability | Only needed for live updates (t-16); answer then |
 
 ## 5. Observed on a real hub (2026-11-21)
 

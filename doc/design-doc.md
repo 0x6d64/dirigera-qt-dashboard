@@ -361,11 +361,11 @@ Label size, medium weight, `text-2`, sentence case. Placed above each room's car
 2. Anatomy: glyph, name (title), primary button "Activate" aligned right or bottom. `[proposed]`
 3. After activation, the button area shows "Activated" in `ok` text for about two
    seconds, then returns. No modal dialog. `[proposed]`
-4. Undo: appears for the allowed window after activation. Not implemented: the
-   duration is unknown (`undo_allowed_duration` has no documented unit `[lib]`;
-   section 14, item 12).
-5. Automatic (non-user) scenes are hidden by default, shown when "Show automatic scenes"
-   is enabled. `[proposed]` Decision pending (section 14, item 3).
+4. No undo after activation (section 14, item 12).
+5. Automatic scenes are those the IKEA app creates itself: every scene whose type is not
+   `userScene` (on the test hub, the `customScene` "Smart Notifications@…" entries). They
+   are hidden by default and shown when "Show automatic scenes" is enabled; the choice is
+   remembered (section 14, item 3; t-90).
 
 ### 8.11 Energy card
 
@@ -405,7 +405,7 @@ with its label and card grid. Sections are ordered alphabetically (section 14, i
 ### 9.3 Scenes
 
 Same header with the Scenes segment selected. Content: scene tiles in a width-driven
-grid, with an optional "Show automatic scenes" toggle above the grid. `[proposed]`
+grid, with a "Show automatic scenes" toggle above the grid (off by default; t-90).
 
 ### 9.4 Energy
 
@@ -458,8 +458,8 @@ Whether totals are shown per home or per room is undecided (section 14, item 5).
 2. Section expansion is not used. `[proposed]`
 3. Values updating several times a second do not animate. `[proposed]`
 4. Skeletons do not animate. `[proposed]`
-5. Reduced motion: provide an in-app setting; use the OS setting if Qt exposes it on
-   Windows (section 14, item 7).
+5. No reduced-motion setting: the only animations are the 120 ms switch and segment
+   changes (section 14, item 7).
 
 ### 10.5 Keyboard
 
@@ -520,19 +520,19 @@ See `qt-gotchas.md`.
 
 | # | Decision | Status |
 | --- | --- | --- |
-| 1 | Application name | Open. Neutral name, checked for availability; "Home" is a placeholder. The window title is currently "Dirigera Dashboard", which section 2.2 allows only descriptively; rename together with this decision |
+| 1 | Application name | Decided: keep "Dirigera Dashboard" |
 | 2 | Room section order | Decided and implemented: alphabetical, case-insensitive |
-| 3 | Show automatic scenes by default | Open. Default proposed: no (t-77) |
+| 3 | Show automatic scenes by default | Decided: no; non-`userScene` scenes are hidden behind a toggle (t-90) |
 | 4 | Low-battery threshold | Decided and implemented: 20 % (`LOW_BATTERY_PERCENT`) |
-| 5 | Energy totals per home or per room | Open. Default proposed: per room, with a home total |
-| 6 | Icon source | Open. Hand-drawn, or a licence-checked set |
-| 7 | Reduced-motion behaviour on Windows | Open. Default proposed: in-app setting |
+| 5 | Energy totals per home or per room | Decided: a total per room and one home total (t-87) |
+| 6 | Icon source | Decided and implemented: icons drawn in code (`widgets/icons.py`) |
+| 7 | Reduced-motion behaviour on Windows | Decided: no setting; animations stay as they are |
 | 8 | Colour-temperature gradient rendering | Decided and implemented: groove gradient between `TEMP_WARM` and `TEMP_COOL`, no fill |
-| 9 | Air-quality colour bands | Open. None until a standard is chosen |
-| 10 | Disabled control colours | Open. Muted tones of enabled colours; verify |
-| 11 | Windows verification: Segoe UI Variable, tabular figures, name truncation, 150 % scaling, text scaling | Open. Check on Windows before release |
-| 12 | Scene undo duration | Open. Unit of `undo_allowed_duration` unknown |
-| 13 | Refresh cost | Open. Measure against a real hub before optimising |
+| 9 | Air-quality colour bands | Decided: WHO-style PM2.5 bands, good ≤ 15, moderate ≤ 35, poor above (µg/m³), shown with a word, never colour alone (t-88) |
+| 10 | Disabled control colours | Decided and implemented: muted tones of enabled colours, checked by `tests/test_theme_contrast.py` |
+| 11 | Windows verification: Segoe UI Variable, tabular figures, name truncation, 150 % scaling, text scaling | Checked by the owner on Windows (2026-11-21): looks fine |
+| 12 | Scene undo | Decided: no undo |
+| 13 | Refresh cost | Checked on a real hub (2026-11-21): fast enough, no optimisation |
 
 ## 15. Acceptance checklist
 
