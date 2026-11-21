@@ -62,7 +62,7 @@ route for history), t-78 (no blind).
 
 ### Plan: air purifier filter health and fan speed (t-85, t-80)
 
-Status: open
+Status: done 2026-11-21
 
 Goal: the purifier card shows how much filter life is left and warns when the
 filter must be changed (`req-20`), and lets the user pick Off, Auto or speed
@@ -82,7 +82,7 @@ Affected files: `widgets/text.py`, `widgets/card.py`, `dashboard.py`,
 `doc/dirigera-api.md` §3, `doc/design-doc.md` (purifier card lines if any),
 `doc/reqs.md`, `agent-notes/todo.md`
 
-#### Commit 1 — "show air purifier filter health" (t-85)
+#### Commit 1 — "show air purifier filter health" (t-85) ✓ executed 2026-11-21
 
 1. `widgets/text.py`: `filter_text(lifetime, elapsed, alarm) -> Optional[str]`.
    None when lifetime or elapsed is not a positive int / int. Remaining =
@@ -100,7 +100,7 @@ Affected files: `widgets/text.py`, `widgets/card.py`, `dashboard.py`,
    chip for a purifier made with `make_device("airPurifier", ...)` with and
    without the alarm.
 
-#### Commit 2 — "add air purifier fan speed control" (t-80)
+#### Commit 2 — "add air purifier fan speed control" (t-80) ✓ executed 2026-11-21
 
 1. `widgets/card.py`: constants `FAN_SPEED_LABELS = ("Off", "Auto", "1", "2",
    "3", "4", "5")` and `FAN_MOTOR_STATES = (0, 1, 10, 20, 30, 40, 50)`; pure
@@ -133,7 +133,7 @@ Affected files: `widgets/text.py`, `widgets/card.py`, `dashboard.py`,
    error; a refresh with a changed `motor_state` moves the selection without
    sending a command.
 
-#### Commit 3 — "record purifier controls"
+#### Commit 3 — "record purifier controls" ✓ executed 2026-11-21
 
 Bookkeeping (see batch rules): t-80, t-85; `req-15`, `req-20`;
 `doc/dirigera-api.md` §3 air purifier row (fan speed control and filter
@@ -141,6 +141,11 @@ footer implemented).
 
 Verification: gates; manual on the real hub by the owner (speed changes,
 filter footer reads "Filter used up · change now", chip "Change filter").
+
+> **Executed 2026-11-21** on branch `feat/purifier-controls`: commit 1
+> "show air purifier filter health" (`db98edc`), commit 2 "add air purifier
+> fan speed control" (`e8eaf13`), commit 3 "record purifier controls" (the
+> commit that adds this note; not merged).
 
 ---
 
