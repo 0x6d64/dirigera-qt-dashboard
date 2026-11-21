@@ -49,8 +49,17 @@ Orientation docs: `README.md`, `doc/design-doc.md` (visual design),
 ### Plan workflow (branches)
 
 - **Executing a plan happens on a dedicated branch.** Before the first plan
-  commit, create `plan/<short-slug>` (e.g. `plan/responsive-grid`) from the
-  current working branch (`git branch --show-current`).
+  commit, create `<type>/<short-slug>` (e.g. `feat/responsive-grid`) from the
+  current working branch (`git branch --show-current`). The type describes the
+  kind of change:
+
+  | Type | Use |
+  |---|---|
+  | `feat/` | new behaviour |
+  | `fix/` | bug fixes |
+  | `test/` | tests and CI |
+  | `docs/` | docs and notes only |
+  | `chore/` | tooling, dependencies, cleanup |
 - Commit each plan step to that branch. Bookkeeping that belongs to the plan
   (checking off `t-` items, execution markers in the plan) goes on the same
   branch.
@@ -123,7 +132,7 @@ Orientation docs: `README.md`, `doc/design-doc.md` (visual design),
 - Small, focused commits with short imperative messages (existing history is
   lowercase, e.g. "update packages").
 - **Do not switch branches unless the user asks for it.** The plan workflow
-  above is the only exception: create the `plan/<slug>` branch when a plan
+  above is the only exception: create the `<type>/<slug>` branch when a plan
   starts, and switch back to merge it when the plan is complete.
-- Do not commit directly to `master`. Work on the current feature or `plan/`
+- Do not commit directly to `master`. Work on the current plan
   branch; check it with `git branch --show-current` instead of assuming a name.

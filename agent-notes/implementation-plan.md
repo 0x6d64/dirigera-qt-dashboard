@@ -239,7 +239,7 @@ check the 150 % scaling note in §11. Gates: black, ruff, mypy clean.
 
 Goal: a small suite that guards behaviour (requirements) and pure logic, not
 layout or styling, so it survives UI work. Executed on branch
-`plan/test-suite`.
+`test/pytest-suite`.
 
 1. Add `pytest` to the dev group, `pythonpath`/`testpaths` config and shared
    fixtures in `tests/conftest.py` (offscreen `QApplication`, recording
