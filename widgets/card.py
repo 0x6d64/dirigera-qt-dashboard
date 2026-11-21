@@ -1,7 +1,8 @@
 """
 Device card component.
 
-Follows design-doc.md §8.1:
+Follows design-doc.md §8.1 (header, footer and error handling live in
+`widgets/cardbase.py`):
 - Minimum width: 280 px; height determined by content
 - Border 1 px BORDER, radius 10 px (RADIUS_CARD), background SURFACE
 - Padding: 16 px (SP16); Gap between zones: 12 px (SP12)
@@ -19,26 +20,22 @@ Follows design-doc.md §8.1:
 from datetime import datetime
 from typing import Any, Callable, Optional, Tuple, override
 
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QResizeEvent
 from PyQt6.QtWidgets import (
-    QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
     QPushButton,
-    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
 
 import theme
-from widgets.chip import StatusChip
+from widgets.cardbase import PENDING_TEXT, CardBase, device_name, label_style
 from widgets.metric import MetricWidget
 from widgets.segments import SegmentedControl
 from widgets.slider import LabeledSlider
 from widgets.switch import ToggleSwitch
-from widgets.text import energy_footer, filter_text, relative_time, type_label
+from widgets.text import energy_footer, filter_text, relative_time
 
 # Device category sorting weight per design-doc.md §8.1 rule 3
 # (keys are the library's camelCase `device_type` values; every controller
@@ -83,9 +80,6 @@ READINGS_PER_ROW = 3
 
 # Battery level at or below which the chip warns (design-doc.md §14 item 4).
 LOW_BATTERY_PERCENT = 20
-
-# How long a command error stays in the footer before the normal text returns.
-CARD_ERROR_MS = 8000
 
 
 def _bound_to_kelvin(bound: int) -> int:
@@ -151,7 +145,7 @@ def device_sort_key(device: Any) -> Tuple[int, str]:
     return (weight, name_str.lower())
 
 
-class DeviceCard(QFrame):
+class DeviceCard(CardBase):
     """Calm, structured card representation of a single smart home device."""
 
     def __init__(
@@ -169,8 +163,7 @@ class DeviceCard(QFrame):
         """Build the card. Every callback receives the card itself, so the
         handler can reach `card.device` and resync the card afterwards with
         `sync_from_device()`."""
-        super().__init__(parent)
-        self.device = device
+        super().__init__(device, parent)
         self._on_toggle = on_toggle
         self._on_brightness = on_brightness
         self._on_blind_position = on_blind_position
@@ -183,127 +176,19 @@ class DeviceCard(QFrame):
         self._readings_box: Optional[QWidget] = None
         self._fan_box: Optional[QWidget] = None
         self._readings: dict[str, MetricWidget] = {}
-        self._is_offline = False
-        self._pending = False
-        self._error: Optional[str] = None
-        self._error_timer = QTimer(self)
-        self._error_timer.setSingleShot(True)
-        self._error_timer.setInterval(CARD_ERROR_MS)
-        self._error_timer.timeout.connect(self._clear_error)
 
-        self.setMinimumWidth(280)
-        self.setFrameShape(QFrame.Shape.StyledPanel)
-        self._apply_card_style(is_offline=False)
-
-        card_layout = QVBoxLayout(self)
-        card_layout.setContentsMargins(theme.SP16, theme.SP16, theme.SP16, theme.SP16)
-        card_layout.setSpacing(theme.SP12)
-
-        # 1. Header row
-        header_layout = QHBoxLayout()
-        header_layout.setContentsMargins(0, 0, 0, 0)
-        header_layout.setSpacing(theme.SP8)
-
-        titles_vbox = QVBoxLayout()
-        titles_vbox.setContentsMargins(0, 0, 0, 0)
-        titles_vbox.setSpacing(2)
-
-        raw_name = getattr(device.attributes, "custom_name", None) or getattr(
-            device, "id", "Unknown Device"
-        )
-        self.full_name = raw_name
-        self.name_label = QLabel(raw_name)
-        self.name_label.setStyleSheet(f"""
-            QLabel {{
-                color: {theme.TEXT};
-                font-size: {theme.FONT_TITLE}px;
-                font-weight: 600;
-                background-color: transparent;
-            }}
-            """)
-        self.name_label.setToolTip(raw_name)
-        # Ignored: the full name must never widen the card; it is elided to
-        # the room the header leaves (§8.1).
-        self.name_label.setSizePolicy(
-            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
-        )
-        titles_vbox.addWidget(self.name_label)
-
-        self.type_label = QLabel(type_label(getattr(device, "device_type", "device")))
-        self.type_label.setStyleSheet(f"""
-            QLabel {{
-                color: {theme.TEXT2};
-                font-size: {theme.FONT_CAPTION}px;
-                background-color: transparent;
-            }}
-            """)
-        titles_vbox.addWidget(self.type_label)
-
-        header_layout.addLayout(titles_vbox, stretch=1)
-
-        self.status_chip = StatusChip(text="", variant="neutral")
-        header_layout.addWidget(self.status_chip, alignment=Qt.AlignmentFlag.AlignTop)
-
-        card_layout.addLayout(header_layout)
-
-        # 2. Control zone
+        # Control zone: 0 to 3 controls depending on device type.
         self.control_zone = QVBoxLayout()
         self.control_zone.setContentsMargins(0, 0, 0, 0)
         self.control_zone.setSpacing(theme.SP8)
         self._build_controls()
         if self.control_zone.count() > 0:
-            card_layout.addLayout(self.control_zone)
+            self.card_layout.addLayout(self.control_zone)
 
-        # 3. Footer row
-        self.footer_label = QLabel()
-        self.footer_label.setWordWrap(True)
-        self._style_footer(danger=False)
-        self._update_footer()
-        card_layout.addWidget(self.footer_label)
-
-        # Initial status chip sync
+        # Footer row, then the initial status chip sync.
+        self._init_footer()
         self._update_status_chip()
         self._elide_name()
-
-    def _elide_name(self) -> None:
-        """Show `full_name` cut with an ellipsis to the width the header has.
-
-        The width is derived from the card, not from the label, so it is right
-        before the first layout pass and cannot feed back into the card size.
-        """
-        self.name_label.ensurePolished()
-        available = (
-            self.width()
-            - 2 * theme.SP16
-            - theme.SP8
-            - (
-                0
-                if self.status_chip.isHidden()
-                else self.status_chip.sizeHint().width()
-            )
-        )
-        text = str(self.full_name)
-        if available > 0:
-            text = self.name_label.fontMetrics().elidedText(
-                text, Qt.TextElideMode.ElideRight, available
-            )
-        if self.name_label.text() != text:
-            self.name_label.setText(text)
-
-    @override
-    def resizeEvent(self, event: Optional[QResizeEvent]) -> None:
-        super().resizeEvent(event)
-        self._elide_name()
-
-    def _apply_card_style(self, is_offline: bool) -> None:
-        bg = theme.SUNKEN if is_offline else theme.SURFACE
-        self.setStyleSheet(f"""
-            DeviceCard {{
-                background-color: {bg};
-                border: 1px solid {theme.BORDER};
-                border-radius: {theme.RADIUS_CARD}px;
-            }}
-            """)
 
     def _build_controls(self) -> None:
         dtype = getattr(self.device, "device_type", "unknown")
@@ -313,9 +198,7 @@ class DeviceCard(QFrame):
             switch_row = QHBoxLayout()
             switch_row.setContentsMargins(0, 0, 0, 0)
             switch_label = QLabel("Power")
-            switch_label.setStyleSheet(
-                f"color: {theme.TEXT2}; font-size: {theme.FONT_LABEL}px;"
-            )
+            switch_label.setStyleSheet(label_style(theme.TEXT2, theme.FONT_LABEL))
             switch_row.addWidget(switch_label)
             switch_row.addStretch()
 
@@ -383,9 +266,7 @@ class DeviceCard(QFrame):
             switch_row = QHBoxLayout()
             switch_row.setContentsMargins(0, 0, 0, 0)
             switch_label = QLabel("Power")
-            switch_label.setStyleSheet(
-                f"color: {theme.TEXT2}; font-size: {theme.FONT_LABEL}px;"
-            )
+            switch_label.setStyleSheet(label_style(theme.TEXT2, theme.FONT_LABEL))
             switch_row.addWidget(switch_label)
             switch_row.addStretch()
 
@@ -524,9 +405,7 @@ class DeviceCard(QFrame):
         box_layout.setContentsMargins(0, 0, 0, 0)
         box_layout.setSpacing(theme.SP4)
         fan_label = QLabel("Fan")
-        fan_label.setStyleSheet(
-            f"color: {theme.TEXT2}; font-size: {theme.FONT_LABEL}px;"
-        )
+        fan_label.setStyleSheet(label_style(theme.TEXT2, theme.FONT_LABEL))
         box_layout.addWidget(fan_label)
         self.fan_speed = SegmentedControl(list(FAN_SPEED_LABELS))
         self.fan_speed.setAccessibleName(f"{self.full_name} fan speed")
@@ -611,11 +490,6 @@ class DeviceCard(QFrame):
         for attr, metric in self._readings.items():
             metric.set_value(values[attr])
 
-    def _set_chip(self, text: str, variant: str) -> None:
-        """Show the state chip, or hide it when there is no state to show."""
-        self.status_chip.set_status(text, variant)
-        self.status_chip.setVisible(bool(text))
-
     def _update_status_chip(self) -> None:
         attrs = getattr(self.device, "attributes", None)
         dtype = getattr(self.device, "device_type", "unknown")
@@ -685,44 +559,9 @@ class DeviceCard(QFrame):
         if isinstance(battery, (int, float)) and battery <= LOW_BATTERY_PERCENT:
             self._set_chip("Low battery", "warn")
 
-    def _style_footer(self, danger: bool) -> None:
-        color = theme.DANGER if danger else theme.TEXT2
-        self.footer_label.setStyleSheet(f"""
-            QLabel {{
-                color: {color};
-                font-size: {theme.FONT_CAPTION}px;
-                background-color: transparent;
-            }}
-            """)
-
-    def _set_footer(self, text: str) -> None:
-        """Show `text`, unless a command error is being shown (danger tone)."""
-        if self._error is not None and text != "Sending…":
-            self.footer_label.setText(self._error)
-            self._style_footer(danger=True)
-        else:
-            self.footer_label.setText(text)
-            self._style_footer(danger=False)
-
-    def show_error(self, message: str) -> None:
-        """Show `message` in the footer in danger tone for CARD_ERROR_MS."""
-        self._error = message
-        self._error_timer.start()
-        if self._pending:
-            return
-        if self._is_offline:
-            self._set_footer(self._offline_text())
-        else:
-            self._update_footer()
-
-    def _clear_error(self) -> None:
-        self._error = None
-        if self._pending:
-            return
-        if self._is_offline:
-            self._set_footer(self._offline_text())
-        else:
-            self._update_footer()
+    @override
+    def _offline_footer(self) -> Optional[str]:
+        return self._offline_text()
 
     def _offline_text(self) -> str:
         """Footer of an offline card: when it was last seen, if known."""
@@ -731,9 +570,10 @@ class DeviceCard(QFrame):
             return "Device unreachable"
         return f"Last seen {relative_time(seen, datetime.now(seen.tzinfo))}"
 
+    @override
     def _update_footer(self) -> None:
         if self._pending:
-            self._set_footer("Sending…")
+            self._set_footer(PENDING_TEXT)
             return
         attrs = getattr(self.device, "attributes", None)
         dtype = getattr(self.device, "device_type", "unknown")
@@ -780,13 +620,7 @@ class DeviceCard(QFrame):
             self._update_status_chip()
             self._update_footer()
 
-    def set_pending(self, pending: bool) -> None:
-        """Show pending command status in footer."""
-        if pending:
-            self._set_footer("Sending…")
-        else:
-            self._update_footer()
-
+    @override
     def sync_from_device(self) -> None:
         """Resync every control, the chip and the footer from `self.device`.
 
@@ -804,13 +638,7 @@ class DeviceCard(QFrame):
         slider the user is dragging or has focused keeps its value (req-13).
         """
         self.device = device
-        raw_name = getattr(device.attributes, "custom_name", None) or getattr(
-            device, "id", "Unknown Device"
-        )
-        if raw_name != self.full_name:
-            self.full_name = raw_name
-            self.name_label.setToolTip(raw_name)
-            self._elide_name()
+        self._set_name(device_name(device))
         self._sync(protect_user=True)
 
     def _sync(self, protect_user: bool) -> None:

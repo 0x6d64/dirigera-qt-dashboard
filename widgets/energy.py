@@ -16,12 +16,10 @@ Only outlets and electrical sensors reach this view; the dashboard filters
 them before calling `EnergyView.set_rooms()`.
 """
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, override
 
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
-    QFrame,
-    QHBoxLayout,
     QLabel,
     QScrollArea,
     QVBoxLayout,
@@ -29,108 +27,43 @@ from PyQt6.QtWidgets import (
 )
 
 import theme
-from widgets.chip import StatusChip
-from widgets.grid import CARD_MIN_WIDTH, CardGrid
+from widgets.cardbase import CardBase, label_style
+from widgets.grid import CardGrid
 from widgets.metric import MetricWidget
-from widgets.text import format_amps, format_kwh, format_volts, type_label
+from widgets.text import format_amps, format_kwh, format_volts
 
 
-class EnergyCard(QFrame):
-    """Card with the live power reading of one metered device."""
+class EnergyCard(CardBase):
+    """Card with the live power reading of one metered device.
+
+    Shares the header, footer and command feedback (`set_pending`,
+    `show_error`, `sync_from_device`) with the device card, so a command can
+    run through the dashboard's `run_device_command`.
+    """
 
     def __init__(self, device: Any, parent: Optional[QWidget] = None) -> None:
-        super().__init__(parent)
-        self.device = device
+        super().__init__(device, parent)
         attrs = getattr(device, "attributes", None)
-        dtype = getattr(device, "device_type", "device")
 
-        self.setMinimumWidth(CARD_MIN_WIDTH)
-        self.setFrameShape(QFrame.Shape.StyledPanel)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(theme.SP16, theme.SP16, theme.SP16, theme.SP16)
-        layout.setSpacing(theme.SP12)
-
-        # 1. Header row: name over type, status chip on the right.
-        header = QHBoxLayout()
-        header.setContentsMargins(0, 0, 0, 0)
-        header.setSpacing(theme.SP8)
-
-        titles = QVBoxLayout()
-        titles.setContentsMargins(0, 0, 0, 0)
-        titles.setSpacing(2)
-
-        raw_name = getattr(attrs, "custom_name", None) or getattr(
-            device, "id", "Unknown device"
-        )
-        self.full_name = raw_name
-        self.name_label = QLabel(raw_name)
-        self.name_label.setToolTip(raw_name)
-        self.name_label.setStyleSheet(f"""
-            QLabel {{
-                color: {theme.TEXT};
-                font-size: {theme.FONT_TITLE}px;
-                font-weight: 600;
-                background-color: transparent;
-            }}
-            """)
-        titles.addWidget(self.name_label)
-
-        self.type_label = QLabel(type_label(dtype))
-        self.type_label.setStyleSheet(f"""
-            QLabel {{
-                color: {theme.TEXT2};
-                font-size: {theme.FONT_CAPTION}px;
-                background-color: transparent;
-            }}
-            """)
-        titles.addWidget(self.type_label)
-
-        header.addLayout(titles, stretch=1)
-
-        self.status_chip = StatusChip(text="", variant="neutral")
-        header.addWidget(self.status_chip, alignment=Qt.AlignmentFlag.AlignTop)
-        layout.addLayout(header)
-
-        # 2. Metric zone: live power, then the A / V caption line.
+        # Metric zone: live power, then the A / V caption line.
         power = getattr(attrs, "current_active_power", None)
         self.power_metric: Optional[MetricWidget] = None
         if power is not None:
             self.power_metric = MetricWidget(
                 caption="Power", initial_value=power, unit="W"
             )
-            layout.addWidget(self.power_metric)
+            self.card_layout.addWidget(self.power_metric)
 
         self.caption_label = QLabel(self._format_captions(attrs))
-        self.caption_label.setStyleSheet(f"""
-            QLabel {{
-                color: {theme.TEXT2};
-                font-size: {theme.FONT_CAPTION}px;
-                background-color: transparent;
-            }}
-            """)
+        self.caption_label.setStyleSheet(label_style(theme.TEXT2, theme.FONT_CAPTION))
         # Always in the layout so a refresh can fill it later; hidden while
         # the device reports no current or voltage.
         self.caption_label.setVisible(bool(self.caption_label.text()))
-        layout.addWidget(self.caption_label)
+        self.card_layout.addWidget(self.caption_label)
 
-        # 3. Footer: total energy, or an explicit "no data" line.
-        self.footer_label = QLabel(self._format_footer(attrs))
-        self.footer_label.setStyleSheet(f"""
-            QLabel {{
-                color: {theme.TEXT2};
-                font-size: {theme.FONT_CAPTION}px;
-                background-color: transparent;
-            }}
-            """)
-        layout.addWidget(self.footer_label)
-
-        offline = getattr(device, "is_reachable", True) is False
-        self._apply_style(offline=offline)
-        if offline:
-            self._set_chip("Offline", "neutral")
-        else:
-            self._update_chip(attrs, dtype)
+        # Footer: total energy, or an explicit "no data" line.
+        self._init_footer()
+        self._update_state()
 
     @property
     def is_metered(self) -> bool:
@@ -148,34 +81,40 @@ class EnergyCard(QFrame):
         if (power is not None) != (self.power_metric is not None):
             return False
         self.device = device
+        self._redraw()
+        return True
+
+    @override
+    def sync_from_device(self) -> None:
+        """Redraw the card from `self.device`, e.g. after a command."""
+        self._redraw()
+
+    def _redraw(self) -> None:
+        """Show the readings, footer and state of `self.device`."""
+        attrs = getattr(self.device, "attributes", None)
         if self.power_metric is not None:
-            self.power_metric.set_value(power)
+            self.power_metric.set_value(getattr(attrs, "current_active_power", None))
         text = self._format_captions(attrs)
         self.caption_label.setText(text)
         self.caption_label.setVisible(bool(text))
-        self.footer_label.setText(self._format_footer(attrs))
-        offline = getattr(device, "is_reachable", True) is False
-        self._apply_style(offline=offline)
+        self._update_footer()
+        self._update_state()
+
+    @override
+    def _update_footer(self) -> None:
+        attrs = getattr(self.device, "attributes", None)
+        self._set_footer(self._format_footer(attrs))
+
+    def _update_state(self) -> None:
+        """Card surface and chip: offline, or the outlet's on/off state."""
+        offline = getattr(self.device, "is_reachable", True) is False
+        self._is_offline = offline
+        self._apply_card_style(is_offline=offline)
         if offline:
             self._set_chip("Offline", "neutral")
         else:
-            self._update_chip(attrs, getattr(device, "device_type", "device"))
-        return True
-
-    def _apply_style(self, offline: bool) -> None:
-        bg = theme.SUNKEN if offline else theme.SURFACE
-        self.setStyleSheet(f"""
-            EnergyCard {{
-                background-color: {bg};
-                border: 1px solid {theme.BORDER};
-                border-radius: {theme.RADIUS_CARD}px;
-            }}
-            """)
-
-    def _set_chip(self, text: str, variant: str) -> None:
-        """Show the state chip, or hide it when there is no state to show."""
-        self.status_chip.set_status(text, variant)
-        self.status_chip.setVisible(bool(text))
+            attrs = getattr(self.device, "attributes", None)
+            self._update_chip(attrs, getattr(self.device, "device_type", "device"))
 
     def _update_chip(self, attrs: Any, dtype: str) -> None:
         """Chip for a readable outlet state; nothing otherwise (no invented state)."""

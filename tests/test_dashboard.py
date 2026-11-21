@@ -172,7 +172,7 @@ def test_failing_reload_is_logged_and_the_failure_still_reported(
 def test_card_error_clears_after_its_timeout(
     window: Any, monkeypatch: pytest.MonkeyPatch, wait_until: Wait
 ) -> None:
-    from widgets import card as card_module
+    from widgets import cardbase as card_module
 
     monkeypatch.setattr(card_module, "CARD_ERROR_MS", 30)
     card = _card(window, StubLight())
