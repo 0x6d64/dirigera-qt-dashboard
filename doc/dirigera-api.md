@@ -42,8 +42,9 @@ Section 4 gives a read-only way to dump them.
    `create_event_listener()` calls `run_forever` and returns only when the socket
    closes. The hub closes idle connections itself. Events carry `type` and
    `data.id` plus only the changed attributes (README example: `{'isOn': False}`).
-   Events during a reconnect are lost, so refetch state after reconnecting. This is
-   `t-16`.
+   Events during a reconnect are lost, so refetch state after reconnecting. To apply
+   an event, either merge its camelCase keys or `reload()` the device (one
+   `GET /devices/{id}`), which is simpler and robust. This is `t-16`.
 6. **The shared `requests.Session` is not documented as thread-safe.** `[lib]` The
    hub object uses one session for all calls. Running slider commands, refreshes and
    the listener concurrently on one `Hub` is a risk `[unverified]`. Serialize hub
