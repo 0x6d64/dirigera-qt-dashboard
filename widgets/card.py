@@ -69,12 +69,15 @@ class DeviceCard(QFrame):
     def __init__(
         self,
         device: Any,
-        on_toggle: Optional[Callable[[Any, bool, ToggleSwitch], None]] = None,
-        on_brightness: Optional[Callable[[Any, int, LabeledSlider], None]] = None,
-        on_blind_position: Optional[Callable[[Any, int, LabeledSlider], None]] = None,
-        on_blind_state: Optional[Callable[[Any, str], None]] = None,
+        on_toggle: Optional[Callable[["DeviceCard", bool], None]] = None,
+        on_brightness: Optional[Callable[["DeviceCard", int], None]] = None,
+        on_blind_position: Optional[Callable[["DeviceCard", int], None]] = None,
+        on_blind_state: Optional[Callable[["DeviceCard", str], None]] = None,
         parent=None,
     ):
+        """Build the card. Every callback receives the card itself, so the
+        handler can reach `card.device` and resync the card afterwards with
+        `sync_from_device()`."""
         super().__init__(parent)
         self.device = device
         self._on_toggle = on_toggle
@@ -189,7 +192,7 @@ class DeviceCard(QFrame):
             if self._on_toggle is not None:
                 cb = self._on_toggle
                 self.switch.toggled.connect(
-                    lambda chk, callback=cb: callback(self.device, chk, self.switch)
+                    lambda chk, callback=cb: callback(self, chk)
                 )
             switch_row.addWidget(self.switch)
             self._controls.append(self.switch)
@@ -210,9 +213,7 @@ class DeviceCard(QFrame):
                 if self._on_brightness is not None:
                     cb_bright = self._on_brightness
                     self.brightness_slider.released.connect(
-                        lambda val, callback=cb_bright: callback(
-                            self.device, val, self.brightness_slider
-                        )
+                        lambda val, callback=cb_bright: callback(self, val)
                     )
                 self._controls.append(self.brightness_slider)
                 self.control_zone.addWidget(self.brightness_slider)
@@ -234,9 +235,7 @@ class DeviceCard(QFrame):
             if self._on_toggle is not None:
                 cb_toggle = self._on_toggle
                 self.switch.toggled.connect(
-                    lambda chk, callback=cb_toggle: callback(
-                        self.device, chk, self.switch
-                    )
+                    lambda chk, callback=cb_toggle: callback(self, chk)
                 )
             switch_row.addWidget(self.switch)
             self._controls.append(self.switch)
@@ -255,9 +254,7 @@ class DeviceCard(QFrame):
             if self._on_blind_position is not None:
                 cb_pos = self._on_blind_position
                 self.blind_slider.released.connect(
-                    lambda val, callback=cb_pos: callback(
-                        self.device, val, self.blind_slider
-                    )
+                    lambda val, callback=cb_pos: callback(self, val)
                 )
             self._controls.append(self.blind_slider)
             self.control_zone.addWidget(self.blind_slider)
@@ -281,9 +278,7 @@ class DeviceCard(QFrame):
                     if self._on_blind_state is not None:
                         cb_state = self._on_blind_state
                         btn.clicked.connect(
-                            lambda _, a=action, callback=cb_state: callback(
-                                self.device, a
-                            )
+                            lambda _, a=action, callback=cb_state: callback(self, a)
                         )
                     btn_row.addWidget(btn)
                     self._controls.append(btn)
@@ -384,3 +379,29 @@ class DeviceCard(QFrame):
             self.footer_label.setText("Sending…")
         else:
             self._update_footer()
+
+    def sync_from_device(self) -> None:
+        """Resync every control, the chip and the footer from `self.device`.
+
+        Called after a command finishes: on success the library has already
+        written the new value into `device.attributes`; on failure the device
+        was reloaded, so the card shows the real state (req-3). Signals are
+        blocked so the resync never sends a command of its own.
+        """
+        attrs = getattr(self.device, "attributes", None)
+        switch = getattr(self, "switch", None)
+        if isinstance(switch, ToggleSwitch):
+            switch.blockSignals(True)
+            switch.setChecked(bool(getattr(attrs, "is_on", False)))
+            switch.blockSignals(False)
+        for name, attr in (
+            ("brightness_slider", "light_level"),
+            ("blind_slider", "blinds_current_level"),
+        ):
+            slider = getattr(self, name, None)
+            value = getattr(attrs, attr, None)
+            if isinstance(slider, LabeledSlider) and value is not None:
+                slider.blockSignals(True)
+                slider.set_value(int(value))
+                slider.blockSignals(False)
+        self.set_offline(not getattr(self.device, "is_reachable", True))

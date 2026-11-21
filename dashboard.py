@@ -1,13 +1,12 @@
 import configparser
 import os
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple, override
+from typing import Any, Callable, Dict, List, Optional, Tuple, override
 
 from dirigera import Hub
-from dirigera.devices.blinds import Blind, BlindsStateEnum
-from dirigera.devices.light import Light
-from dirigera.devices.outlet import Outlet
+from dirigera.devices.blinds import BlindsStateEnum
 from dirigera.devices.scene import Scene
+from PyQt6 import sip
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QCloseEvent
 from PyQt6.QtWidgets import (
@@ -37,8 +36,6 @@ from widgets.energy import EnergyView
 from widgets.grid import CardGrid
 from widgets.scene import SceneTile
 from widgets.segments import SegmentedControl
-from widgets.slider import LabeledSlider
-from widgets.switch import ToggleSwitch
 
 # Constants
 DEFAULT_BRIGHTNESS = 50
@@ -111,6 +108,41 @@ class SceneTriggerWorker(QThread):
             self.failed.emit(self._scene, str(e))
             return
         self.triggered.emit(self._scene)
+
+
+class CommandWorker(QThread):
+    """Send one device command off the GUI thread (req-4).
+
+    On failure the device is reloaded here as well, since that is a hub call
+    too; the GUI slot then only redraws the card from the real state (req-3).
+    The card travels through the signals untouched: only the GUI thread uses
+    it.
+    """
+
+    succeeded = pyqtSignal(object)  # type: ignore[call-arg]  # card
+    failed = pyqtSignal(object, str, str)  # type: ignore[call-arg]
+
+    def __init__(
+        self, card: Any, command: Callable[[], None], action: str, parent=None
+    ):
+        super().__init__(parent)
+        self._card = card
+        self._device = card.device
+        self._command = command
+        self._action = action
+
+    def run(self):
+        """Send the command; on error reload the device and emit the message."""
+        try:
+            self._command()
+        except Exception as e:
+            try:
+                self._device.reload()
+            except Exception:
+                pass  # the in-memory state is the best truth left
+            self.failed.emit(self._card, self._action, str(e))
+            return
+        self.succeeded.emit(self._card)
 
 
 class RefreshWorker(QThread):
@@ -228,6 +260,7 @@ class DirigeraDashboard(QMainWindow):
         self._connect_worker: Optional[ConnectWorker] = None
         self._refresh_worker: Optional[RefreshWorker] = None
         self._scene_workers: List[SceneTriggerWorker] = []
+        self._command_workers: List[CommandWorker] = []
         # (room section, its card grid), in display order, for search filtering.
         self._room_sections: List[Tuple[QWidget, CardGrid]] = []
         self.init_ui()
@@ -708,83 +741,74 @@ class DirigeraDashboard(QMainWindow):
         """Create a scene tile wired to the activation handler (§8.10)."""
         return SceneTile(scene, on_activate=self.trigger_scene)
 
-    def toggle_device_power(self, device: Any, turn_on: bool, control: ToggleSwitch):
-        """Toggle power for a light or outlet device."""
+    def run_device_command(
+        self, card: DeviceCard, command: Callable[[], None], action: str
+    ) -> None:
+        """Run a device command in a worker and resync the card afterwards.
+
+        Hub calls block for up to the library's 10 s timeout, so they never
+        run on the GUI thread (req-4). The card shows "Sending…" meanwhile.
+        """
+        self._command_workers = [w for w in self._command_workers if w.isRunning()]
+        card.set_pending(True)
+        worker = CommandWorker(card, command, action, self)
+        worker.succeeded.connect(self._on_command_done)
+        worker.failed.connect(self._on_command_failed)
+        self._command_workers.append(worker)
+        worker.start()
+
+    def _on_command_done(self, card: DeviceCard) -> None:
+        """Redraw the card from the value the library stored on success."""
+        if not sip.isdeleted(card):
+            card.sync_from_device()
+
+    def _on_command_failed(self, card: DeviceCard, action: str, message: str) -> None:
+        """Report the failure and show the device's real state (req-3)."""
+        if not sip.isdeleted(card):
+            card.sync_from_device()
+        QMessageBox.warning(self, "Error", f"Failed to {action}: {message}")
+
+    def toggle_device_power(self, card: DeviceCard, turn_on: bool) -> None:
+        """Switch a light or outlet on or off."""
+        device = card.device
         dtype = getattr(device, "device_type", "unknown")
-        try:
-            if dtype == "light":
-                device.set_light(lamp_on=turn_on)
-            elif dtype == "outlet":
-                device.set_on(turn_on)
-        except Exception as e:
-            QMessageBox.warning(self, "Error", f"Failed to toggle {dtype}: {str(e)}")
-            self.sync_control_from_device(device, control)
-
-    def toggle_light(self, light: Light, turn_on: bool, control: ToggleSwitch):
-        """Toggle light on/off (kept for backwards compatibility)."""
-        self.toggle_device_power(light, turn_on, control)
-
-    def set_light_brightness(
-        self, light: Light, brightness: int, control: LabeledSlider
-    ):
-        """Set light brightness."""
-        try:
-            light.set_light_level(brightness)
-        except Exception as e:
-            QMessageBox.warning(self, "Error", f"Failed to set brightness: {str(e)}")
-            self.sync_control_from_device(light, control)
-
-    def set_blind_position(self, blind: Blind, position: int, control: LabeledSlider):
-        """Set blind position."""
-        try:
-            blind.set_target_level(position)
-        except Exception as e:
-            QMessageBox.warning(
-                self, "Error", f"Failed to set blind position: {str(e)}"
+        if dtype == "light":
+            self.run_device_command(
+                card, lambda: device.set_light(lamp_on=turn_on), f"toggle {dtype}"
             )
-            self.sync_control_from_device(blind, control)
+        elif dtype == "outlet":
+            self.run_device_command(
+                card, lambda: device.set_on(turn_on), f"toggle {dtype}"
+            )
 
-    def set_blind_state(self, blind: Blind, action: str) -> None:
+    def set_light_brightness(self, card: DeviceCard, brightness: int) -> None:
+        """Set a light's brightness."""
+        device = card.device
+        self.run_device_command(
+            card, lambda: device.set_light_level(brightness), "set brightness"
+        )
+
+    def set_blind_position(self, card: DeviceCard, position: int) -> None:
+        """Move a blind to a target level."""
+        device = card.device
+        self.run_device_command(
+            card, lambda: device.set_target_level(position), "set blind position"
+        )
+
+    def set_blind_state(self, card: DeviceCard, action: str) -> None:
         """Trigger blind movement state (Up, Down, Stop)."""
         action_map = {
             "Up": BlindsStateEnum.UP,
             "Down": BlindsStateEnum.DOWN,
             "Stop": BlindsStateEnum.STOPPED,
         }
-        enum_val = action_map.get(action)
-        if not enum_val:
+        state = action_map.get(action)
+        if state is None:
             return
-        try:
-            blind.set_state(enum_val)
-        except Exception as e:
-            QMessageBox.warning(self, "Error", f"Failed to set blind state: {str(e)}")
-
-    def toggle_outlet(self, outlet: Outlet, turn_on: bool, control: ToggleSwitch):
-        """Toggle outlet on/off (kept for backwards compatibility)."""
-        self.toggle_device_power(outlet, turn_on, control)
-
-    def sync_control_from_device(self, device: Any, control: QWidget) -> None:
-        """Restore a control's value from the device's actual state.
-
-        Used after a failed command so the UI reflects reality instead of the
-        intended value. Reloads the device first; if that fails too, the
-        in-memory state is the best available truth.
-        """
-        try:
-            device.reload()
-        except Exception:
-            pass
-        if isinstance(control, ToggleSwitch):
-            control.blockSignals(True)
-            control.setChecked(bool(getattr(device.attributes, "is_on", False)))
-            control.blockSignals(False)
-        elif isinstance(control, LabeledSlider):
-            level = getattr(device.attributes, "light_level", None)
-            if level is None:
-                level = getattr(device.attributes, "blinds_current_level", None)
-            control.blockSignals(True)
-            control.set_value(level or 0)
-            control.blockSignals(False)
+        device = card.device
+        self.run_device_command(
+            card, lambda: device.set_state(state), "set blind state"
+        )
 
     def trigger_scene(self, tile: SceneTile) -> None:
         """Trigger a scene in a worker thread (req-4, t-51).
@@ -837,6 +861,7 @@ class DirigeraDashboard(QMainWindow):
             self._connect_worker,
             self._refresh_worker,
             *self._scene_workers,
+            *self._command_workers,
         ]
         for worker in workers:
             if worker is not None and worker.isRunning():
