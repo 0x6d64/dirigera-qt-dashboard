@@ -10,6 +10,7 @@ from PyQt6 import sip
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QCloseEvent
 from PyQt6.QtWidgets import (
+    QApplication,
     QDialog,
     QHBoxLayout,
     QLabel,
@@ -261,6 +262,8 @@ class DirigeraDashboard(QMainWindow):
         self._refresh_worker: Optional[RefreshWorker] = None
         self._scene_workers: List[SceneTriggerWorker] = []
         self._command_workers: List[CommandWorker] = []
+        # Set while a close waits for running workers (see closeEvent).
+        self._close_pending = False
         # (room section, its card grid), in display order, for search filtering.
         self._room_sections: List[Tuple[QWidget, CardGrid]] = []
         self.init_ui()
@@ -854,20 +857,48 @@ class DirigeraDashboard(QMainWindow):
             if widget is not None:
                 widget.deleteLater()
 
-    @override
-    def closeEvent(self, event: Optional[QCloseEvent]) -> None:
-        """Wait for in-flight hub calls so no worker outlives the window."""
+    def _running_workers(self) -> List[QThread]:
+        """Return every worker thread that is still running."""
         workers: List[Optional[QThread]] = [
             self._connect_worker,
             self._refresh_worker,
+            getattr(self, "discovery_thread", None),
             *self._scene_workers,
             *self._command_workers,
         ]
-        for worker in workers:
-            if worker is not None and worker.isRunning():
-                worker.requestInterruption()
-                worker.wait(2000)
-        super().closeEvent(event)
+        return [w for w in workers if w is not None and w.isRunning()]
+
+    @override
+    def closeEvent(self, event: Optional[QCloseEvent]) -> None:
+        """Close without destroying a worker thread that is still running.
+
+        Hub calls cannot be interrupted and may last the library's 10 s
+        timeout, and destroying a running QThread aborts the process. So
+        while any worker runs, the window only hides; the close completes,
+        and the application quits, once the last worker has finished.
+        """
+        running = self._running_workers()
+        if not running:
+            super().closeEvent(event)
+            return
+        if event is not None:
+            event.ignore()
+        self.hide()
+        if not self._close_pending:
+            self._close_pending = True
+            for worker in running:
+                worker.finished.connect(self._finish_pending_close)
+
+    def _finish_pending_close(self) -> None:
+        """Complete a deferred close once no worker is running any more."""
+        sender = self.sender()
+        if isinstance(sender, QThread):
+            sender.wait()  # finished is emitted just before run() returns
+        if self._running_workers():
+            return
+        self.close()
+        # A hidden window closing does not trigger quit-on-last-window.
+        QApplication.quit()
 
     @staticmethod
     def get_device_name(device: Any) -> str:
