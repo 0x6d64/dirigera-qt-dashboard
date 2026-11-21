@@ -87,6 +87,10 @@ The dashboard offers two ways to find your hub:
 
 ## Development
 
+See [AGENTS.md](AGENTS.md) for the repository's working rules — task and
+requirement ID conventions, the implementation-plan branch workflow, code
+gates, and git rules. Read it before contributing.
+
 ### Code Formatting
 
 This project uses `black` for code formatting:

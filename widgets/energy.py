@@ -1,0 +1,245 @@
+"""
+Energy view and energy cards.
+
+Follows design-doc.md §8.11 and §9.4:
+- Energy cards reuse the device-card surface: 1 px border, 10 px radius,
+  16 px padding, 280 px minimum width.
+- Primary reading: live power in W (`MetricWidget`); the caption line carries
+  current in A and voltage in V; the footer shows the total in kWh.
+- Devices without metering data get no metric row and a "No energy data"
+  footer.
+- Cards are grouped by room in the same flow grid as the Rooms view.
+- Per-home versus per-room totals is `[open]` in the design doc, so no totals
+  are shown yet.
+
+Only outlets and electrical sensors reach this view; the dashboard filters
+them before calling `EnergyView.set_rooms()`.
+"""
+
+from typing import Any, List, Optional, Tuple
+
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import (
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QScrollArea,
+    QVBoxLayout,
+    QWidget,
+)
+
+import theme
+from widgets.chip import StatusChip
+from widgets.grid import CARD_MIN_WIDTH, CardGrid
+from widgets.metric import MetricWidget
+
+
+class EnergyCard(QFrame):
+    """Card with the live power reading of one metered device."""
+
+    def __init__(self, device: Any, parent=None):
+        super().__init__(parent)
+        self.device = device
+        attrs = getattr(device, "attributes", None)
+        dtype = getattr(device, "device_type", "device")
+
+        self.setMinimumWidth(CARD_MIN_WIDTH)
+        self.setFrameShape(QFrame.Shape.StyledPanel)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(theme.SP16, theme.SP16, theme.SP16, theme.SP16)
+        layout.setSpacing(theme.SP12)
+
+        # 1. Header row: name over type, status chip on the right.
+        header = QHBoxLayout()
+        header.setContentsMargins(0, 0, 0, 0)
+        header.setSpacing(theme.SP8)
+
+        titles = QVBoxLayout()
+        titles.setContentsMargins(0, 0, 0, 0)
+        titles.setSpacing(2)
+
+        raw_name = getattr(attrs, "custom_name", None) or getattr(
+            device, "id", "Unknown device"
+        )
+        self.full_name = raw_name
+        self.name_label = QLabel(raw_name)
+        self.name_label.setToolTip(raw_name)
+        self.name_label.setStyleSheet(f"""
+            QLabel {{
+                color: {theme.TEXT};
+                font-size: {theme.FONT_TITLE}px;
+                font-weight: 600;
+                background-color: transparent;
+            }}
+            """)
+        titles.addWidget(self.name_label)
+
+        self.type_label = QLabel(dtype.replace("_", " ").capitalize())
+        self.type_label.setStyleSheet(f"""
+            QLabel {{
+                color: {theme.TEXT2};
+                font-size: {theme.FONT_CAPTION}px;
+                background-color: transparent;
+            }}
+            """)
+        titles.addWidget(self.type_label)
+
+        header.addLayout(titles, stretch=1)
+
+        self.status_chip = StatusChip(text="", variant="neutral")
+        header.addWidget(self.status_chip, alignment=Qt.AlignmentFlag.AlignTop)
+        layout.addLayout(header)
+
+        # 2. Metric zone: live power, then the A / V caption line.
+        power = getattr(attrs, "current_active_power", None)
+        self.power_metric: Optional[MetricWidget] = None
+        if power is not None:
+            self.power_metric = MetricWidget(
+                caption="Power", initial_value=power, unit="W"
+            )
+            layout.addWidget(self.power_metric)
+
+        self.caption_label = QLabel(self._format_captions(attrs))
+        self.caption_label.setStyleSheet(f"""
+            QLabel {{
+                color: {theme.TEXT2};
+                font-size: {theme.FONT_CAPTION}px;
+                background-color: transparent;
+            }}
+            """)
+        if self.caption_label.text():
+            layout.addWidget(self.caption_label)
+
+        # 3. Footer: total energy, or an explicit "no data" line.
+        self.footer_label = QLabel(self._format_footer(attrs))
+        self.footer_label.setStyleSheet(f"""
+            QLabel {{
+                color: {theme.TEXT2};
+                font-size: {theme.FONT_CAPTION}px;
+                background-color: transparent;
+            }}
+            """)
+        layout.addWidget(self.footer_label)
+
+        offline = getattr(device, "is_reachable", True) is False
+        self._apply_style(offline=offline)
+        if offline:
+            self.status_chip.set_status("Offline", "neutral")
+        else:
+            self._update_chip(attrs, dtype)
+
+    @property
+    def is_metered(self) -> bool:
+        """Return True when the device reports live power."""
+        return self.power_metric is not None
+
+    def _apply_style(self, offline: bool) -> None:
+        bg = theme.SUNKEN if offline else theme.SURFACE
+        self.setStyleSheet(f"""
+            EnergyCard {{
+                background-color: {bg};
+                border: 1px solid {theme.BORDER};
+                border-radius: {theme.RADIUS_CARD}px;
+            }}
+            """)
+
+    def _update_chip(self, attrs: Any, dtype: str) -> None:
+        if dtype == "outlet":
+            is_on = getattr(attrs, "is_on", None)
+            if is_on is True:
+                self.status_chip.set_status("On", "ok")
+            elif is_on is False:
+                self.status_chip.set_status("Off", "neutral")
+            else:
+                self.status_chip.set_status("Ready", "neutral")
+        else:
+            self.status_chip.set_status("Ready", "neutral")
+
+    @staticmethod
+    def _format_captions(attrs: Any) -> str:
+        """Return the current/voltage caption line, empty when unreported."""
+        parts = []
+        amps = getattr(attrs, "current_amps", None)
+        volts = getattr(attrs, "current_voltage", None)
+        if isinstance(amps, (int, float)):
+            parts.append(f"{amps:.2f} A")
+        if isinstance(volts, (int, float)):
+            parts.append(f"{volts:.0f} V")
+        return " · ".join(parts)
+
+    @staticmethod
+    def _format_footer(attrs: Any) -> str:
+        """Return the total-energy footer; never leave it blank (§8.11)."""
+        kwh = getattr(attrs, "total_energy_consumed", None)
+        if isinstance(kwh, (int, float)):
+            return f"Total {kwh:.2f} kWh"
+        return "No energy data"
+
+
+class EnergyView(QWidget):
+    """Scrollable energy view: one card grid per room (§9.4)."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+
+        self.content = QWidget()
+        self.content_layout = QVBoxLayout(self.content)
+        self.content_layout.setContentsMargins(
+            theme.SP24, theme.SP20, theme.SP24, theme.SP24
+        )
+        self.content_layout.setSpacing(theme.SP24)
+        self.content_layout.addStretch()
+        self.scroll_area.setWidget(self.content)
+        outer.addWidget(self.scroll_area, 1)
+
+        # Shown instead of the grid when nothing reports energy data.
+        self.empty_label = QLabel("No energy data")
+        self.empty_label.setProperty("role", "caption")
+        self.empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.empty_label.hide()
+        outer.addWidget(self.empty_label, 1)
+
+    def set_rooms(self, rooms: List[Tuple[str, List[Any]]]) -> None:
+        """Rebuild the view from (room label, devices) pairs."""
+        self.clear()
+
+        has_rooms = bool(rooms)
+        self.scroll_area.setVisible(has_rooms)
+        self.empty_label.setVisible(not has_rooms)
+
+        for label_text, devices in rooms:
+            section = QWidget()
+            layout = QVBoxLayout(section)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(theme.SP12)  # label-to-grid gap (§4.3)
+
+            label = QLabel(label_text)
+            label.setProperty("role", "section")
+            layout.addWidget(label)
+
+            grid = CardGrid()
+            grid.set_cards([EnergyCard(device) for device in devices])
+            layout.addWidget(grid)
+
+            self.content_layout.insertWidget(self.content_layout.count() - 1, section)
+
+    def clear(self) -> None:
+        """Remove every room section, keeping the trailing stretch."""
+        while self.content_layout.count() > 1:
+            item = self.content_layout.takeAt(0)
+            widget = item.widget() if item is not None else None
+            if widget is not None:
+                widget.deleteLater()
+
+    def cards(self) -> List[EnergyCard]:
+        """Return every energy card in display order."""
+        found: List[EnergyCard] = list(self.content.findChildren(EnergyCard))
+        return found
