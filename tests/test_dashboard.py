@@ -58,13 +58,28 @@ def test_failed_connect_is_not_reported_as_connected(
     window.connect_to_hub()
     wait_until(lambda: window._connect_worker is None)
     assert window.hub is None
-    assert any(kind == "critical" for kind, _ in dialogs)
+    assert dialogs == []
+    assert window.status_label.text().startswith("Connection failed")
+    assert "unreachable" in window.connection_block.message_label.text()
+    assert window.connection_block.ip_input.isEnabled()
 
 
 def test_missing_credentials_do_not_start_a_worker(window: Any, dialogs: list) -> None:
     window.connect_to_hub()
     assert window._connect_worker is None
-    assert dialogs
+    assert dialogs == []
+    assert not window.connection_block.message_label.isHidden()
+    assert "IP address" in window.connection_block.message_label.text()
+
+
+@pytest.mark.parametrize("bad", ["not-an-ip", "300.1.1.1", "192.168.1"])
+def test_invalid_ip_starts_no_worker(window: Any, dialogs: list, bad: str) -> None:
+    window.connection_block.ip_input.setText(bad)
+    window.connection_block.token_input.setText("tok")
+    window.connect_to_hub()
+    assert window._connect_worker is None
+    assert window.connection_block.message_label.text() == "Enter a valid IP address"
+    assert dialogs == []
 
 
 def test_refresh_builds_cards_and_scenes(
@@ -203,3 +218,22 @@ def test_close_waits_for_running_worker(
     release.set()
     wait_until(lambda: bool(quits))
     assert not window._running_workers()
+
+
+def test_message_boxes_only_live_in_the_hub_chooser() -> None:
+    """§8.14: the hub chooser is the one modal; everything else is inline."""
+    import ast
+    from pathlib import Path
+
+    root = Path(dashboard.__file__).parent
+    for path in [root / "dashboard.py", *(root / "widgets").glob("*.py")]:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for cls in [n for n in tree.body if isinstance(n, ast.ClassDef)]:
+            uses = [
+                n
+                for n in ast.walk(cls)
+                if isinstance(n, ast.Attribute)
+                and isinstance(n.value, ast.Name)
+                and n.value.id == "QMessageBox"
+            ]
+            assert not uses or cls.name == "HubSelectionDialog", (path.name, cls.name)

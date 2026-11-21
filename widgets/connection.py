@@ -9,7 +9,7 @@ Follows design-doc.md §8.12 and §9.1:
   reports the state (the dashboard owns the chip).
 """
 
-from typing import Tuple
+from typing import Optional, Tuple
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
@@ -88,6 +88,26 @@ class ConnectionBlock(QWidget):
         button_row.addWidget(self.connect_button)
 
         layout.addLayout(button_row)
+
+        # One caption line for outcomes (missing input, failures, discovery).
+        self.message_label = QLabel()
+        self.message_label.setProperty("role", "caption")
+        self.message_label.setWordWrap(True)
+        self.message_label.hide()
+        layout.addWidget(self.message_label)
+
+    def set_message(self, text: str, tone: Optional[str] = None) -> None:
+        """Show `text` under the fields (tone: "ok", "warn", "danger" or None).
+
+        An empty text hides the line.
+        """
+        self.message_label.setText(text)
+        self.message_label.setProperty("tone", tone or "")
+        style = self.message_label.style()
+        if style is not None:
+            style.unpolish(self.message_label)
+            style.polish(self.message_label)
+        self.message_label.setVisible(bool(text))
 
     def credentials(self) -> Tuple[str, str]:
         """Return the stripped IP address and token."""
