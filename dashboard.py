@@ -46,6 +46,7 @@ from settings import (
     ui_settings,
 )
 from widgets.card import DeviceCard, device_sort_key
+from widgets.cardbase import label_style
 from widgets.chip import StatusChip
 from widgets.connection import ConnectionBlock
 from widgets.energy import EnergyCard, EnergyView
@@ -389,7 +390,7 @@ class DirigeraDashboard(QMainWindow):
         self.automatic_switch.setChecked(self._show_automatic)
         self.automatic_switch.toggled.connect(self._on_automatic_toggled)
         automatic_label = QLabel(AUTOMATIC_SCENES_LABEL)
-        automatic_label.setProperty("role", "section")
+        automatic_label.setStyleSheet(label_style(theme.TEXT2, theme.FONT_LABEL))
         automatic_row = QHBoxLayout()
         automatic_row.setSpacing(theme.SP12)
         automatic_row.addWidget(automatic_label)
