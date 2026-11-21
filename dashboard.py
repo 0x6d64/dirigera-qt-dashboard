@@ -1105,6 +1105,7 @@ class DirigeraDashboard(QMainWindow):
         new_cards: Dict[str, DeviceCard] = {}
         wanted: List[Tuple[str, str, List[QWidget]]] = []
         section_colours: Dict[str, Optional[str]] = {}
+        profiles = profile_options(self.adaptive_profiles)
 
         for room_name, room_devices in groups:
             room_key = get_room(room_devices[0])[0]
@@ -1119,6 +1120,7 @@ class DirigeraDashboard(QMainWindow):
                     card = self.create_device_widget(device)
                 else:
                     card.update_from_device(device)
+                    card.set_profiles(profiles)
                 card.set_room_colour(theme.room_colour(room_colour_name(device)))
                 card.set_marker_shown(self._room_colours)
                 new_cards[device_id] = card
@@ -1304,6 +1306,7 @@ class DirigeraDashboard(QMainWindow):
             on_blind_state=self.set_blind_state,
             on_colour=self.set_light_colour,
             on_fan_speed=self.set_fan_speed,
+            profiles=profile_options(self.adaptive_profiles),
         )
 
     def create_scene_tile(self, scene: Scene) -> SceneTile:
