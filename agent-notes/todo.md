@@ -85,7 +85,7 @@ Found by comparing the implementation with `doc/design-doc.md` in the 2026-11-21
 - [x] **t-75 [C·S]** Outlets with metering show their energy footer in the Rooms view, as electrical sensors do.
 - [ ] **t-76 [C·S]** Fix the design doc itself. Done on `docs/design-doc-cleanup`: missing-doc references, stale `[open]`/`[verified]` tags, §5.2 pairings (now owned by the contrast test), chip radius vs height. Remaining: window size (1080 vs code 1000, with t-70), "Dirigera" as the app title against §2.2, and polling in §10.2 (see t-56).
 - [ ] **t-77 [C·S]** Decide whether "automatic scenes" exist: the library's `SceneType` has no automatic type, so §8.10.5 and §9.3 cannot be built as written.
-- [ ] **t-78 [C·S]** Verify on a real blind whether level 100 means open or closed; the card labels the slider "Open" and the chip says "Open" at 100 (§8.1).
+- [ ] **t-78 [C·S]** *(deferred indefinitely 2026-11-21: no real blind available; the card keeps 100 = "Open")* Verify on a real blind whether level 100 means open or closed; the card labels the slider "Open" and the chip says "Open" at 100 (§8.1).
 
 ## Typing, tests & CI
 

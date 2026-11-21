@@ -412,7 +412,8 @@ Not planned, and why:
   neither can be verified without a real hub; polling (t-56, t-79) already
   meets `req-13`.
 - t-77 (automatic scenes) and §14 item 1 (app name): need an owner decision.
-- t-78 (blind direction): needs a real blind.
+- t-78 (blind direction): needs a real blind; deferred indefinitely by the
+  user (no blind available).
 - Reduced-motion setting (part of t-74): §14 item 7 is still open.
 
 ### Plan: inline status instead of dialogs (t-66, t-30)
