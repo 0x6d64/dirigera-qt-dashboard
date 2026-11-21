@@ -11,6 +11,8 @@ Typography follows design-doc.md §6.2.
 Shape radii follow design-doc.md §7.1.
 """
 
+from typing import Optional
+
 # ---------------------------------------------------------------------------
 # Colour tokens (light theme)
 # ---------------------------------------------------------------------------
@@ -52,6 +54,41 @@ WARN_BG = "#FBE9D7"  # Warning chip background
 # Status: danger
 DANGER = "#B3261E"  # Danger chip text, error text
 DANGER_BG = "#FBE4E2"  # Danger chip background
+
+# Room colours (req-22, t-86): best-guess RGB per hue word in the hub's colour
+# names (e.g. "ikea_green_no_65"). They mark the room only (a dot and a card
+# edge), never text or state, so each one is a mid tone that reaches 3:1
+# against WINDOW and SURFACE (non-text contrast, design-doc.md §5.2).
+ROOM_COLOURS: dict[str, str] = {
+    "red": "#C62828",
+    "orange": "#B85C00",
+    "yellow": "#9A7400",
+    "green": "#2E7D32",
+    "turquoise": "#00808A",
+    "blue": "#1565C0",
+    "purple": "#6A1B9A",
+    "lilac": "#7E57C2",
+    "pink": "#C2185B",
+    "beige": "#A38457",
+    "brown": "#6D4C41",
+    "grey": "#6B7280",
+}
+
+
+def room_colour(name: Optional[str]) -> Optional[str]:
+    """Return the marker colour for a hub colour name, or None if unknown.
+
+    The first part of the name (split on "_") that is a known hue word wins,
+    so "ikea_green_no_65" maps to green. None, empty and unknown names stay
+    neutral (None).
+    """
+    if not name:
+        return None
+    for part in name.lower().split("_"):
+        if part in ROOM_COLOURS:
+            return ROOM_COLOURS[part]
+    return None
+
 
 # ---------------------------------------------------------------------------
 # Spacing scale (base unit 4 px — design-doc.md §4.4)
