@@ -17,11 +17,13 @@ them before calling `EnergyView.set_rooms()`.
 """
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple, override
+from typing import Any, Callable, Dict, List, Optional, Tuple, override
 
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
+    QHBoxLayout,
     QLabel,
+    QPushButton,
     QScrollArea,
     QVBoxLayout,
     QWidget,
@@ -33,6 +35,17 @@ from widgets.cardbase import CardBase, label_style
 from widgets.grid import CardGrid
 from widgets.metric import MetricWidget
 from widgets.text import format_amps, format_kwh, format_volts, usage_text
+
+# How long the reset waits for the confirming second click (req-18).
+RESET_CONFIRM_MS = 5000
+RESET_WARNING = "Usage since the last reset will be lost"
+RESET_CAPABILITY = "energyConsumedAtLastReset"
+
+
+def _can_reset(device: Any) -> bool:
+    """True when the hub accepts a usage reset for `device` (dirigera-api.md §5)."""
+    capabilities = getattr(device, "capabilities", None)
+    return RESET_CAPABILITY in (getattr(capabilities, "can_receive", None) or [])
 
 
 class EnergyCard(CardBase):
@@ -49,10 +62,12 @@ class EnergyCard(CardBase):
         parent: Optional[QWidget] = None,
         price_per_kwh: float = DEFAULT_PRICE_PER_KWH,
         currency: str = DEFAULT_CURRENCY,
+        on_reset: Optional[Callable[["EnergyCard"], None]] = None,
     ) -> None:
         super().__init__(device, parent)
         self.price_per_kwh = price_per_kwh
         self.currency = currency
+        self._on_reset = on_reset
         attrs = getattr(device, "attributes", None)
 
         # Metric zone: live power, then the A / V caption line.
@@ -76,10 +91,79 @@ class EnergyCard(CardBase):
         self.usage_label.setStyleSheet(label_style(theme.TEXT2, theme.FONT_CAPTION))
         self.card_layout.addWidget(self.usage_label)
         self._update_usage()
+        self._build_reset_zone()
 
         # Footer: total energy, or an explicit "no data" line.
         self._init_footer()
         self._update_state()
+
+    def _build_reset_zone(self) -> None:
+        """Reset button with its inline two-step confirm (req-18, no dialog).
+
+        Shown only when the hub accepts the reset (`energyConsumedAtLastReset`
+        in `can_receive`). The first click asks for confirmation here; only
+        the second click runs the reset, and Cancel or the timeout undoes it.
+        """
+        self.reset_zone = QWidget()
+        zone = QVBoxLayout(self.reset_zone)
+        zone.setContentsMargins(0, 0, 0, 0)
+        zone.setSpacing(theme.SP8)
+
+        self.reset_caption = QLabel(RESET_WARNING)
+        self.reset_caption.setWordWrap(True)
+        self.reset_caption.setStyleSheet(label_style(theme.TEXT2, theme.FONT_CAPTION))
+        zone.addWidget(self.reset_caption)
+
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(theme.SP8)
+        self.reset_button = QPushButton("Reset")
+        self.reset_button.setAccessibleName(f"{self.full_name} reset usage")
+        self.confirm_button = QPushButton("Confirm reset")
+        self.confirm_button.setAccessibleName(f"{self.full_name} confirm reset")
+        self.cancel_button = QPushButton("Cancel")
+        self.cancel_button.setAccessibleName(f"{self.full_name} cancel reset")
+        for button in (self.reset_button, self.confirm_button, self.cancel_button):
+            button.setFixedHeight(28)
+            row.addWidget(button)
+        row.addStretch()
+        zone.addLayout(row)
+        self.card_layout.addWidget(self.reset_zone)
+
+        self._confirm_timer = QTimer(self)
+        self._confirm_timer.setSingleShot(True)
+        self._confirm_timer.setInterval(RESET_CONFIRM_MS)
+        self._confirm_timer.timeout.connect(self._cancel_reset)
+        self.reset_button.clicked.connect(self._ask_reset)
+        self.confirm_button.clicked.connect(self._confirm_reset)
+        self.cancel_button.clicked.connect(self._cancel_reset)
+
+        self.can_reset = _can_reset(self.device)
+        self.reset_zone.setVisible(self.can_reset)
+        self._show_reset_step(confirming=False)
+
+    def _show_reset_step(self, confirming: bool) -> None:
+        """Show "Reset" alone, or the caption with Confirm and Cancel."""
+        self.reset_button.setVisible(not confirming)
+        self.reset_caption.setVisible(confirming)
+        self.confirm_button.setVisible(confirming)
+        self.cancel_button.setVisible(confirming)
+
+    def _ask_reset(self) -> None:
+        """First click: ask for confirmation, send nothing yet."""
+        self._show_reset_step(confirming=True)
+        self._confirm_timer.start()
+
+    def _cancel_reset(self) -> None:
+        """Back to the plain "Reset" button (Cancel, or the timeout)."""
+        self._confirm_timer.stop()
+        self._show_reset_step(confirming=False)
+
+    def _confirm_reset(self) -> None:
+        """Second click: hand the reset to the dashboard, which runs it."""
+        self._cancel_reset()
+        if self._on_reset is not None:
+            self._on_reset(self)
 
     @property
     def is_metered(self) -> bool:
@@ -173,12 +257,17 @@ class EnergyCard(CardBase):
 class EnergyView(QWidget):
     """Scrollable energy view: one card grid per room (§9.4)."""
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(
+        self,
+        parent: Optional[QWidget] = None,
+        on_reset: Optional[Callable[[EnergyCard], None]] = None,
+    ) -> None:
         # PyQt6 stubs mis-type the first argument of QWidget.__init__ here.
         super().__init__(parent)  # type: ignore[arg-type]
         self._shape: List[Tuple[str, List[Any]]] = []
         self.price_per_kwh = DEFAULT_PRICE_PER_KWH
         self.currency = DEFAULT_CURRENCY
+        self.on_reset = on_reset
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -266,7 +355,10 @@ class EnergyView(QWidget):
             grid.set_cards(
                 [
                     EnergyCard(
-                        device, price_per_kwh=self.price_per_kwh, currency=self.currency
+                        device,
+                        price_per_kwh=self.price_per_kwh,
+                        currency=self.currency,
+                        on_reset=self.on_reset,
                     )
                     for device in devices
                 ]

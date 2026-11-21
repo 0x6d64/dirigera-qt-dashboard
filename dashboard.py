@@ -47,7 +47,7 @@ from settings import (
 from widgets.card import DeviceCard, device_sort_key
 from widgets.chip import StatusChip
 from widgets.connection import ConnectionBlock
-from widgets.energy import EnergyView
+from widgets.energy import EnergyCard, EnergyView
 from widgets.grid import CardGrid
 from widgets.scene import SCENE_MIN_WIDTH, SceneTile
 from widgets.segments import SegmentedControl
@@ -368,7 +368,7 @@ class DirigeraDashboard(QMainWindow):
         self.tab_widget.addTab(self.scenes_tab, "Scenes")
 
         # Energy tab (t-49)
-        self.energy_view = EnergyView()
+        self.energy_view = EnergyView(on_reset=self.reset_energy)
         self.tab_widget.addTab(self.energy_view, "Energy")
 
         # The segmented switcher is the only navigation; a visible tab bar
@@ -1082,11 +1082,12 @@ class DirigeraDashboard(QMainWindow):
 
     def run_device_command(
         self, card: CommandTarget, command: Callable[[], None], action: str
-    ) -> None:
+    ) -> CommandWorker:
         """Run a device command in a worker and resync the card afterwards.
 
         Hub calls block for up to the library's 10 s timeout, so they never
         run on the GUI thread (req-4). The card shows "Sending…" meanwhile.
+        Returns the worker, so a caller can attach its own success handler.
         """
         self._command_workers = [w for w in self._command_workers if w.isRunning()]
         card.set_pending(True)
@@ -1095,6 +1096,28 @@ class DirigeraDashboard(QMainWindow):
         worker.failed.connect(self._on_command_failed)
         self._command_workers.append(worker)
         worker.start()
+        return worker
+
+    def reset_energy(self, card: EnergyCard) -> None:
+        """Reset a metering plug's usage counter on the hub (req-18).
+
+        The hub copies its running total into the reset value and sets the
+        reset time to now. Success triggers a refresh to fetch those values.
+        """
+        device = card.device
+
+        def command() -> None:
+            device.dirigera_client.patch(
+                route=f"/devices/{device.id}",
+                data=[{"attributes": {"energyConsumedAtLastReset": 0}}],
+            )
+
+        worker = self.run_device_command(card, command, "reset energy")
+        worker.succeeded.connect(self._on_energy_reset_done)
+
+    def _on_energy_reset_done(self, _card: object) -> None:
+        """Fetch the values the hub stored for the reset."""
+        self._request_background_refresh()
 
     def _on_command_done(self, card: CommandTarget) -> None:
         """Redraw the card from the value the library stored on success."""
