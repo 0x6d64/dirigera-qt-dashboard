@@ -68,6 +68,24 @@ Found in the 2026-11-21 repo review and fixed on `improve-ui` the same day.
 - [x] **t-64 [C·S]** Rooms were grouped by name (two rooms with the same name merged) and sorted case-sensitively; the fallback label was "Unknown Room". *(done)*
 - [x] **t-65 [C·S]** Remove dead dashboard code: `DEFAULT_BRIGHTNESS`, `VIEW_*`, `handle_manual_ip`, `get_device_name`, `toggle_light`, `toggle_outlet`. *(done)*
 
+## Design conformance gaps (deferred 2026-11-21)
+
+Found by comparing the implementation with `doc/design-doc.md` in the 2026-11-21 review. Deliberately deferred: the design topic is revisited as a whole later, and several items need a decision in the doc first.
+
+- [ ] **t-66 [B·M]** Replace modal `QMessageBox` errors for routine failures (device commands, refresh) with inline status (§8.14, §10.1). Coordinate with t-56, which must not raise a dialog every poll.
+- [ ] **t-67 [B·S]** Truncate long device names with an ellipsis and tooltip; today a long name widens the card or clips (§8.1 rule 2, acceptance item 6).
+- [ ] **t-68 [B·S]** Offline footer should read "Last seen <relative time>" from `device.last_seen`, not "Device unreachable" (§8.1 state 2).
+- [ ] **t-69 [B·M]** Give the remaining device types real state instead of an empty card with an invented "Ready" chip: environment, motion, open/close, water, occupancy and light sensors, air purifiers, controllers (§8.5, principle 1). Add the missing types to the card sort map (§8.1 rule 3).
+- [ ] **t-70 [C·S]** Chip text rules: no percentage in blind chips, sentence case, and no raw `device_type` captions such as "Open close sensor" (§8.2, acceptance item 4).
+- [ ] **t-71 [C·S]** Scene tiles should use a 240 px minimum column width, not the 280 px card width (§8.10.1); give `CardGrid` a configurable minimum.
+- [ ] **t-72 [C·S]** Window defaults: 1080 × 700 default, 640 × 480 minimum, no extra tab-layout margins outside the spacing scale (§4.1, §4.4). Related to t-54.
+- [ ] **t-73 [C·S]** Refresh button shows "Refreshing…" while running (§10.2.1); first-load skeleton (§8.13).
+- [ ] **t-74 [C·M]** Keyboard and accessibility: arrow keys in the segmented control, fixed width for metric values, accessible names on blind buttons and sliders, reduced-motion setting (§10.4.5, §10.5, §12.3).
+- [ ] **t-75 [C·S]** Outlets with metering show their energy footer in the Rooms view, as electrical sensors do.
+- [ ] **t-76 [C·S]** Fix the design doc itself: references to the missing `visual-language-identity.md` and `look-and-feel.md`, the 20 px vs 18 px chip height, stale `[open]`/`[verified]` tags (room order, low-battery threshold, window size), missing contrast pairings in §5.2, and "Dirigera" as the app title against §2.2. Add polling to §10.2 (see t-56).
+- [ ] **t-77 [C·S]** Decide whether "automatic scenes" exist: the library's `SceneType` has no automatic type, so §8.10.5 and §9.3 cannot be built as written.
+- [ ] **t-78 [C·S]** Verify on a real blind whether level 100 means open or closed; the card labels the slider "Open" and the chip says "Open" at 100 (§8.1).
+
 ## Typing, tests & CI
 
 - [x] **t-31 [B·S]** Fix the remaining `mypy` errors: `pyqtSignal(list)` stub call *(dashboard.py:41)* and missing `None` guards in `clear_layout` *(dashboard.py:542–547)*. *(done: typed the signal with the same `# type: ignore[call-arg]` used by the other signals; `clear_layout` now takes `Optional[QLayoutItem]` into account and annotates its return; `mypy` is clean in all 17 files)*
