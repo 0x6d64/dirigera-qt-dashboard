@@ -41,3 +41,7 @@ disallow_untyped_defs = false
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+markers = [
+    "slow: long-running test; CI runs it on master only",
+    "hardware: needs a real DIRIGERA hub; never run in CI",
+]

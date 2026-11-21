@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+      # Qt needs a few system libraries even with the offscreen platform.
+      - run: >
+          sudo apt-get update && sudo apt-get install -y
+          libegl1 libgl1 libxkbcommon0 libdbus-1-3 libfontconfig1 libglib2.0-0
+      - run: uv run black --check .
+      - run: uv run ruff check .
+      - run: uv run mypy .
+      # Branches and pull requests skip slow tests; master runs them too.
+      # Tests marked `hardware` need a real hub and never run in CI.
+      - name: Tests (fast)
+        if: github.ref != 'refs/heads/master'
+        run: uv run pytest -m "not slow and not hardware"
+        env:
+          QT_QPA_PLATFORM: offscreen
+      - name: Tests (all but hardware)
+        if: github.ref == 'refs/heads/master'
+        run: uv run pytest -m "not hardware"
+        env:
+          QT_QPA_PLATFORM: offscreen

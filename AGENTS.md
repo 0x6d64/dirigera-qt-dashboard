@@ -107,6 +107,8 @@ Orientation docs: `README.md`, `doc/design-doc.md` (visual design),
   - `uv run black .`
   - `uv run ruff check .`
   - `uv run mypy .`
+  - `uv run pytest` (CI skips tests marked `slow` outside master and never runs
+    `hardware` ones; mark new tests accordingly)
 - Match the existing style: flat module layout, type hints on public
   functions, docstrings for non-obvious behavior.
 - Never commit secrets: `config.ini`, tokens, `token.txt`, `*.token` are
