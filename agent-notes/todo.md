@@ -103,6 +103,16 @@ Found by comparing the implementation with `doc/design-doc.md` in the 2026-11-21
 - [x] **t-38 [C·M]** Add package metadata (license expression, classifiers, keywords) to `pyproject.toml`.
 - [x] **t-39 [C·S]** Document the security model in the README: the hub uses a self-signed certificate and the `dirigera` library disables TLS verification, so the token should be treated as a network secret.
 
+## Feature requests (2026-11-21)
+
+Stated by the user; recorded, not yet planned.
+
+- [ ] **t-80 [B·M]** Air purifier fan control (`req-15`): let the user pick off, auto, or a fixed speed level (1, 2, 3, 4, …) on the purifier card. Library 1.6.1: `set_fan_mode(FanModeEnum)` with `off`, `on`, `low`, `medium`, `high`, `auto`, and `set_motor_state(0..50)` documented as "0 == off, 1 == auto", which suggests fixed levels map to motor-state steps (for example 10/20/30/40/50); neither setter checks a capability. The level mapping and the number of levels per model are `[unverified]` (`doc/dirigera-api.md` §4 item 2): settle them on a real purifier before building.
+- [x] **t-81 [B·S]** Air purifier PM2.5 reading (`req-16`). *(already shown: t-69 added a PM2.5 metric from `current_p_m25` to the purifier card; the unit is undocumented in the library, so none is shown. Confirm on a real purifier)*
+- [ ] **t-82 [C·M]** Air quality history (`req-17`): the IKEA Android app shows historical readings for air quality sensors; find out whether the hub serves them. The `dirigera` library exposes no history (`doc/dirigera-api.md` §2.7), so any source is an undocumented hub route. Use the read-only tryout script `tools/hub_get.py` (prints the JSON of a `GET` route) on a real hub to look for candidate routes, and record findings in `doc/dirigera-api.md`. If the hub has no history, the app would have to sample readings itself (lost on exit unless stored).
+- [ ] **t-83 [C·M]** Reset accumulated energy on metering plugs from the Energy tab (`req-18`). The library reads `energy_consumed_at_last_reset` and `time_of_last_energy_reset` on outlets and electrical sensors but has no reset setter, so the reset command (attribute name in a `PATCH /devices/{id}`) is `[unverified]`; find it with a real plug before building. Needs a confirmation, since the reset cannot be undone (the one modal `design-doc.md` §8.14 allows).
+- [ ] **t-84 [C·M]** Energy cost (`req-19`): show the cost of the accumulated usage on metering plugs. New `config.ini` items: price per kWh and currency unit (for example `[energy] price_per_kwh`, `currency`). Default and fallback when unset or invalid: Romania, 1.54 RON/kWh, the March 2026 residential price including network costs and taxes (globalpetrolprices.com; Eurostat H1 2026 gives 0.284 €/kWh, about 1.4 RON). The cost of the period since the last reset needs `energy_consumed_at_last_reset` (see t-83).
+
 ## Design document implementation (v1.0)
 
 Design tasks build on each other. Recommended order: t-40 → t-43/t-44 → t-41/t-42 → t-45 → t-46/t-47/t-48 → t-49/t-51/t-52 → t-50/t-53. Run t-17 before t-49.
