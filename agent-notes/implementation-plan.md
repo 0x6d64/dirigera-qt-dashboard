@@ -9,6 +9,8 @@ Reference tasks by their `t-<number>` ID — plans never get their own IDs
 ```
 ### Plan: <short title> (t-<id>[, t-<id>])
 
+Status: open | partly done (<what>) | done <date>
+
 Goal: <one or two sentences>
 Affected files: <paths>
 #### Commit N — "<message>" (t-<id>)
@@ -16,11 +18,17 @@ Affected files: <paths>
 Verification: <commands / manual checks>
 ```
 
-Plans use `###`, commits inside a plan use `####`.
+Plans use `###`, commits inside a plan use `####`. Every plan and execution
+order entry has one `Status:` line right under its heading; update it when
+the plan is executed (newest entries first; no separate done section).
+Finished commits carry `✓ executed <date>` on their heading, and a done plan
+may end with an `> **Executed …**` note listing branch and commit hashes.
 
-## Active plans
+## Plans
 
 ### Execution order, batch 3 (2026-11-21)
+
+Status: open
 
 The owner's feature requests and open-question decisions of 2026-11-21, built
 by Haiku subagents in this order, one branch per plan, each merged into
@@ -38,8 +46,8 @@ by Haiku subagents in this order, one branch per plan, each merged into
   empty). Never show or control the child lock (`req-21`).
 - Bookkeeping on the branch: check off the `t-` items in `agent-notes/todo.md`,
   mark the matching `req-` entries in `doc/reqs.md` implemented, update the
-  design-doc or `doc/dirigera-api.md` lines named in the plan, and add an
-  Executed marker with commit hashes to the plan.
+  design-doc or `doc/dirigera-api.md` lines named in the plan, set the plan's
+  `Status:` line to done, and add an Executed note with commit hashes.
 - Files are UTF-8 with LF line endings.
 
 1. `feat/purifier-controls` — filter health, fan speed (t-85, t-80)
@@ -53,6 +61,8 @@ Not planned: t-15 and t-16 (L effort, polling meets `req-13`), t-82 (no hub
 route for history), t-78 (no blind).
 
 ### Plan: air purifier filter health and fan speed (t-85, t-80)
+
+Status: open
 
 Goal: the purifier card shows how much filter life is left and warns when the
 filter must be changed (`req-20`), and lets the user pick Off, Auto or speed
@@ -135,6 +145,8 @@ filter footer reads "Filter used up · change now", chip "Change filter").
 ---
 
 ### Plan: energy reset, cost and totals (t-83, t-84, t-87)
+
+Status: open
 
 Goal: on the Energy tab, metering plugs can reset their usage counter
 (`req-18`), usage is shown with its cost from a configurable price
@@ -240,6 +252,8 @@ update after the refresh).
 
 ### Plan: PM2.5 bands, hidden devices, automatic scenes (t-88, t-89, t-90)
 
+Status: open
+
 Goal: PM2.5 readings say good / moderate / poor (`design-doc.md` §14 item 9),
 devices the hub marks hidden are not shown (`doc/dirigera-api.md` §2.2 row 6),
 and automatic scenes are hidden behind a remembered toggle (§8.10.5, §9.3,
@@ -301,6 +315,8 @@ Verification: gates.
 
 ### Plan: room colours (t-86)
 
+Status: open
+
 Goal: optionally mark each room with the colour the owner picked in the IKEA
 app (`req-22`), with a remembered toggle; the default stays the current
 neutral look.
@@ -319,12 +335,12 @@ Affected files: `theme.py`, `dashboard.py`, `widgets/card.py`,
 
 1. `theme.py`: `ROOM_COLOURS` dict from hue word to hex (at least red, orange,
    yellow, green, turquoise, blue, purple, lilac, pink, beige, brown, grey),
-   mid tones that reach 3:1 against `theme.BG` and `theme.SURFACE` (non-text
+   mid tones that reach 3:1 against `theme.WINDOW` and `theme.SURFACE` (non-text
    contrast). `room_colour(name) -> Optional[str]`: split the name on `_`,
    return the colour of the first known hue word; None for None, empty or
    unknown names.
 2. Tests: names from the real hub map to green and blue; unknown and None
-   give None; every `ROOM_COLOURS` value is ≥ 3:1 against `BG` and `SURFACE`
+   give None; every `ROOM_COLOURS` value is ≥ 3:1 against `WINDOW` and `SURFACE`
    (reuse the contrast helper in `tests/test_theme_contrast.py`).
 
 #### Commit 2 — "show room colours with a toggle" (t-86)
@@ -356,6 +372,10 @@ Verification: gates; manual by the owner (colours look roughly like the app).
 
 ### Plan: dirigera 1.6.1 migration follow-ups (t-12, t-14 … t-16)
 
+Status: partly done. Commit 1 (t-12) done 2026-11-15; commit 2 (t-14) done
+2026-11-21 by the plan "light colour controls"; commits 3 (t-15) and 4 (t-16)
+open, not scheduled
+
 Goal: Adopt the capabilities added in `dirigera` 1.6.1 that the card UI does
 not expose yet. t-12 and t-13 landed with the `DeviceCard` refactor (design
 plan commit 4); what remains is colour/temperature controls, adaptive
@@ -381,7 +401,7 @@ Affected files: `widgets/card.py`, `dashboard.py`
    `Blind` without the capability renders none.
 4. Close t-12 in `todo.md` once the smoke test passes.
 
-#### Commit 2 — "light color and temperature controls" (t-14)
+#### Commit 2 — "light color and temperature controls" (t-14) ✓ executed 2026-11-21 (plan "light colour controls")
 
 1. In the light control zone of `widgets/card.py`, add an optional
    `on_color_temperature` callback (same pattern as `on_brightness`). When
@@ -455,6 +475,8 @@ Affected files: `widgets/card.py`, `dashboard.py`
 
 ### Execution order (2026-11-21)
 
+Status: done 2026-11-21
+
 Highest-priority implementation work, executed in this order, one branch per
 plan, each merged into `master` with `--no-ff` (branches are kept):
 
@@ -474,6 +496,8 @@ green on every commit; check off the tasks and mark requirements implemented on
 the plan branch.
 
 ### Plan: automated refresh (t-19, t-56)
+
+Status: done 2026-11-21
 
 > **Executed 2026-11-21** on branch `feat/automated-refresh`: commit 1
 > "update cards without rebuilding" (`f26544e`), commit 2 "periodic
@@ -559,6 +583,8 @@ set a short interval. Gates as above.
 
 ### Plan: refresh after a scene activation (t-79)
 
+Status: done 2026-11-21
+
 Goal: after a scene is activated, the device views show the new state within
 about two seconds instead of waiting for the next 30 s poll. Branch
 `fix/scene-refresh`.
@@ -603,6 +629,8 @@ here.
 ---
 
 ### Plan: config file location and errors (t-28, t-27)
+
+Status: done 2026-11-21
 
 > **Executed 2026-11-21** on branch `fix/config-file`: commit 1 "load
 > config.ini from the app folder" (`d49dbe3`), commit 2 "report unreadable
@@ -650,6 +678,8 @@ Mark `req-8` implemented, check off t-27 and t-28. Gates green.
 ---
 
 ### Plan: discovery cancel, large subnets, dedupe (t-25, t-21, t-24)
+
+Status: done 2026-11-21
 
 > **Executed 2026-11-21** on branch `fix/discovery`: commit 1 "scan every /24
 > of large networks once" (`cb9ccee`), commit 2 "cooperative discovery cancel"
@@ -717,6 +747,8 @@ check off t-21, t-24, t-25. Gates green.
 
 ### Execution order, batch 2 (2026-11-21)
 
+Status: done 2026-11-21
+
 Everything still open that can be built and verified without a real hub or an
 owner decision, in this order, one branch per plan, each merged into `master`
 with `--no-ff` (branches kept). The batch-1 rules apply (tests in `tests/`,
@@ -751,6 +783,8 @@ Not planned, and why:
 - Reduced-motion setting (part of t-74): §14 item 7 is still open.
 
 ### Plan: inline status instead of dialogs (t-66, t-30)
+
+Status: done 2026-11-21
 
 Goal: routine outcomes never open a modal dialog (`design-doc.md` §8.14). The
 only remaining dialog is `HubSelectionDialog`, because it asks for a choice.
@@ -807,6 +841,8 @@ Verification: as listed per commit; all four gates green.
 
 ### Plan: specific exceptions and logging (t-26)
 
+Status: done 2026-11-21
+
 Goal: no failure disappears silently. Errors are caught where they can be
 handled, logged, and reported; catch-alls remain only at thread boundaries,
 where an uncaught exception would be lost.
@@ -854,6 +890,8 @@ Check off t-26, Executed marker.
 ---
 
 ### Plan: card text and footers (t-67, t-68, t-70, t-75)
+
+Status: done 2026-11-21
 
 > **Executed 2026-11-21** on branch `fix/card-text`: commit 1 "elide long
 > device names" (`6ba47be`), commit 2 "humanise chips, types and offline
@@ -926,6 +964,8 @@ Check off t-67, t-68, t-70, t-75, Executed markers.
 
 ### Plan: real state for every device type (t-69)
 
+Status: done 2026-11-21
+
 Goal: every device type shows its real readings instead of an empty card with
 an invented "Ready" chip (`design-doc.md` §1 principle 1, §8.5;
 `dirigera-api.md` §3 rows 4 to 10).
@@ -970,6 +1010,8 @@ Check off t-69, Executed marker.
 ---
 
 ### Plan: scene grid, refresh feedback, keyboard (t-71, t-73, t-74)
+
+Status: done 2026-11-21
 
 Goal: the remaining small design gaps that need no decision.
 
@@ -1022,6 +1064,8 @@ setting remains. Executed markers.
 
 ### Plan: light colour controls (t-14)
 
+Status: done 2026-11-21
+
 Goal: lights that support it get colour temperature and colour controls
 (`dirigera-api.md` §2.3 row 1 and §3 row 1; `design-doc.md` §8.4 item 7).
 
@@ -1071,6 +1115,8 @@ Executed markers.
 
 ### Plan: discovery scope (t-22, t-23)
 
+Status: done 2026-11-21
+
 Goal: the user can see and limit what discovery scans; virtual and link-local
 networks are skipped by default.
 
@@ -1113,6 +1159,8 @@ Check off t-22, t-23, Executed markers.
 
 ### Plan: type checking and remaining smoke tests (t-34, t-55)
 
+Status: done 2026-11-21
+
 Goal: mypy checks function bodies everywhere, and the remaining ad-hoc
 offscreen checks live in `tests/`.
 
@@ -1149,6 +1197,8 @@ Check off t-34 and t-55, Executed markers.
 ---
 
 ### Plan: README, entry point and metadata (t-36, t-37, t-38, t-39, t-76)
+
+Status: done 2026-11-21
 
 Goal: a new user can install and run the app from the README alone, and the
 project metadata is complete.
@@ -1193,6 +1243,8 @@ Check off t-36, t-37, t-38, t-39, t-76, Executed markers.
 ---
 
 ### Plan: responsive header and window defaults (t-54, t-72)
+
+Status: done 2026-11-21
 
 Goal: remove the ~970 px minimum window width set by the fixed 56 px single-row
 header (design commit 6), so the window can actually reach t-46's 640 px
@@ -1258,9 +1310,9 @@ view switcher on a second header row", Executed markers.
 
 ---
 
-## Done
-
 ### Plan: pytest suite (t-32, t-33, t-53, t-55)
+
+Status: done (branch `test/pytest-suite`)
 
 Goal: a small suite that guards behaviour (requirements) and pure logic, not
 layout or styling, so it survives UI work. Executed on branch
@@ -1290,6 +1342,8 @@ of t-55 (energy view, header responsiveness).
 Verification: `uv run pytest`, plus the three gates.
 
 ### Plan: design document v1.0 implementation (t-40 … t-53)
+
+Status: done 2026-11-17
 
 Goal: Implement the visual design described in `doc/design-doc.md` v1.0 —
 introducing a token-driven theme, purpose-built components, a redesigned card
@@ -1702,6 +1756,8 @@ Create a `widgets/` package (`widgets/__init__.py` empty).
 
 ### Plan: fix token generation (t-11)
 
+Status: done 2026-11-14
+
 > **Executed 2026-11-14** — commit (t-11). Replaced non-existent
 > `dirigera.create_token` with `dirigera.hub.auth` challenge flow (`send_challenge`
 > + `get_token`). Verified script usage, imports, unit mock flow, and gate checks.
@@ -1737,6 +1793,8 @@ Affected files: `generate_token.py`, `README.md`, `doc/reqs.md`, `agent-notes/to
    - Gates: `uv run black .`, `uv run ruff check .`, `uv run mypy .`.
 
 ### Plan: Correctness & runtime bugs (t-1 … t-10)
+
+Status: done 2026-11-14
 
 > **Executed 2026-11-14** — commits `f0740fd` (t-1–t-4), `365ffce`
 > (t-5–t-7), `c9290d2` (t-8–t-10). Offscreen smoke checks passed; mypy

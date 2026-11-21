@@ -44,8 +44,9 @@ Orientation docs: `README.md`, `doc/design-doc.md` (visual design), `doc/diriger
 - One implementation plan entry per task or coherent task group, with concrete
   steps, affected files, and verification steps.
 - A plan's status is recorded once, in its own entry in
-  `implementation-plan.md` (executed markers on commits). Do not copy status
-  into other files.
+  `implementation-plan.md`: a `Status:` line under the plan heading (open,
+  partly done, done <date>) and `✓ executed` markers on finished commits.
+  There is no separate done section. Do not copy status into other files.
 
 ### Plan workflow (branches)
 
