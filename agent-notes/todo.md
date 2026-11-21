@@ -78,10 +78,10 @@ Found by comparing the implementation with `doc/design-doc.md` in the 2026-11-21
 - [x] **t-68 [B·S]** Offline footer should read "Last seen <relative time>" from `device.last_seen`, not "Device unreachable" (§8.1 state 2).
 - [x] **t-69 [B·M]** Give the remaining device types real state instead of an empty card with an invented "Ready" chip: environment, motion, open/close, water, occupancy and light sensors, air purifiers, controllers (§8.5, principle 1). Add the missing types to the card sort map (§8.1 rule 3).
 - [x] **t-70 [C·S]** Chip text rules: no percentage in blind chips, sentence case, and no raw `device_type` captions such as "Open close sensor" (§8.2, acceptance item 4).
-- [ ] **t-71 [C·S]** Scene tiles should use a 240 px minimum column width, not the 280 px card width (§8.10.1); give `CardGrid` a configurable minimum.
+- [x] **t-71 [C·S]** Scene tiles should use a 240 px minimum column width, not the 280 px card width (§8.10.1); give `CardGrid` a configurable minimum.
 - [x] **t-72 [C·S]** Window defaults: 1080 × 700 default, 640 × 480 minimum, no extra tab-layout margins outside the spacing scale (§4.1, §4.4). Related to t-54.
-- [ ] **t-73 [C·S]** Refresh button shows "Refreshing…" while running (§10.2.1); first-load skeleton (§8.13).
-- [ ] **t-74 [C·M]** Keyboard and accessibility: arrow keys in the segmented control, fixed width for metric values, accessible names on blind buttons and sliders, reduced-motion setting (§10.4.5, §10.5, §12.3).
+- [x] **t-73 [C·S]** Refresh button shows "Refreshing…" while running (§10.2.1); first-load skeleton (§8.13).
+- [ ] **t-74 [C·M]** Keyboard and accessibility: arrow keys in the segmented control, fixed width for metric values, accessible names on blind buttons and sliders, reduced-motion setting (§10.4.5, §10.5, §12.3). Done except the reduced-motion setting (§14 item 7 still open).
 - [x] **t-75 [C·S]** Outlets with metering show their energy footer in the Rooms view, as electrical sensors do.
 - [ ] **t-76 [C·S]** Fix the design doc itself. Done on `docs/design-doc-cleanup`: missing-doc references, stale `[open]`/`[verified]` tags, §5.2 pairings (now owned by the contrast test), chip radius vs height. Remaining: window size (1080 vs code 1000, with t-70), "Dirigera" as the app title against §2.2, and polling in §10.2 (see t-56).
 - [ ] **t-77 [C·S]** Decide whether "automatic scenes" exist: the library's `SceneType` has no automatic type, so §8.10.5 and §9.3 cannot be built as written.

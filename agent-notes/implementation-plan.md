@@ -643,14 +643,14 @@ Affected files: `widgets/grid.py`, `dashboard.py`, `widgets/segments.py`,
 `widgets/metric.py`, `widgets/card.py`, `tests/test_polish.py` (new),
 `agent-notes/todo.md`
 
-#### Commit 1 — "narrower scene columns" (t-71)
+#### Commit 1 — "narrower scene columns" (t-71) ✓ executed 2026-11-21 (`fc1a041`)
 
 1. `CardGrid(min_width: int = CARD_MIN_WIDTH)`; `grid_columns_for_width`
    takes the minimum as a parameter. The scenes grid uses
    `SCENE_MIN_WIDTH = 240` from `widgets/scene.py`.
 2. Test: at a given width the scenes grid has more columns than a device grid.
 
-#### Commit 2 — "refreshing state and first-load skeleton" (t-73)
+#### Commit 2 — "refreshing state and first-load skeleton" (t-73) ✓ executed 2026-11-21 (`c645900`)
 
 1. While any refresh runs, the Refresh button reads "Refreshing…" and is
    disabled; it returns to "Refresh" when the worker is done.
@@ -660,7 +660,7 @@ Affected files: `widgets/grid.py`, `dashboard.py`, `widgets/segments.py`,
 3. Tests: button text during and after a refresh (stub hub with a gate event);
    skeletons present before and gone after the first refresh.
 
-#### Commit 3 — "keyboard and accessible names" (t-74)
+#### Commit 3 — "keyboard and accessible names" (t-74) ✓ executed 2026-11-21 (`f7a1b6f`)
 
 1. Segmented control: Left/Right arrows move the selection (and emit the same
    signal as a click) when it has focus.
@@ -678,6 +678,11 @@ Affected files: `widgets/grid.py`, `dashboard.py`, `widgets/segments.py`,
 
 Check off t-71, t-73; t-74 stays open with a note that only the reduced-motion
 setting remains. Executed markers.
+
+> **Executed 2026-11-21** on branch `fix/grid-refresh-a11y`: commits
+> `fc1a041`, `c645900`, `5157cfb` ("hide energy chip without readable state":
+> the energy card no longer invents a "Ready" chip, same rule as device cards)
+> and `f7a1b6f`, then this bookkeeping commit.
 
 ---
 
