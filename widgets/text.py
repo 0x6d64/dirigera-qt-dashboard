@@ -1,8 +1,8 @@
 """Pure text helpers for cards (no Qt): relative times and type captions."""
 
 import re
-from datetime import datetime
-from typing import Any, Optional
+from datetime import date, datetime
+from typing import Any, Iterable, List, Optional, Tuple
 
 # The library's `device_type` strings, which are camelCase (see
 # `.venv/Lib/site-packages/dirigera/hub/hub.py`).
@@ -78,6 +78,82 @@ def format_kwh(attrs: Any) -> Optional[str]:
     """Total energy as "1.50 kWh", None when unreported."""
     value = _number(attrs, "total_energy_consumed")
     return None if value is None else f"{value:.2f} kWh"
+
+
+def usage_kwh(attrs: Any) -> Optional[float]:
+    """Energy used since the last reset, in kWh, None when unreported.
+
+    `total_energy_consumed` never resets; the hub keeps the total at the last
+    reset in `energy_consumed_at_last_reset`. Without that value the total
+    is the usage (docs/dirigera-api.md §5 item 2).
+    """
+    total = _number(attrs, "total_energy_consumed")
+    if total is None:
+        return None
+    at_reset = _number(attrs, "energy_consumed_at_last_reset")
+    # Never negative, even if the hub's two counters disagree.
+    return total if at_reset is None else max(0.0, total - at_reset)
+
+
+def format_cost(kwh: float, price_per_kwh: float, currency: str) -> str:
+    """The cost of `kwh` at `price_per_kwh`, e.g. "2.00 RON"."""
+    return f"{kwh * price_per_kwh:.2f} {currency}"
+
+
+def usage_text(
+    attrs: Any, price_per_kwh: float, currency: str, today: date
+) -> Optional[str]:
+    """The usage line of an energy card with its cost, None when unreported.
+
+    "Since 21 Nov: 1.30 kWh · 2.00 RON" once a reset time is known (with the
+    year when it is not `today`'s), else "Usage 18.40 kWh · 28.34 RON".
+    """
+    kwh = usage_kwh(attrs)
+    if kwh is None:
+        return None
+    cost = format_cost(kwh, price_per_kwh, currency)
+    reset = getattr(attrs, "time_of_last_energy_reset", None)
+    has_reset_value = _number(attrs, "energy_consumed_at_last_reset") is not None
+    if isinstance(reset, datetime) and has_reset_value:
+        # Aware timestamps are shown in local time, naive ones are taken as local.
+        day = reset.astimezone().date()
+        year = "" if day.year == today.year else f" {day.year}"
+        return f"Since {day:%d %b}{year}: {kwh:.2f} kWh · {cost}"
+    return f"Usage {kwh:.2f} kWh · {cost}"
+
+
+def energy_totals(devices: Iterable[Any]) -> Tuple[Optional[float], Optional[float]]:
+    """Sum the live power (W) and the usage (kWh) of `devices`.
+
+    Each sum counts only the devices that report it; None when none does.
+    """
+    watts: Optional[float] = None
+    kwh: Optional[float] = None
+    for device in devices:
+        attrs = getattr(device, "attributes", None)
+        power = _number(attrs, "current_active_power")
+        if power is not None:
+            watts = (watts or 0.0) + power
+        used = usage_kwh(attrs)
+        if used is not None:
+            kwh = (kwh or 0.0) + used
+    return watts, kwh
+
+
+def totals_text(
+    watts: Optional[float], kwh: Optional[float], price_per_kwh: float, currency: str
+) -> Optional[str]:
+    """A totals line such as "45 W now · 1.30 kWh · 2.00 RON", None when empty.
+
+    Parts without data are left out; the cost goes with the usage.
+    """
+    parts: List[str] = []
+    if watts is not None:
+        parts.append(f"{watts:.0f} W now")
+    if kwh is not None:
+        parts.append(f"{kwh:.2f} kWh")
+        parts.append(format_cost(kwh, price_per_kwh, currency))
+    return " · ".join(parts) or None
 
 
 def energy_footer(attrs: Any, with_power: bool = False) -> str:

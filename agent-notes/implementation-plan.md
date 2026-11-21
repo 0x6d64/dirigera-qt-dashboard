@@ -272,7 +272,7 @@ finds nothing.
 
 ### Plan: energy reset, cost and totals (t-83, t-84, t-87)
 
-Status: open
+Status: done 2026-11-21
 
 Goal: on the Energy tab, metering plugs can reset their usage counter
 (`req-18`), usage is shown with its cost from a configurable price
@@ -298,7 +298,7 @@ Affected files: `widgets/text.py`, `widgets/energy.py`, `settings.py`,
 `tests/test_energy_reset.py` (new), `tests/test_config.py`,
 `doc/design-doc.md` §8.11/§9.4, `doc/reqs.md`, `agent-notes/todo.md`
 
-#### Commit 1 — "add energy price settings" (t-84)
+#### Commit 1 — "add energy price settings" (t-84) ✓ executed 2026-11-21
 
 1. `settings.py` (new home of the config parsers, t-92): `EnergySettings`
    dataclass (`price_per_kwh: float = 1.54`, `currency: str = "RON"`) and
@@ -317,7 +317,7 @@ Affected files: `widgets/text.py`, `widgets/energy.py`, `settings.py`,
    shows the problem in the status text (`tests/test_config.py`; the QSettings
    fixture from t-92 keeps tests off the real settings).
 
-#### Commit 2 — "show energy usage and cost" (t-84)
+#### Commit 2 — "show energy usage and cost" (t-84) ✓ executed 2026-11-21
 
 1. `widgets/text.py`: `usage_kwh(attrs) -> Optional[float]` (definition
    above), `format_cost(kwh, price, currency) -> str` (`"2.00 RON"`, two
@@ -331,7 +331,7 @@ Affected files: `widgets/text.py`, `widgets/energy.py`, `settings.py`,
 3. Tests: helper unit tests; card texts with and without reset data, after a
    price change, and with no energy data.
 
-#### Commit 3 — "add energy counter reset" (t-83)
+#### Commit 3 — "add energy counter reset" (t-83) ✓ executed 2026-11-21
 
 1. `EnergyCard`: a small "Reset" button (only when the capability is there),
    two-step inline confirm: first click shows "Confirm reset" and "Cancel"
@@ -356,7 +356,7 @@ Affected files: `widgets/text.py`, `widgets/energy.py`, `settings.py`,
    and the timeout send nothing; failure shows the card error; the `dialogs`
    fixture stays empty.
 
-#### Commit 4 — "show room and home energy totals" (t-87)
+#### Commit 4 — "show room and home energy totals" (t-87) ✓ executed 2026-11-21
 
 1. Room grouping and labels come from `rooms.py` (`group_by_room`,
    `format_room_label`, t-92). Each room section in the Energy view gets a
@@ -371,7 +371,7 @@ Affected files: `widgets/text.py`, `widgets/energy.py`, `settings.py`,
 3. Tests: helper sums (mixed missing values), room caption and home line
    texts, update after a refresh with new readings.
 
-#### Commit 5 — "record energy reset, cost and totals"
+#### Commit 5 — "record energy reset, cost and totals" ✓ executed 2026-11-21
 
 Bookkeeping: t-83, t-84, t-87; `req-18`, `req-19`; design-doc §14 item 5
 implemented, §8.11/§9.4 describe the usage line, reset and totals;
@@ -379,6 +379,17 @@ implemented, §8.11/§9.4 describe the usage line, reset and totals;
 
 Verification: gates; manual by the owner on the real hub (reset once, values
 update after the refresh).
+
+> **Executed 2026-11-21** on branch `feat/energy-reset-cost`: commit 1 "add
+> energy price settings" (`7ed3533`), commit 2 "show energy usage and cost"
+> (`695fe72`), commit 3 "add energy counter reset" (`c8f67a2`), commit 4 "show
+> room and home energy totals" (`b59c567`), commit 5 "record energy reset, cost
+> and totals" (the commit that adds this note; not merged). Deviations: the
+> reset confirm is inline, not the modal that t-83 mentions (the batch rule
+> forbids dialogs); the usage reads "Since …" only when both the reset time and
+> the reset value are known, else "Usage …"; a blank `price_per_kwh` or
+> `currency` means the default, as in `[discovery]`, without a message. The
+> owner's hub check (reset once, values after the refresh) is still open.
 
 ---
 

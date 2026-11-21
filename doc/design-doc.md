@@ -373,6 +373,15 @@ Label size, medium weight, `text-2`, sentence case. Placed above each room's car
    kWh. `[lib]`
 2. Plugs without metering: footer reads "No energy data"; no empty metric row. `[proposed]`
 3. No history graphs. `[proposed]`
+4. Usage line under the captions: the usage since the last reset with its cost, e.g.
+   "Since 21 Nov: 1.30 kWh · 2.00 RON" (the year is added when it is not this year).
+   Without a reset time: "Usage 18.40 kWh · 28.34 RON". The cost is usage times the
+   price in `[energy]` (req-19; default 1.54 RON per kWh). Hidden without energy
+   data. `[verified]`
+5. Reset (req-18): a "Reset" button, only on plugs whose hub accepts the reset. The
+   first click shows "Confirm reset" and "Cancel" in its place with the caption
+   "Usage since the last reset will be lost"; Cancel, or 5 s without a click, returns
+   to "Reset". The second click sends the reset; no dialog. `[verified]`
 
 ### 8.12 Connection block (not-connected state)
 
@@ -409,8 +418,11 @@ grid, with a "Show automatic scenes" toggle above the grid (off by default; t-90
 
 ### 9.4 Energy
 
-Same header with the Energy segment selected. Content: energy cards grouped by room.
-Whether totals are shown per home or per room is undecided (section 14, item 5).
+Same header with the Energy segment selected. Content: a home line above the rooms,
+then energy cards grouped by room. Each room label has a totals caption under it.
+Both sum the live power, the usage and its cost, and leave out parts without data,
+e.g. "Home: 120 W now · 18.40 kWh · 28.34 RON" and "45 W now · 1.30 kWh · 2.00 RON"
+(section 14, item 5; t-87). `[verified]`
 
 ## 10. Behaviour
 
@@ -524,7 +536,7 @@ See `qt-gotchas.md`.
 | 2 | Room section order | Decided and implemented: alphabetical, case-insensitive |
 | 3 | Show automatic scenes by default | Decided: no; non-`userScene` scenes are hidden behind a toggle (t-90) |
 | 4 | Low-battery threshold | Decided and implemented: 20 % (`LOW_BATTERY_PERCENT`) |
-| 5 | Energy totals per home or per room | Decided: a total per room and one home total (t-87) |
+| 5 | Energy totals per home or per room | Decided and implemented: a total per room and one home total (t-87) |
 | 6 | Icon source | Decided and implemented: icons drawn in code (`widgets/icons.py`) |
 | 7 | Reduced-motion behaviour on Windows | Decided: no setting; animations stay as they are |
 | 8 | Colour-temperature gradient rendering | Decided and implemented: groove gradient between `TEMP_WARM` and `TEMP_COOL`, no fill |

@@ -38,11 +38,16 @@ from network_discovery import (
     hosts_to_scan,
 )
 from rooms import format_room_label, get_room, group_by_room, is_energy_device
-from settings import DiscoverySettings, parse_discovery_settings
+from settings import (
+    DiscoverySettings,
+    EnergySettings,
+    parse_discovery_settings,
+    parse_energy_settings,
+)
 from widgets.card import DeviceCard, device_sort_key
 from widgets.chip import StatusChip
 from widgets.connection import ConnectionBlock
-from widgets.energy import EnergyView
+from widgets.energy import EnergyCard, EnergyView
 from widgets.grid import CardGrid
 from widgets.scene import SCENE_MIN_WIDTH, SceneTile
 from widgets.segments import SegmentedControl
@@ -237,6 +242,10 @@ class DirigeraDashboard(QMainWindow):
         in the status caption and leaves the fields empty.
         """
         self.discovery_settings = DiscoverySettings()
+        self.energy_settings = EnergySettings()
+        self.energy_view.set_price(
+            self.energy_settings.price_per_kwh, self.energy_settings.currency
+        )
         if not CONFIG_PATH.exists():
             return
         config = configparser.ConfigParser()
@@ -245,17 +254,25 @@ class DirigeraDashboard(QMainWindow):
         except (configparser.Error, OSError, UnicodeDecodeError) as error:
             self.set_status_text(f"Could not read config.ini: {error}", "danger")
             return
+        ignored: List[str] = []
         if "discovery" in config:
             self.discovery_settings, problems = parse_discovery_settings(
                 config["discovery"]
             )
-            if problems:
-                self.set_status_text(
-                    "Ignored invalid [discovery] settings in config.ini ("
-                    + "; ".join(problems)
-                    + "); using defaults",
-                    "danger",
-                )
+            ignored += [f"[discovery] {p}" for p in problems]
+        if "energy" in config:
+            self.energy_settings, problems = parse_energy_settings(config["energy"])
+            self.energy_view.set_price(
+                self.energy_settings.price_per_kwh, self.energy_settings.currency
+            )
+            ignored += [f"[energy] {p}" for p in problems]
+        if ignored:
+            self.set_status_text(
+                "Ignored invalid settings in config.ini ("
+                + "; ".join(ignored)
+                + "); using defaults",
+                "danger",
+            )
         if "hub" not in config:
             return
         hub = config["hub"]
@@ -351,7 +368,7 @@ class DirigeraDashboard(QMainWindow):
         self.tab_widget.addTab(self.scenes_tab, "Scenes")
 
         # Energy tab (t-49)
-        self.energy_view = EnergyView()
+        self.energy_view = EnergyView(on_reset=self.reset_energy)
         self.tab_widget.addTab(self.energy_view, "Energy")
 
         # The segmented switcher is the only navigation; a visible tab bar
@@ -1065,11 +1082,12 @@ class DirigeraDashboard(QMainWindow):
 
     def run_device_command(
         self, card: CommandTarget, command: Callable[[], None], action: str
-    ) -> None:
+    ) -> CommandWorker:
         """Run a device command in a worker and resync the card afterwards.
 
         Hub calls block for up to the library's 10 s timeout, so they never
         run on the GUI thread (req-4). The card shows "Sending…" meanwhile.
+        Returns the worker, so a caller can attach its own success handler.
         """
         self._command_workers = [w for w in self._command_workers if w.isRunning()]
         card.set_pending(True)
@@ -1078,6 +1096,28 @@ class DirigeraDashboard(QMainWindow):
         worker.failed.connect(self._on_command_failed)
         self._command_workers.append(worker)
         worker.start()
+        return worker
+
+    def reset_energy(self, card: EnergyCard) -> None:
+        """Reset a metering plug's usage counter on the hub (req-18).
+
+        The hub copies its running total into the reset value and sets the
+        reset time to now. Success triggers a refresh to fetch those values.
+        """
+        device = card.device
+
+        def command() -> None:
+            device.dirigera_client.patch(
+                route=f"/devices/{device.id}",
+                data=[{"attributes": {"energyConsumedAtLastReset": 0}}],
+            )
+
+        worker = self.run_device_command(card, command, "reset energy")
+        worker.succeeded.connect(self._on_energy_reset_done)
+
+    def _on_energy_reset_done(self, _card: object) -> None:
+        """Fetch the values the hub stored for the reset."""
+        self._request_background_refresh()
 
     def _on_command_done(self, card: CommandTarget) -> None:
         """Redraw the card from the value the library stored on success."""

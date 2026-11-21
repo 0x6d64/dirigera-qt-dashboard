@@ -103,3 +103,69 @@ def test_empty_energy_view_shows_its_empty_state(qapp: Any) -> None:
     assert not view.empty_label.isVisible()
     assert view.scroll_area.isVisible()
     view.hide()
+
+
+def test_view_price_reaches_new_and_existing_cards(qapp: Any) -> None:
+    view = EnergyView()
+    view.set_price(1.0, "EUR")
+    view.set_rooms(
+        [("Kitchen", [_outlet("a", "Kettle", None, 1.0, total_energy_consumed=2.0)])]
+    )
+    (card,) = view.cards()
+    assert card.usage_label.text() == "Usage 2.00 kWh · 2.00 EUR"
+
+    view.set_price(2.0, "EUR")
+    assert card.usage_label.text() == "Usage 2.00 kWh · 4.00 EUR"
+
+
+def _metered(id_: str, power: float | None, **kw: Any) -> Any:
+    return _outlet(id_, id_.title(), None, power, **kw)
+
+
+def test_room_captions_and_home_line_total_the_readings(qapp: Any) -> None:
+    view = EnergyView()
+    view.set_rooms(
+        [
+            (
+                "Kitchen",
+                [
+                    _metered(
+                        "a",
+                        25.0,
+                        total_energy_consumed=18.4,
+                        energy_consumed_at_last_reset=17.1,
+                    ),
+                    _metered("b", 20.0),
+                ],
+            ),
+            ("Attic", [_metered("c", 75.0, total_energy_consumed=5.0)]),
+        ]
+    )
+    assert view.room_captions() == [
+        "45 W now · 1.30 kWh · 2.00 RON",
+        "75 W now · 5.00 kWh · 7.70 RON",
+    ]
+    assert view.home_label.text() == "Home: 120 W now · 6.30 kWh · 9.70 RON"
+    assert not view.home_label.isHidden()
+
+
+def test_totals_are_left_out_without_readings(qapp: Any) -> None:
+    view = EnergyView()
+    view.set_rooms([("Kitchen", [_metered("a", None)])])
+    assert view.room_captions() == [""]
+    assert view.home_label.isHidden()
+
+
+def test_totals_follow_a_refresh_in_place(qapp: Any) -> None:
+    view = EnergyView()
+    view.update_rooms([("Kitchen", [_metered("a", 10.0)])])
+    view.update_rooms([("Kitchen", [_metered("a", 42.0)])])
+    assert view.room_captions() == ["42 W now"]
+    assert view.home_label.text() == "Home: 42 W now"
+
+
+def test_totals_follow_a_new_price(qapp: Any) -> None:
+    view = EnergyView()
+    view.set_rooms([("Kitchen", [_metered("a", 1.0, total_energy_consumed=2.0)])])
+    view.set_price(1.0, "EUR")
+    assert view.room_captions() == ["1 W now · 2.00 kWh · 2.00 EUR"]
