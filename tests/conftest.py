@@ -101,9 +101,16 @@ class StubLight:
 
     attributes: Any
 
-    def __init__(self, fail: bool = False, **kw: Any) -> None:
+    def __init__(
+        self,
+        fail: bool = False,
+        can_receive: list[str] | None = None,
+        **kw: Any,
+    ) -> None:
         base = make_device("light", is_on=False, light_level=50, **kw)
         self.__dict__.update(base.__dict__)
+        self.capabilities = SimpleNamespace(can_receive=can_receive or [])
+        self.colour_calls: list[tuple[float, float]] = []
         self.fail = fail
         self.threads: list[threading.Thread] = []
 
@@ -119,6 +126,16 @@ class StubLight:
     def set_light_level(self, level: int) -> None:
         self._command()
         self.attributes.light_level = level
+
+    def set_color_temperature(self, color_temp: int) -> None:
+        self._command()
+        self.attributes.color_temperature = color_temp
+
+    def set_light_color(self, hue: float, saturation: float) -> None:
+        self._command()
+        self.colour_calls.append((hue, saturation))
+        self.attributes.color_hue = hue
+        self.attributes.color_saturation = saturation
 
     def reload(self) -> "StubLight":
         return self

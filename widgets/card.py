@@ -85,6 +85,32 @@ LOW_BATTERY_PERCENT = 20
 CARD_ERROR_MS = 8000
 
 
+def _bound_to_kelvin(bound: int) -> int:
+    """Normalise a colour temperature bound to Kelvin the way the library does.
+
+    Some bulbs report their bounds in mireds (153 to 454); no Kelvin value is
+    below 1000 and no mired value above it.
+    """
+    if 0 < bound < 1000:
+        return round(1_000_000 / bound)
+    return bound
+
+
+def kelvin_bounds(attrs: Any) -> Optional[Tuple[int, int]]:
+    """(lowest, highest) Kelvin the light accepts, or None when unknown."""
+    low = getattr(attrs, "color_temperature_min", None)
+    high = getattr(attrs, "color_temperature_max", None)
+    if not isinstance(low, int) or not isinstance(high, int):
+        return None
+    bounds = (_bound_to_kelvin(low), _bound_to_kelvin(high))
+    lower, upper = min(bounds), max(bounds)
+    return (lower, upper) if lower < upper else None
+
+
+def _can_receive(device: Any) -> list[str]:
+    return list(getattr(getattr(device, "capabilities", None), "can_receive", []))
+
+
 def device_sort_key(device: Any) -> Tuple[int, str]:
     """Sort key for devices within a room: category weight then device name."""
     dtype = getattr(device, "device_type", "unknown")
@@ -107,6 +133,7 @@ class DeviceCard(QFrame):
         on_toggle: Optional[Callable[["DeviceCard", bool], None]] = None,
         on_brightness: Optional[Callable[["DeviceCard", int], None]] = None,
         on_blind_position: Optional[Callable[["DeviceCard", int], None]] = None,
+        on_temperature: Optional[Callable[["DeviceCard", int], None]] = None,
         on_blind_state: Optional[Callable[["DeviceCard", str], None]] = None,
         parent=None,
     ):
@@ -118,6 +145,7 @@ class DeviceCard(QFrame):
         self._on_toggle = on_toggle
         self._on_brightness = on_brightness
         self._on_blind_position = on_blind_position
+        self._on_temperature = on_temperature
         self._on_blind_state = on_blind_state
 
         self._controls: list[QWidget] = []
@@ -291,6 +319,29 @@ class DeviceCard(QFrame):
                 self.brightness_slider.setAccessibleName(f"{self.full_name} brightness")
                 self._controls.append(self.brightness_slider)
                 self.control_zone.addWidget(self.brightness_slider)
+
+            # Colour temperature, only where the light accepts it (§1 finding 1).
+            bounds = kelvin_bounds(self.device.attributes)
+            if "colorTemperature" in _can_receive(self.device) and bounds:
+                kelvin = getattr(self.device.attributes, "color_temperature", None)
+                self.temperature_slider = LabeledSlider(
+                    label="Warmth",
+                    minimum=bounds[0],
+                    maximum=bounds[1],
+                    initial_value=kelvin if isinstance(kelvin, int) else bounds[0],
+                    unit="K",
+                    gradient=(theme.TEMP_WARM, theme.TEMP_COOL),
+                )
+                if self._on_temperature is not None:
+                    cb_temp = self._on_temperature
+                    self.temperature_slider.committed.connect(
+                        lambda val, callback=cb_temp: callback(self, val)
+                    )
+                self.temperature_slider.setAccessibleName(
+                    f"{self.full_name} colour temperature"
+                )
+                self._controls.append(self.temperature_slider)
+                self.control_zone.addWidget(self.temperature_slider)
 
         elif dtype == "outlet":
             # Power toggle switch
@@ -628,6 +679,7 @@ class DeviceCard(QFrame):
         for name, attr in (
             ("brightness_slider", "light_level"),
             ("blind_slider", "blinds_current_level"),
+            ("temperature_slider", "color_temperature"),
         ):
             slider = getattr(self, name, None)
             value = getattr(attrs, attr, None)
