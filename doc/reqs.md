@@ -27,7 +27,7 @@ reused.
   no task)*
 - **req-22** — The dashboard can show each room in the colour the user chose in
   the IKEA app, with a toggle between colour mode and the current black and
-  white (neutral) look. *(user, 2026-11-21; t-86, open)*
+  white (neutral) look. *(user, 2026-11-21; t-86, implemented)*
 
 ## Inferred
 

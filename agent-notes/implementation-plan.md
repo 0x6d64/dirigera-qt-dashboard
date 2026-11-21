@@ -28,7 +28,7 @@ may end with an `> **Executed …**` note listing branch and commit hashes.
 
 ### Execution order, batch 3 (2026-11-21)
 
-Status: open
+Status: done 2026-11-21
 
 The owner's feature requests and open-question decisions of 2026-11-21, built
 by Haiku subagents in this order, one branch per plan, each merged into
@@ -462,7 +462,7 @@ Verification: gates.
 
 ### Plan: room colours (t-86)
 
-Status: open
+Status: done 2026-11-21
 
 Goal: optionally mark each room with the colour the owner picked in the IKEA
 app (`req-22`), with a remembered toggle; the default stays the current
@@ -478,7 +478,7 @@ Affected files: `theme.py`, `rooms.py`, `dashboard.py`, `widgets/card.py`,
 `tests/test_theme_contrast.py`, `doc/design-doc.md`, `doc/dirigera-api.md`,
 `doc/reqs.md`, `agent-notes/todo.md`
 
-#### Commit 1 — "map IKEA room colour names" (t-86)
+#### Commit 1 — "map IKEA room colour names" (t-86) ✓ executed 2026-11-21
 
 1. `theme.py`: `ROOM_COLOURS` dict from hue word to hex (at least red, orange,
    yellow, green, turquoise, blue, purple, lilac, pink, beige, brown, grey),
@@ -491,7 +491,7 @@ Affected files: `theme.py`, `rooms.py`, `dashboard.py`, `widgets/card.py`,
    give None; every `ROOM_COLOURS` value is ≥ 3:1 against `WINDOW` and `SURFACE`
    (reuse the contrast helper in `tests/test_theme_contrast.py`).
 
-#### Commit 2 — "show room colours with a toggle" (t-86)
+#### Commit 2 — "show room colours with a toggle" (t-86) ✓ executed 2026-11-21
 
 1. Toggle row "Room colours" with a `ToggleSwitch` above the room sections in
    the Rooms view (same pattern as the automatic scenes toggle); off by
@@ -509,13 +509,18 @@ Affected files: `theme.py`, `rooms.py`, `dashboard.py`, `widgets/card.py`,
    sheet, a room without a colour does not; the setting persists into a new
    window.
 
-#### Commit 3 — "record room colours"
+#### Commit 3 — "record room colours" ✓ executed 2026-11-21
 
 Bookkeeping: t-86; `req-22`; design-doc gets a short room-colour section
 (marker and card edge only, never text or state, default off);
 `doc/dirigera-api.md` §4 row 5 note that names map by hue word.
 
 Verification: gates; manual by the owner (colours look roughly like the app).
+
+> **Executed 2026-11-21** on branch `feat/room-colours`: commit 1
+> "map IKEA room colour names" (`e304306`), commit 2 "show room colours
+> with a toggle" (`8a2bb42`), commit 3 "record room colours" (the commit
+> that adds this note; not merged).
 
 ---
 
