@@ -308,8 +308,8 @@ Variants:
 5. Value updates live while dragging. The command is sent on release or after a short
    pause (`req-6`). `[verified]` (test)
 6. Minimum on light brightness is 1 %, not 0 (the library rejects 0) `[lib]`.
-7. Colour-temperature slider: warm-to-cool gradient track. `[proposed]` Not yet rendered
-   in the mockup.
+7. Colour-temperature slider: warm-to-cool gradient track (`TEMP_WARM` to `TEMP_COOL`).
+   `[verified]` (test for behaviour; the rendering itself is not asserted)
 8. Disabled state: track and thumb in muted tones of the enabled colours (see
    `qt-gotchas.md`, item 4).
 
@@ -527,7 +527,7 @@ See `qt-gotchas.md`.
 | 5 | Energy totals per home or per room | Open. Default proposed: per room, with a home total |
 | 6 | Icon source | Open. Hand-drawn, or a licence-checked set |
 | 7 | Reduced-motion behaviour on Windows | Open. Default proposed: in-app setting |
-| 8 | Colour-temperature gradient rendering | Open. Implement and verify |
+| 8 | Colour-temperature gradient rendering | Decided and implemented: groove gradient between `TEMP_WARM` and `TEMP_COOL`, no fill |
 | 9 | Air-quality colour bands | Open. None until a standard is chosen |
 | 10 | Disabled control colours | Open. Muted tones of enabled colours; verify |
 | 11 | Windows verification: Segoe UI Variable, tabular figures, name truncation, 150 % scaling, text scaling | Open. Check on Windows before release |

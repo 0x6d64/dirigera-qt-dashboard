@@ -720,6 +720,14 @@ option), `theme.py` (two tokens for the warm and cool ends of the gradient),
 2. Tests: controls hidden by default and shown by the button; a commit sends
    both values with the right scaling; no controls without the capabilities.
 
+> **Executed 2026-11-21** on branch `feat/light-colour`: commit 1 "colour
+> temperature slider" (`8e7b18e`), commit 2 "hue and saturation controls"
+> (`cce6d98`), commit 3 "record light colour controls" (this bookkeeping
+> commit). Deviations: the bounds normalisation is a copy of the library's
+> private `_bound_to_kelvin` in `widgets/card.py` (`kelvin_bounds`); the
+> Warmth slider is also omitted when the bounds are missing or equal; the
+> saturation slider is labelled "Sat." to fit the 60 px label column.
+
 #### Commit 3 — "record light colour controls"
 
 Check off t-14, close §14 item 8 in `design-doc.md` (gradient implemented),
