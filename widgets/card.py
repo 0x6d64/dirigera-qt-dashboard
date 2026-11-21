@@ -48,6 +48,9 @@ _TYPE_SORT_WEIGHT = {
     "controller": 100,
 }
 
+# Battery level at or below which the chip warns (design-doc.md §15 item 4).
+LOW_BATTERY_PERCENT = 20
+
 
 def device_sort_key(device: Any) -> Tuple[int, str]:
     """Sort key for devices within a room: category weight then device name."""
@@ -192,9 +195,11 @@ class DeviceCard(QFrame):
             self._controls.append(self.switch)
             self.control_zone.addLayout(switch_row)
 
-            # Brightness slider
-            if hasattr(self.device.attributes, "light_level"):
-                lvl = getattr(self.device.attributes, "light_level", 50) or 50
+            # Brightness slider, only for dimmable lights. `light_level` is an
+            # Optional pydantic field, so hasattr() is always true; a light
+            # without dimming reports None.
+            lvl = getattr(self.device.attributes, "light_level", None)
+            if lvl is not None:
                 self.brightness_slider = LabeledSlider(
                     label="Level",
                     minimum=1,
@@ -325,16 +330,21 @@ class DeviceCard(QFrame):
         else:
             self.status_chip.set_status("Ready", "neutral")
 
+        # A low battery is the one fact that overrides the state chip (§8.1
+        # state 4). It lives here, not in the footer, so the order in which
+        # chip and footer are refreshed cannot hide it.
+        battery = getattr(attrs, "battery_percentage", None)
+        if isinstance(battery, (int, float)) and battery <= LOW_BATTERY_PERCENT:
+            self.status_chip.set_status("Low battery", "warn")
+
     def _update_footer(self) -> None:
         attrs = getattr(self.device, "attributes", None)
         dtype = getattr(self.device, "device_type", "unknown")
 
-        # Battery check
+        # Battery level
         battery = getattr(attrs, "battery_percentage", None)
         if isinstance(battery, (int, float)):
             self.footer_label.setText(f"Battery {int(battery)}%")
-            if battery <= 20:
-                self.status_chip.set_status("Low Battery", "warn")
             return
 
         # Electrical sensor secondary metrics
