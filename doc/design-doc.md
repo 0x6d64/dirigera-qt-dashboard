@@ -207,7 +207,7 @@ Rules:
 | --- | --- | --- |
 | 1 | Card | 10 px |
 | 2 | Button, search field, segment group | 6 px |
-| 3 | Chip | Fully rounded (9 px for a 18 px chip) |
+| 3 | Chip | Fully rounded (half the 20 px chip height; `theme.RADIUS_CHIP`) |
 | 4 | Switch | Fully rounded |
 | 5 | Slider track and thumb | Fully rounded |
 
