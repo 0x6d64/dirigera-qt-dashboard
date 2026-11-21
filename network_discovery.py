@@ -2,8 +2,8 @@
 
 import ipaddress
 import socket
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Dict, List, Optional, Tuple, cast
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+from typing import Callable, Dict, List, Optional, Tuple, cast
 
 import netifaces
 import requests
@@ -30,10 +30,17 @@ DIRIGERA_PORT = 8443
 # unauthenticated requests (verified against a real hub).
 DIRIGERA_API_VERSION_HEADER = "Api-Version"
 
+# Upper bound for the number of addresses probed in one scan.
+MAX_SCAN_HOSTS = 4096
+
+# Networks up to this many addresses (a /23) are scanned completely; larger
+# ones are split into their /24 subnets.
+_MAX_UNSPLIT_ADDRESSES = 512
+
 
 def get_local_networks() -> List[str]:
     """Get all local network ranges from all interfaces."""
-    networks = []
+    networks: List[str] = []
     for interface in netifaces.interfaces():
         # netifaces2 ships type hints that do not match its runtime API, so cast
         # to the plain dict shape both netifaces and netifaces2 return.
@@ -48,7 +55,8 @@ def get_local_networks() -> List[str]:
                         network = ipaddress.IPv4Network(
                             f"{ip_addr}/{netmask}", strict=False
                         )
-                        networks.append(str(network))
+                        if str(network) not in networks:
+                            networks.append(str(network))
                     except (ValueError, ipaddress.AddressValueError):
                         continue
     return networks
@@ -122,49 +130,74 @@ def scan_ip(ip: str) -> Optional[Tuple[str, Optional[str]]]:
     return None
 
 
+def hosts_to_scan(networks: List[str], max_hosts: int = MAX_SCAN_HOSTS) -> List[str]:
+    """Return the host addresses to probe for the given networks.
+
+    Networks of up to 512 addresses contribute all their hosts, larger ones
+    contribute the hosts of every /24 they contain. Duplicates are dropped
+    (order preserved), invalid network strings are skipped, and the result
+    stops at ``max_hosts`` addresses.
+    """
+    hosts: List[str] = []
+    seen = set()
+    for network_str in networks:
+        try:
+            network = ipaddress.IPv4Network(network_str, strict=False)
+        except ValueError:
+            continue
+        if network.num_addresses > _MAX_UNSPLIT_ADDRESSES:
+            subnets = network.subnets(new_prefix=24)
+        else:
+            subnets = iter([network])
+        for subnet in subnets:
+            for host in subnet.hosts():
+                ip = str(host)
+                if ip in seen:
+                    continue
+                if len(hosts) >= max_hosts:
+                    return hosts
+                seen.add(ip)
+                hosts.append(ip)
+    return hosts
+
+
 def discover_dirigera_hubs(
-    max_workers: int = 50, timeout_per_ip: float = 1.0
+    max_workers: int = 50,
+    timeout_per_ip: float = 1.0,
+    should_stop: Optional[Callable[[], bool]] = None,
 ) -> List[Tuple[str, Optional[str]]]:
     """
     Discover Dirigera hubs on the local network.
+
+    ``should_stop`` is polled while results are collected; once it returns
+    True the pending probes are cancelled and the hubs found so far are
+    returned. Only probes already in flight keep running, each for at most
+    its own timeout.
 
     Returns:
         List of tuples (ip_address, mac_address) for discovered hubs. The MAC
         is None when the hub was identified via its API but no MAC could be
         resolved.
     """
-    networks = get_local_networks()
-    if not networks:
+    ips_to_scan = hosts_to_scan(get_local_networks())
+    if not ips_to_scan:
         return []
 
-    discovered_hubs = []
-    ips_to_scan = []
+    discovered_hubs: List[Tuple[str, Optional[str]]] = []
 
-    # Collect all IPs to scan from all local networks
-    for network_str in networks:
-        try:
-            network = ipaddress.IPv4Network(network_str)
-            # Skip very large networks to avoid long scans
-            if network.num_addresses > 512:
-                # For large networks, only scan common ranges
-                base_ip = str(network.network_address)
-                for i in range(1, 255):
-                    octets = base_ip.split(".")
-                    octets[-1] = str(i)
-                    ips_to_scan.append(".".join(octets))
-            else:
-                # For smaller networks, scan all hosts
-                ips_to_scan.extend([str(ip) for ip in network.hosts()])
-        except (ValueError, ipaddress.AddressValueError):
-            continue
-
-    # Scan IPs in parallel
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_ip = {executor.submit(scan_ip, ip): ip for ip in ips_to_scan}
-
-        for future in as_completed(future_to_ip):
-            result = future.result()
-            if result:
-                discovered_hubs.append(result)
+    # No `with` block: its exit would wait for every queued probe.
+    executor = ThreadPoolExecutor(max_workers=max_workers)
+    try:
+        pending = {executor.submit(scan_ip, ip) for ip in ips_to_scan}
+        while pending:
+            if should_stop is not None and should_stop():
+                break
+            done, pending = wait(pending, timeout=0.1, return_when=FIRST_COMPLETED)
+            for future in done:
+                result = future.result()
+                if result:
+                    discovered_hubs.append(result)
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
 
     return discovered_hubs
