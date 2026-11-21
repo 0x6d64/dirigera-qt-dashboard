@@ -466,8 +466,9 @@ e.g. "Home: 120 W now · 18.40 kWh · 28.34 RON" and "45 W now · 1.30 kWh · 2.
    it, and a slider being dragged or focused keeps its value. A fetch identical to the
    last one changes nothing. `[verified]` (test)
 5. Polling (`req-13`, `t-56`): the dashboard refreshes by itself every 30 s while a hub
-   is connected. A poll is skipped, not queued, while a fetch is in flight and while the
-   window is minimised; restoring the window polls at once. `[verified]` (test)
+   is connected, every 300 s while live events arrive (10.3). A poll is skipped, not
+   queued, while a fetch is in flight and while the window is minimised; restoring the
+   window polls at once. `[verified]` (test)
 6. The status row shows `Updated HH:MM · every 30 s`; it turns warn when the last success
    is older than two intervals. `[verified]` (test)
 7. A failed background poll shows no modal dialog: the hub chip turns amber and the
@@ -477,11 +478,24 @@ e.g. "Home: 120 W now · 18.40 kWh · 28.34 RON" and "45 W now · 1.30 kWh · 2.
 
 ### 10.3 Live updates
 
-1. Live updates are planned (`t-16`). The design must work without them: values update
-   on refresh.
+1. Live updates (`t-16`, `req-23`) never replace polling: the design works without
+   them and values still update on refresh. `[verified]` (test)
 2. The event listener is blocking and the hub closes idle connections; the design
    assumes it may stop and must be restarted, and that events during a reconnect are
-   lost, so a full refetch follows reconnection `[lib]`.
+   lost, so a full refetch follows reconnection `[lib]`. The library reconnects a
+   dropped socket after 5 s; the first open after a loss starts that refetch.
+   `[verified]` (test)
+3. Events are only a hint. Any readable event starts a refresh after a 1 s window
+   that coalesces a burst (a metering plug can report every second) into one; a
+   refresh already running queues one more. The cards then update in place (10.2
+   item 4), so nothing is parsed from the event itself. Events are ignored while
+   the window is minimised; restoring it polls at once. `[verified]` (test)
+4. While the socket is open the status row reads `Live · updated HH:MM` and the poll
+   slows to every 300 s as a safety net. When the socket drops, the row returns to
+   `Updated HH:MM · every 30 s` and polling at 30 s resumes. `[verified]` (test)
+5. The listener starts after a successful connect and stops on a failed or repeated
+   connect and when the window closes; a close waits for the listener thread like
+   any other worker (`req-14`). `[verified]` (test)
 
 ### 10.4 Motion
 

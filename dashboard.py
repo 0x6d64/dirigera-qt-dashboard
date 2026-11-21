@@ -65,6 +65,7 @@ from workers import (
     CommandWorker,
     ConnectWorker,
     DiscoveryThread,
+    EventWorker,
     RefreshWorker,
     SceneTriggerWorker,
 )
@@ -73,6 +74,11 @@ log = logging.getLogger(__name__)
 
 # Seconds between automatic background refreshes (req-13, t-56).
 POLL_INTERVAL_S = 30
+# While live events arrive the poll is only a safety net (t-16).
+LIVE_POLL_INTERVAL_S = 300
+# Events within this window cost one refresh; a metering plug can report every
+# second, and each refresh is a full fetch from the hub (t-16).
+EVENT_COALESCE_MS = 1000
 # Delay before the refresh that follows a scene activation: the hub applies a
 # scene asynchronously, so an immediate fetch can miss the change.
 SCENE_REFRESH_DELAY_MS = 1500
@@ -250,6 +256,14 @@ class DirigeraDashboard(QMainWindow):
         self._refresh_worker: Optional[RefreshWorker] = None
         self._scene_workers: List[SceneTriggerWorker] = []
         self._command_workers: List[CommandWorker] = []
+        # The live-event listener (t-16); stopped ones stay listed until their
+        # thread has ended, so a close can wait for them.
+        self._event_worker: Optional[EventWorker] = None
+        self._event_workers: List[EventWorker] = []
+        self._live = False
+        # True after the socket dropped: the next open must refetch, because
+        # events during the gap are lost.
+        self._event_gap = False
         # Set while a close waits for running workers (see closeEvent).
         self._close_pending = False
         # (room section, its card grid), in display order, for search filtering.
@@ -275,6 +289,10 @@ class DirigeraDashboard(QMainWindow):
         self._scene_refresh_timer.timeout.connect(self._request_background_refresh)
         # Set when a scene refresh came due while a fetch was already running.
         self._refresh_pending = False
+        # Single-shot: the first event of a burst starts it (t-16).
+        self._event_timer = QTimer(self)
+        self._event_timer.setSingleShot(True)
+        self._event_timer.timeout.connect(self._request_background_refresh)
         self.init_ui()
         self.load_config()
 
@@ -654,11 +672,13 @@ class DirigeraDashboard(QMainWindow):
             return
         age = (datetime.now() - self._last_refresh).total_seconds()
         stale = age > 2 * self._poll_interval
-        self._set_caption(
-            self.update_label,
-            f"Updated {self._last_refresh:%H:%M} · every {self._poll_interval} s",
-            "warn" if stale else None,
+        updated = f"{self._last_refresh:%H:%M}"
+        text = (
+            f"Live · updated {updated}"
+            if self._live
+            else f"Updated {updated} · every {self._poll_interval} s"
         )
+        self._set_caption(self.update_label, text, "warn" if stale else None)
 
     def discover_hubs(self) -> None:
         """Start the hub discovery process in a background thread."""
@@ -786,6 +806,7 @@ class DirigeraDashboard(QMainWindow):
 
     def _on_connected(self, hub: Hub, ip_address: str) -> None:
         """Adopt the verified hub and load its data."""
+        self._stop_events()  # a listener of an earlier hub must not outlive it
         self.hub = hub
         self._hub_ip = ip_address
         self.status_chip.set_status(f"Hub online · {ip_address}", "ok")
@@ -795,6 +816,7 @@ class DirigeraDashboard(QMainWindow):
         self._show_skeleton()
         self.refresh_devices()
         self.refresh_timer.start()
+        self._start_events()
 
     def _show_skeleton(self) -> None:
         """Show placeholder cards until the first fetch arrives (§8.13).
@@ -833,6 +855,7 @@ class DirigeraDashboard(QMainWindow):
         # A half-built hub must not look connected.
         self.hub = None
         self.refresh_timer.stop()
+        self._stop_events()
         self.show_connection_block()
         self.status_chip.set_status("Hub unreachable", "warn")
         self.set_status_text(f"Connection failed: {message}", "danger")
@@ -881,6 +904,66 @@ class DirigeraDashboard(QMainWindow):
         worker.finished.connect(self._on_refresh_worker_done)
         self._refresh_worker = worker
         worker.start()
+
+    def _start_events(self) -> None:
+        """Listen for hub events; they only prompt a refresh (t-16)."""
+        hub = self.hub
+        if hub is None:
+            return
+        self._event_workers = [w for w in self._event_workers if w.isRunning()]
+        worker = EventWorker(hub, self)
+        worker.opened.connect(self._on_events_opened)
+        worker.received.connect(self._on_hub_event)
+        worker.lost.connect(self._on_events_lost)
+        self._event_worker = worker
+        self._event_workers.append(worker)
+        worker.start()
+
+    def _stop_events(self) -> None:
+        """Stop the listener and fall back to plain polling."""
+        worker = self._event_worker
+        self._event_worker = None
+        self._event_timer.stop()
+        self._event_gap = False
+        self._set_live(False)
+        if worker is not None:
+            worker.request_stop()
+
+    def _from_current_listener(self) -> bool:
+        """False for a signal that a stopped listener queued before it ended."""
+        sender = self.sender()
+        return sender is None or sender is self._event_worker
+
+    def _set_live(self, live: bool) -> None:
+        """Switch between live updates and polling, and retime the poll."""
+        if live == self._live:
+            return
+        self._live = live
+        self._poll_interval = LIVE_POLL_INTERVAL_S if live else POLL_INTERVAL_S
+        self.refresh_timer.setInterval(self._poll_interval * 1000)
+        self._update_caption()
+
+    def _on_events_opened(self) -> None:
+        if not self._from_current_listener():
+            return
+        self._set_live(True)
+        if self._event_gap:
+            self._event_gap = False
+            self._request_background_refresh()  # catch up on what was missed
+
+    def _on_events_lost(self) -> None:
+        if not self._from_current_listener():
+            return
+        self._event_gap = True
+        self._set_live(False)
+
+    def _on_hub_event(self, _event: object) -> None:
+        """Any hub event means something changed: refresh once per window."""
+        if not self._from_current_listener():
+            return
+        if self.hub is None or self.isMinimized() or self._event_timer.isActive():
+            return  # restoring a minimised window polls at once
+        self._event_timer.start(EVENT_COALESCE_MS)
 
     def _request_background_refresh(self) -> None:
         """Refresh in the background now, or once the running fetch ends."""
@@ -1377,6 +1460,7 @@ class DirigeraDashboard(QMainWindow):
             self._connect_worker,
             self._refresh_worker,
             getattr(self, "discovery_thread", None),
+            *self._event_workers,
             *self._scene_workers,
             *self._command_workers,
         ]
@@ -1393,6 +1477,7 @@ class DirigeraDashboard(QMainWindow):
         """
         self.refresh_timer.stop()
         self._scene_refresh_timer.stop()
+        self._stop_events()
         discovery = getattr(self, "discovery_thread", None)
         if discovery is not None and discovery.isRunning():
             discovery.request_stop()

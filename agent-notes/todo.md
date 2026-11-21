@@ -28,7 +28,7 @@ take the next free number (see `AGENTS.md`).
 - [x] **t-12 [C·S]** Add blind up/down/stop controls using the new `BlindsStateEnum` / `Blind.set_state()`. *(superseded by t-45 for the card design; implemented there, capability guard fixed and verified offscreen)*
 - [x] **t-14 [C·M]** Add light color temperature / color controls (`set_color_temperature`, `set_light_color`). *(control logic; visual polish in t-42 and t-45)*
 - [ ] **t-15 [C·L]** Expose adaptive light profiles via `hub.get_adaptive_profiles()` and `activate_adaptive_profile()`.
-- [ ] **t-16 [C·L]** Replace manual Refresh with live updates using `Hub.create_event_listener()` (websocket). *(schedule after t-17)*
+- [x] **t-16 [C·L]** Replace manual Refresh with live updates using `Hub.create_event_listener()` (websocket). *(done on `feat/live-events`: events prompt one coalesced refresh, the poll is the fallback; real-hub check outstanding, see the plan)*
 
 ## UI responsiveness
 

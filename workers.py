@@ -4,9 +4,10 @@ Each worker catches its own errors at the thread boundary and reports them
 through a signal, so nothing is lost when a thread ends.
 """
 
+import json
 import logging
 import threading
-from typing import Any, Callable, Optional, Protocol
+from typing import Any, Callable, Dict, Optional, Protocol
 
 from dirigera import Hub
 from dirigera.devices.scene import Scene
@@ -17,6 +18,25 @@ from network_discovery import discover_dirigera_hubs
 from settings import DiscoverySettings
 
 log = logging.getLogger(__name__)
+
+# Seconds the websocket library waits before it reconnects a dropped socket.
+EVENT_RECONNECT_S = 5
+
+
+def parse_event(message: Any) -> Optional[Dict[str, Any]]:
+    """Decode one websocket message; `None` unless it is a JSON object with a `type`.
+
+    Never raises: the hub may send anything, and the listener thread must go on.
+    """
+    if not isinstance(message, (str, bytes, bytearray)):
+        return None
+    try:
+        data = json.loads(message)
+    except ValueError:  # includes JSONDecodeError and bad UTF-8
+        return None
+    if isinstance(data, dict) and isinstance(data.get("type"), str):
+        return data
+    return None
 
 
 class CommandTarget(Protocol):
@@ -178,3 +198,70 @@ class RefreshWorker(QThread):
             self.failed.emit(str(e))
             return
         self.refreshed.emit(devices, scenes)
+
+
+class EventWorker(QThread):
+    """Listen to the hub websocket and report what arrives (t-16).
+
+    `create_event_listener` blocks until the socket is closed for good and
+    reconnects dropped sockets itself. The library callbacks run on this
+    thread: they only emit signals and never raise or touch widgets. Events
+    are a hint that something changed; the GUI answers with a refresh.
+    """
+
+    opened = pyqtSignal()  # type: ignore[call-arg]  # on every (re)connect: events in a gap are lost
+    received = pyqtSignal(object)  # type: ignore[call-arg]  # parsed event
+    lost = pyqtSignal()  # type: ignore[call-arg]  # the socket dropped or failed
+
+    def __init__(self, hub: Hub, parent: Optional[QObject] = None) -> None:
+        super().__init__(parent)
+        self._hub = hub
+        self._stop = threading.Event()
+
+    def request_stop(self) -> None:
+        """Close the socket and end the thread; safe from any thread, repeatable."""
+        self._stop.set()
+        try:
+            self._hub.stop_event_listener()
+        except Exception as e:  # closing must never raise into the caller
+            log.warning("Stopping the event listener failed: %s", e)
+
+    def stop_requested(self) -> bool:
+        return self._stop.is_set()
+
+    def _on_open(self, *args: Any) -> None:
+        if self._stop.is_set():
+            # A stop that came before the socket existed could not close it.
+            self.request_stop()
+            return
+        self.opened.emit()
+
+    def _on_message(self, *args: Any) -> None:
+        if self._stop.is_set() or not args:
+            return
+        event = parse_event(args[-1])
+        if event is None:
+            log.debug("Ignored an unreadable hub message")
+            return
+        log.debug("Hub event %s: %s", event["type"], event)
+        self.received.emit(event)
+
+    def _on_lost(self, *args: Any) -> None:
+        if not self._stop.is_set():
+            self.lost.emit()
+
+    def run(self) -> None:
+        """Block in the listener until it ends; report an unexpected end."""
+        if self._stop.is_set():
+            return
+        try:
+            self._hub.create_event_listener(
+                on_open=self._on_open,
+                on_message=self._on_message,
+                on_error=self._on_lost,
+                on_close=self._on_lost,
+                reconnect=EVENT_RECONNECT_S,
+            )
+        except Exception:  # thread boundary: an escape would be lost
+            log.exception("The hub event listener failed")
+        self._on_lost()

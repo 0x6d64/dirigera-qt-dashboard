@@ -183,6 +183,11 @@ class StubHub:
         self.scenes = scenes or []
         self.fail = False
         self.calls: list[threading.Thread] = []
+        # The event listener blocks until stopped; tests call the callbacks
+        # kept in `listener` themselves (nothing opens or fires by default).
+        self.listener: dict[str, Any] = {}
+        self.listener_started = threading.Event()
+        self.listener_stop = threading.Event()
 
     def get(self, route: str) -> dict[str, Any]:
         self.calls.append(threading.current_thread())
@@ -196,6 +201,14 @@ class StubHub:
 
     def get_scenes(self) -> list[Any]:
         return self.scenes
+
+    def create_event_listener(self, **callbacks: Any) -> None:
+        self.listener = callbacks
+        self.listener_started.set()
+        self.listener_stop.wait(10)
+
+    def stop_event_listener(self) -> None:
+        self.listener_stop.set()
 
 
 @pytest.fixture
@@ -213,6 +226,7 @@ def window(
 
     win = DirigeraDashboard()
     yield win
+    win._stop_events()  # the listener blocks until it is told to stop
     # Let in-flight workers deliver their signals now, not during the next test.
     end = time.monotonic() + 5
     while win._running_workers() and time.monotonic() < end:
