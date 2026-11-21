@@ -104,6 +104,9 @@ field (260 px); segmented view switcher; Refresh button. `[verified]`
 
 Padding: 20 px horizontal, 12 px vertical. Bottom border 1 px `border` token. `[verified]`
 
+Below 900 px window width the header has two 48 px rows: row 1 as above (search field
+fills the free width), row 2 the view switcher, left-aligned. `[verified]`
+
 ### 4.3 Content area
 
 1. Padding 24 px horizontal, 20 px top, 24 px bottom. `[verified]`
@@ -472,7 +475,8 @@ Whether totals are shown per home or per room is undecided (section 14, item 5).
 | --- | --- | --- |
 | 1 | 1080 px and wider | Three card columns at 280 px minimum |
 | 2 | About 760 px | Two columns; search field shrinks to about 180 px |
-| 3 | Under 640 px | One column; view switcher moves to a second header row |
+| 3 | Under 640 px | One column |
+| 4 | Under 900 px | View switcher moves to a second header row |
 
 Minimum window size 640 × 480 px. `[proposed]`
 
