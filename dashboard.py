@@ -11,7 +11,7 @@ from dirigera.devices.blinds import BlindsStateEnum
 from dirigera.devices.scene import Scene
 from PyQt6 import sip
 from PyQt6.QtCore import QEvent, QObject, Qt, QThread, QTimer, pyqtSignal
-from PyQt6.QtGui import QCloseEvent
+from PyQt6.QtGui import QCloseEvent, QResizeEvent
 from PyQt6.QtWidgets import (
     QApplication,
     QDialog,
@@ -48,6 +48,14 @@ POLL_INTERVAL_S = 30
 # Delay before the refresh that follows a scene activation: the hub applies a
 # scene asynchronously, so an immediate fetch can miss the change.
 SCENE_REFRESH_DELAY_MS = 1500
+# Header: one 56 px row from this window width up, two 48 px rows below it
+# (design-doc.md §4.2, §11). The single row needs about 870 px (offscreen
+# fonts), so the plan's 760 px would clip it; 900 px leaves a little slack.
+HEADER_BREAKPOINT = 900
+HEADER_HEIGHT = 56
+HEADER_HEIGHT_COMPACT = 96
+QWIDGETSIZE_MAX = 16777215
+
 # Saved credentials live next to this file, whatever the working directory.
 CONFIG_PATH = Path(__file__).resolve().parent / "config.ini"
 
@@ -331,6 +339,7 @@ class DirigeraDashboard(QMainWindow):
     def init_ui(self):
         self.setWindowTitle("Dirigera Dashboard")
         self.resize(1080, 700)
+        self.setMinimumSize(640, 480)
 
         # Create central widget and main layout
         central_widget = QWidget()
@@ -341,6 +350,7 @@ class DirigeraDashboard(QMainWindow):
 
         # Header bar (design-doc.md §4.2)
         self.header = self.build_header()
+        self._apply_header_layout(self.width() < HEADER_BREAKPOINT)
         main_layout.addWidget(self.header)
 
         # Caption line for detailed status messages
@@ -438,14 +448,24 @@ class DirigeraDashboard(QMainWindow):
         self.show_connection_block()
 
     def build_header(self) -> QWidget:
-        """Build the fixed-height header bar (design-doc.md §4.2)."""
+        """Build the header bar (design-doc.md §4.2).
+
+        Row 1 holds title, status chip, search and Refresh. The view switcher
+        sits in row 1 too, except below `HEADER_BREAKPOINT`, where it moves to
+        a second row (design-doc.md §11); see `_apply_header_layout`.
+        """
         header = QWidget()
         header.setProperty("role", "header")
-        header.setFixedHeight(56)
+        header.setFixedHeight(HEADER_HEIGHT)
 
-        layout = QHBoxLayout(header)
-        layout.setContentsMargins(theme.SP20, theme.SP12, theme.SP20, theme.SP12)
-        layout.setSpacing(theme.SP12)
+        outer = QVBoxLayout(header)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        self.header_row1 = QWidget()
+        self.header_row1_layout = QHBoxLayout(self.header_row1)
+        self.header_row1_layout.setSpacing(theme.SP12)
+        layout = self.header_row1_layout
 
         title = QLabel("Dirigera")
         title.setProperty("role", "appTitle")
@@ -454,6 +474,7 @@ class DirigeraDashboard(QMainWindow):
         self.status_chip = StatusChip("Not connected", "neutral")
         layout.addWidget(self.status_chip)
 
+        # Index 2 is the flexible gap; index 3 is the search field.
         layout.addStretch(1)
 
         self.search_input = QLineEdit()
@@ -476,7 +497,57 @@ class DirigeraDashboard(QMainWindow):
         self.refresh_button.setEnabled(False)
         layout.addWidget(self.refresh_button)
 
+        self.header_row2 = QWidget()
+        self.header_row2_layout = QHBoxLayout(self.header_row2)
+        self.header_row2_layout.setContentsMargins(
+            theme.SP20, theme.SP8, theme.SP20, theme.SP8
+        )
+        self.header_row2_layout.addStretch(1)
+        self.header_row2.hide()
+
+        outer.addWidget(self.header_row1)
+        outer.addWidget(self.header_row2)
+
+        self._header_compact: Optional[bool] = None
         return header
+
+    def _apply_header_layout(self, compact: bool) -> None:
+        """Move the view switcher between the header rows.
+
+        Normal: one 56 px row with the switcher before Refresh. Compact: a
+        second 48 px row holds the switcher, left-aligned, and the search
+        field takes the free width of row 1. The one switcher instance is
+        re-parented, never copied.
+        """
+        if compact == self._header_compact:
+            return
+        self._header_compact = compact
+        row1 = self.header_row1_layout
+        row2 = self.header_row2_layout
+        switcher = self.view_switcher
+        if compact:
+            row1.removeWidget(switcher)
+            row2.insertWidget(0, switcher)
+            self.search_input.setMaximumWidth(QWIDGETSIZE_MAX)
+            row1.setStretch(2, 0)
+            row1.setStretch(3, 1)
+            margin = theme.SP8
+        else:
+            row2.removeWidget(switcher)
+            row1.insertWidget(row1.indexOf(self.refresh_button), switcher)
+            self.search_input.setMaximumWidth(260)
+            row1.setStretch(2, 1)
+            row1.setStretch(3, 0)
+            margin = theme.SP12
+        row1.setContentsMargins(theme.SP20, margin, theme.SP20, margin)
+        self.header_row2.setVisible(compact)
+        self.header.setFixedHeight(HEADER_HEIGHT_COMPACT if compact else HEADER_HEIGHT)
+
+    @override
+    def resizeEvent(self, event: Optional[QResizeEvent]) -> None:
+        """Switch the header layout when the width crosses the breakpoint."""
+        super().resizeEvent(event)
+        self._apply_header_layout(self.width() < HEADER_BREAKPOINT)
 
     def show_connection_block(self, busy: bool = False) -> None:
         """Show the not-connected block instead of the views (§9.1).
