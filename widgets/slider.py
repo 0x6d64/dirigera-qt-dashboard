@@ -12,6 +12,8 @@ Follows design-doc.md §8.4:
   and after a short pause for every other user change — track clicks, arrow
   and Page keys, mouse wheel — so no input path leaves a value unsent.
   Programmatic `set_value()` never fires it.
+- Optional `gradient=(start, end)`: the track is a left-to-right gradient
+  between two theme colours instead of a fill (colour temperature, §8.4.7).
 - Does NOT use `QSlider:disabled::sub-page` (doc/qt-gotchas.md item 4)
 """
 
@@ -41,6 +43,7 @@ class LabeledSlider(QWidget):
         maximum: int = 100,
         initial_value: int = 0,
         unit: str = "%",
+        gradient: Optional[tuple[str, str]] = None,
         parent=None,
     ):
         super().__init__(parent)
@@ -74,6 +77,18 @@ class LabeledSlider(QWidget):
         self._slider.setMaximum(maximum)
         self._slider.setValue(initial_value)
         self._slider.setMinimumHeight(24)
+        if gradient is not None:
+            # The whole groove is the gradient; the filled part is made
+            # transparent so the thumb alone marks the value.
+            self._slider.setStyleSheet(f"""
+                QSlider::groove:horizontal {{
+                    background: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0,
+                        stop: 0 {gradient[0]}, stop: 1 {gradient[1]});
+                }}
+                QSlider::sub-page:horizontal {{
+                    background: transparent;
+                }}
+                """)
 
         # Right value readout (fixed width, right-aligned)
         self._value_label = QLabel()

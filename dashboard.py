@@ -1120,7 +1120,9 @@ class DirigeraDashboard(QMainWindow):
             on_toggle=self.toggle_device_power,
             on_brightness=self.set_light_brightness,
             on_blind_position=self.set_blind_position,
+            on_temperature=self.set_light_temperature,
             on_blind_state=self.set_blind_state,
+            on_colour=self.set_light_colour,
         )
 
     def create_scene_tile(self, scene: Scene) -> SceneTile:
@@ -1172,6 +1174,20 @@ class DirigeraDashboard(QMainWindow):
         device = card.device
         self.run_device_command(
             card, lambda: device.set_light_level(brightness), "set brightness"
+        )
+
+    def set_light_temperature(self, card: DeviceCard, kelvin: int) -> None:
+        """Set a light's colour temperature in Kelvin."""
+        device = card.device
+        self.run_device_command(
+            card, lambda: device.set_color_temperature(kelvin), "set colour temperature"
+        )
+
+    def set_light_colour(self, card: DeviceCard, hue: float, saturation: float) -> None:
+        """Set a light's hue (0 to 360) and saturation (0.0 to 1.0)."""
+        device = card.device
+        self.run_device_command(
+            card, lambda: device.set_light_color(hue, saturation), "set colour"
         )
 
     def set_blind_position(self, card: DeviceCard, position: int) -> None:

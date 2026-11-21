@@ -36,6 +36,11 @@ ACCENT_SOFT = "#E6EEFC"  # Selected segment, selected room chip
 # Off-state
 OFF = "#7C8696"  # Switch track when off
 
+# Colour-temperature slider track: warm (low Kelvin) to cool (high Kelvin).
+# Decorative, so not part of the text contrast pairings.
+TEMP_WARM = "#FFB45E"
+TEMP_COOL = "#BDD9FF"
+
 # Status: ok
 OK = "#17753A"  # Ok chip text
 OK_BG = "#E3F4EA"  # Ok chip background
