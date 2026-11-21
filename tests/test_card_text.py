@@ -94,3 +94,30 @@ def test_sort_uses_real_device_types() -> None:
         "motionSensor",
         "lightController",
     ]
+
+
+def test_metering_outlet_shows_the_energy_footer() -> None:
+    card = DeviceCard(
+        make_device(
+            "outlet",
+            is_on=True,
+            current_active_power=12.0,
+            current_voltage=230.0,
+            current_amps=0.05,
+            total_energy_consumed=1.5,
+        )
+    )
+    assert card.footer_label.text() == "12 W · 230 V · 0.05 A · 1.50 kWh"
+
+
+def test_plain_outlet_has_no_energy_footer() -> None:
+    card = DeviceCard(make_device("outlet", is_on=True, current_active_power=None))
+    assert card.footer_label.text() == ""
+
+
+def test_metering_outlet_footer_follows_a_refresh() -> None:
+    card = DeviceCard(make_device("outlet", is_on=True, current_active_power=5.0))
+    card.update_from_device(
+        make_device("outlet", is_on=True, current_active_power=40.0)
+    )
+    assert card.footer_label.text() == "40 W"

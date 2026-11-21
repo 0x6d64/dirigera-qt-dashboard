@@ -2,6 +2,7 @@
 
 import re
 from datetime import datetime
+from typing import Any, Optional
 
 # The library's `device_type` strings, which are camelCase (see
 # `.venv/Lib/site-packages/dirigera/hub/hub.py`).
@@ -48,3 +49,43 @@ def type_label(device_type: str) -> str:
     words = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", device_type).replace("_", " ")
     words = words.strip().lower()
     return words[:1].upper() + words[1:] if words else "Device"
+
+
+def _number(attrs: Any, name: str) -> Optional[float]:
+    value = getattr(attrs, name, None)
+    return value if isinstance(value, (int, float)) else None
+
+
+def format_power(attrs: Any) -> Optional[str]:
+    """Active power as "12 W", None when unreported."""
+    value = _number(attrs, "current_active_power")
+    return None if value is None else f"{value:.0f} W"
+
+
+def format_volts(attrs: Any) -> Optional[str]:
+    """Voltage as "230 V", None when unreported."""
+    value = _number(attrs, "current_voltage")
+    return None if value is None else f"{value:.0f} V"
+
+
+def format_amps(attrs: Any) -> Optional[str]:
+    """Current as "0.05 A", None when unreported."""
+    value = _number(attrs, "current_amps")
+    return None if value is None else f"{value:.2f} A"
+
+
+def format_kwh(attrs: Any) -> Optional[str]:
+    """Total energy as "1.50 kWh", None when unreported."""
+    value = _number(attrs, "total_energy_consumed")
+    return None if value is None else f"{value:.2f} kWh"
+
+
+def energy_footer(attrs: Any, with_power: bool = False) -> str:
+    """The footer of a metered card: volts, amps and total, "·" separated.
+
+    `with_power` puts the live power first, for cards that show no power
+    metric of their own. Empty when nothing is reported.
+    """
+    parts = [format_power(attrs)] if with_power else []
+    parts += [format_volts(attrs), format_amps(attrs), format_kwh(attrs)]
+    return " · ".join(p for p in parts if p)

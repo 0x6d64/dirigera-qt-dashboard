@@ -36,7 +36,7 @@ from widgets.chip import StatusChip
 from widgets.metric import MetricWidget
 from widgets.slider import LabeledSlider
 from widgets.switch import ToggleSwitch
-from widgets.text import relative_time, type_label
+from widgets.text import energy_footer, relative_time, type_label
 
 # Device category sorting weight per design-doc.md §8.1 rule 3
 # (keys are the library's camelCase `device_type` values; every controller
@@ -436,20 +436,13 @@ class DeviceCard(QFrame):
             self._set_footer(f"Battery {int(battery)}%")
             return
 
-        # Electrical sensor secondary metrics
-        if dtype == "electricalSensor":
-            v = getattr(attrs, "current_voltage", None)
-            a = getattr(attrs, "current_amps", None)
-            kwh = getattr(attrs, "total_energy_consumed", None)
-            parts = []
-            if isinstance(v, (int, float)):
-                parts.append(f"{v:.0f} V")
-            if isinstance(a, (int, float)):
-                parts.append(f"{a:.2f} A")
-            if isinstance(kwh, (int, float)):
-                parts.append(f"{kwh:.2f} kWh")
-            if parts:
-                self._set_footer(" · ".join(parts))
+        # Electrical sensors and metering outlets: the energy readings. An
+        # outlet has no power metric on its card, so its footer leads with W.
+        power = getattr(attrs, "current_active_power", None)
+        if dtype == "electricalSensor" or (dtype == "outlet" and power is not None):
+            text = energy_footer(attrs, with_power=dtype == "outlet")
+            if text:
+                self._set_footer(text)
                 return
 
         self._set_footer("")
