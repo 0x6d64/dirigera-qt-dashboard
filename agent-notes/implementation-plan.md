@@ -119,6 +119,26 @@ Affected files: `widgets/card.py`, `dashboard.py`
 
 ---
 
+### Execution order (2026-11-21)
+
+Highest-priority implementation work, executed in this order, one branch per
+plan, each merged into `master` with `--no-ff` (branches are kept):
+
+1. `feat/automated-refresh` — automated refresh (t-19, t-56). Only A task.
+2. `fix/config-file` — config file location and errors (t-28, t-27).
+3. `fix/discovery` — discovery cancel, large subnets, dedupe (t-25, t-21,
+   t-24).
+
+Not in this batch: t-26 (broad `except` cleanup, touches every plan above, do
+after them), t-54 and the design gaps t-66 … t-78 (design topic deferred by the
+user), t-30 and other C items.
+
+Rules for all three: tests go in `tests/` with the fixtures in
+`tests/conftest.py`, assert behaviour not layout (see the pytest suite plan);
+gates `uv run black .`, `uv run ruff check .`, `uv run mypy .`, `uv run pytest`
+green on every commit; check off the tasks and mark requirements implemented on
+the plan branch.
+
 ### Plan: automated refresh (t-19, t-56)
 
 Goal: stop the dashboard showing stale values. Poll the hub every 30 s and
@@ -157,12 +177,13 @@ Affected files: `dashboard.py`, `widgets/card.py`, `widgets/energy.py`,
    `(device.id, is_reachable, repr(attributes))` plus scene ids) and return
    without touching the widget tree or the caption when it is unchanged.
 
-Verification: offscreen script (no `pytest` until t-32) — stub hub whose
-attributes change between fetches; feed `_on_refreshed` twice and assert the
-same `DeviceCard` objects (identity, not recreated), an unchanged scrollbar
-value, an unreleased slider still holding the dragged value, and that an
-identical payload leaves the status caption untouched. Gates: black, ruff,
-mypy clean.
+Verification: `tests/test_refresh.py` with the `StubHub` from `conftest.py`
+(new device objects with changed attributes between fetches): after a second
+refresh the same `DeviceCard` objects exist (identity, not recreated) and
+show the new state; a new device id adds a card and a vanished id removes it;
+an unreleased (`setSliderDown(True)`) slider keeps the dragged value; an
+identical payload leaves the status caption untouched. Existing
+`test_dashboard.py` tests must still pass. Gates green.
 
 #### Commit 2 — "periodic background refresh" (t-56)
 
@@ -187,10 +208,112 @@ mypy clean.
    last-update caption, no modal on background failure); mark `req-13`
    implemented in `reqs.md`; check off t-19 and t-56 in `todo.md`.
 
-Verification: offscreen script — connect with a stub hub, assert the timer is
-active with a 30 s interval, that a poll during an in-flight manual refresh is
-skipped, that a minimised window does not fire, and that a failed background
-poll sets the warn caption without creating a dialog. Gates as above.
+Verification: tests in `tests/test_refresh.py` — after connecting with the
+stub hub the timer is active with a 30 s interval; `_poll()` during an
+in-flight refresh starts no second worker; `_poll()` while minimised does
+nothing; a failed timer-driven refresh records no dialog (the `dialogs`
+fixture stays empty) and shows the stale caption, while a failed manual
+refresh still reports. Do not wait 30 s in tests: call `_poll()` directly or
+set a short interval. Gates as above.
+
+---
+
+### Plan: config file location and errors (t-28, t-27)
+
+Goal: saved credentials load no matter which directory the app is started
+from, and a broken `config.ini` is reported instead of silently ignored
+(`req-8`). The token stays in plain `config.ini` by user decision (req-7
+obsolete).
+
+Affected files: `dashboard.py` (`load_config`), `tests/conftest.py`,
+`tests/test_config.py` (new), `README.md`, `config.ini.example`,
+`doc/reqs.md`, `agent-notes/todo.md`
+
+#### Commit 1 — "load config.ini from the app folder" (t-28)
+
+1. `dashboard.py`: module constant
+   `CONFIG_PATH = Path(__file__).resolve().parent / "config.ini"`.
+   `load_config()` reads `CONFIG_PATH` (look the constant up at call time, so
+   tests can monkeypatch `dashboard.CONFIG_PATH`). No other lookup locations.
+2. `tests/conftest.py`: the `window` fixture monkeypatches
+   `dashboard.CONFIG_PATH` to `tmp_path / "config.ini"` (missing by default),
+   replacing the `chdir` workaround, so tests never read the developer's file.
+3. README and `config.ini.example`: say the file lives next to `dashboard.py`.
+
+#### Commit 2 — "report unreadable config.ini" (t-27)
+
+1. A missing file is normal: no message.
+2. Catch `configparser.Error`, `OSError` and `UnicodeDecodeError` only (no bare
+   `except Exception`). On failure call
+   `set_status_text(f"Could not read config.ini: {error}", "danger")`; no modal
+   dialog (inline status, design-doc §8.14). Leave the fields empty.
+3. A `[hub]` section without keys, or the placeholder token
+   `YOUR_TOKEN_HERE`, is not an error: leave the field empty as today.
+
+Verification: `tests/test_config.py` — valid file fills IP and token; the
+placeholder token is ignored; a file without `[hub]` leaves fields empty and
+shows no error; a malformed file (e.g. a line with no section header) leaves
+fields empty, shows the status text in danger tone and records no dialog;
+`load_config` finds the file after `monkeypatch.chdir` to another directory.
+Mark `req-8` implemented, check off t-27 and t-28. Gates green.
+
+---
+
+### Plan: discovery cancel, large subnets, dedupe (t-25, t-21, t-24)
+
+Goal: Cancel really stops a scan without `QThread.terminate()`, only one scan
+runs at a time, networks larger than /23 are scanned beyond their first /24,
+and duplicate networks are scanned once (`req-10`, `req-11`).
+
+Affected files: `network_discovery.py`, `dashboard.py` (`DiscoveryThread`,
+`discover_hubs`, `on_discovery_canceled`, `on_discovery_finished`,
+`closeEvent`), `tests/test_network_discovery.py`, `tests/test_discovery_ui.py`
+(new), `doc/reqs.md`, `agent-notes/todo.md`
+
+#### Commit 1 — "scan every /24 of large networks once" (t-21, t-24)
+
+1. `network_discovery.py`: new pure function
+   `hosts_to_scan(networks: List[str], max_hosts: int = MAX_SCAN_HOSTS) -> List[str]`
+   with `MAX_SCAN_HOSTS = 4096`. Networks of up to 512 addresses contribute
+   all hosts; larger ones are split with `subnets(new_prefix=24)` and
+   contribute every /24's hosts in order. The result has no duplicates
+   (order preserved) and stops at `max_hosts`. Invalid network strings are
+   skipped.
+2. `get_local_networks()` returns each network once (order preserved), so two
+   interfaces on the same subnet do not double the scan.
+3. `discover_dirigera_hubs()` uses `hosts_to_scan()` instead of its inline loop.
+
+#### Commit 2 — "cooperative discovery cancel" (t-25)
+
+1. `discover_dirigera_hubs(..., should_stop: Optional[Callable[[], bool]] = None)`:
+   check `should_stop()` while collecting results; when it returns True,
+   cancel the pending futures (`executor.shutdown(wait=False,
+   cancel_futures=True)`) and return the hubs found so far. Never block the
+   caller longer than the in-flight probes' timeout.
+2. `DiscoveryThread`: a `threading.Event` with `request_stop()`; `run()` passes
+   `should_stop=self._stop.is_set`. Keep catching errors so the thread always
+   emits `discovery_done` (narrowing that `except` is t-26).
+3. `dashboard.py`:
+   - `discover_hubs()` returns immediately if a discovery thread is running,
+     and disables `connection_block.discover_button` until the scan ends.
+   - `on_discovery_canceled()` calls `request_stop()`, never `terminate()` and
+     never `wait()` on the GUI thread; sets "Discovery canceled".
+   - `on_discovery_finished()` ignores results of a canceled scan (no dialog,
+     no IP filled in) and re-enables the Discover button in every case.
+   - `closeEvent`: request a stop on a running discovery thread before the
+     existing deferred-close logic, so closing does not wait for a full scan.
+
+Verification: `tests/test_network_discovery.py` gets cases for
+`hosts_to_scan` (a /22 yields hosts from all four /24s; the cap holds; a
+duplicate network is scanned once; a /30 yields its two hosts) and for
+`should_stop` (with `scan_ip` stubbed to count calls and `should_stop` turning
+True early, far fewer IPs are scanned than exist, and the call returns).
+`tests/test_discovery_ui.py` with `discover_dirigera_hubs` monkeypatched in
+`dashboard` to a function that waits on the stop flag: a second Discover click
+while running starts no second thread; Cancel returns immediately, the thread
+finishes, no dialog is recorded and the IP field stays empty; the Discover
+button is enabled again afterwards. Mark `req-10` and `req-11` implemented,
+check off t-21, t-24, t-25. Gates green.
 
 ---
 
