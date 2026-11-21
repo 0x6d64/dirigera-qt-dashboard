@@ -212,7 +212,7 @@ class DeviceCard(QFrame):
                 )
                 if self._on_brightness is not None:
                     cb_bright = self._on_brightness
-                    self.brightness_slider.released.connect(
+                    self.brightness_slider.committed.connect(
                         lambda val, callback=cb_bright: callback(self, val)
                     )
                 self._controls.append(self.brightness_slider)
@@ -253,7 +253,7 @@ class DeviceCard(QFrame):
             )
             if self._on_blind_position is not None:
                 cb_pos = self._on_blind_position
-                self.blind_slider.released.connect(
+                self.blind_slider.committed.connect(
                     lambda val, callback=cb_pos: callback(self, val)
                 )
             self._controls.append(self.blind_slider)

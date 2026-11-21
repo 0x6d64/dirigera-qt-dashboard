@@ -8,23 +8,29 @@ Follows design-doc.md §8.4:
 - Thumb 18 px white with 2 px ACCENT border
 - Minimum height: 24 px (prevents thumb clipping)
 - Value label updates live while dragging
-- Command signal `released(int)` fires only on slider release (req-6)
+- Command signal `committed(int)` (req-6): fires once on release after a drag,
+  and after a short pause for every other user change — track clicks, arrow
+  and Page keys, mouse wheel — so no input path leaves a value unsent.
+  Programmatic `set_value()` never fires it.
 - Does NOT use `QSlider:disabled::sub-page` (design-doc.md §13.2 pitfall 2)
 """
 
 from typing import override
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import QHBoxLayout, QLabel, QSlider, QWidget
 
 import theme
+
+# Pause after a non-drag change before the value is committed (req-6).
+COMMIT_DELAY_MS = 300
 
 
 class LabeledSlider(QWidget):
     """Composite slider with aligned label, live value readout, and release-trigger."""
 
-    # Fired on sliderReleased for sending hub commands without flooding ticks (req-6)
-    released = pyqtSignal(int)  # type: ignore[call-arg]
+    # Fired once per user change, for sending hub commands (req-6)
+    committed = pyqtSignal(int)  # type: ignore[call-arg]
     # Fired on every tick for live UI updates
     value_changed = pyqtSignal(int)  # type: ignore[call-arg]
 
@@ -39,6 +45,13 @@ class LabeledSlider(QWidget):
     ):
         super().__init__(parent)
         self._unit = unit
+        self._programmatic = False
+
+        # Coalesces bursts of key, wheel or click steps into one command.
+        self._commit_timer = QTimer(self)
+        self._commit_timer.setSingleShot(True)
+        self._commit_timer.setInterval(COMMIT_DELAY_MS)
+        self._commit_timer.timeout.connect(self._commit)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -85,13 +98,27 @@ class LabeledSlider(QWidget):
         self._slider.sliderReleased.connect(self._on_slider_released)
 
         self._update_value_label(self._slider.value())
+        # The value the hub is believed to hold; commits only send changes.
+        self._committed_value = self._slider.value()
 
     def _on_value_changed(self, value: int) -> None:
         self._update_value_label(value)
         self.value_changed.emit(value)
+        # During a drag the release commits; any other user change commits
+        # after a pause, so the latest value wins.
+        if not self._programmatic and not self._slider.isSliderDown():
+            self._commit_timer.start()
 
     def _on_slider_released(self) -> None:
-        self.released.emit(self._slider.value())
+        self._commit()
+
+    def _commit(self) -> None:
+        self._commit_timer.stop()
+        value = self._slider.value()
+        # A click on the handle without moving it sends nothing.
+        if value != self._committed_value:
+            self._committed_value = value
+            self.committed.emit(value)
 
     def _update_value_label(self, val: int) -> None:
         if self._unit:
@@ -104,7 +131,13 @@ class LabeledSlider(QWidget):
         return self._slider.value()
 
     def set_value(self, value: int) -> None:
-        self._slider.setValue(value)
+        """Show `value` without committing it (used for resyncs)."""
+        self._programmatic = True
+        try:
+            self._slider.setValue(value)
+        finally:
+            self._programmatic = False
+        self._committed_value = self._slider.value()
         self._update_value_label(self._slider.value())
 
     def set_minimum(self, min_val: int) -> None:
