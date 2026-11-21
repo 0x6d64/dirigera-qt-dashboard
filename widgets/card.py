@@ -16,14 +16,16 @@ Follows design-doc.md §8.1:
   lights -> outlets -> blinds -> air/environment -> sensors -> remotes.
 """
 
-from typing import Any, Callable, Optional, Tuple
+from typing import Any, Callable, Optional, Tuple, override
 
 from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QResizeEvent
 from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -128,6 +130,11 @@ class DeviceCard(QFrame):
             }}
             """)
         self.name_label.setToolTip(raw_name)
+        # Ignored: the full name must never widen the card; it is elided to
+        # the room the header leaves (§8.1).
+        self.name_label.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
+        )
         titles_vbox.addWidget(self.name_label)
 
         raw_type = getattr(device, "device_type", "device").replace("_", " ")
@@ -165,6 +172,33 @@ class DeviceCard(QFrame):
 
         # Initial status chip sync
         self._update_status_chip()
+        self._elide_name()
+
+    def _elide_name(self) -> None:
+        """Show `full_name` cut with an ellipsis to the width the header has.
+
+        The width is derived from the card, not from the label, so it is right
+        before the first layout pass and cannot feed back into the card size.
+        """
+        self.name_label.ensurePolished()
+        available = (
+            self.width()
+            - 2 * theme.SP16
+            - theme.SP8
+            - self.status_chip.sizeHint().width()
+        )
+        text = str(self.full_name)
+        if available > 0:
+            text = self.name_label.fontMetrics().elidedText(
+                text, Qt.TextElideMode.ElideRight, available
+            )
+        if self.name_label.text() != text:
+            self.name_label.setText(text)
+
+    @override
+    def resizeEvent(self, event: Optional[QResizeEvent]) -> None:
+        super().resizeEvent(event)
+        self._elide_name()
 
     def _apply_card_style(self, is_offline: bool) -> None:
         bg = theme.SUNKEN if is_offline else theme.SURFACE
@@ -449,8 +483,8 @@ class DeviceCard(QFrame):
         )
         if raw_name != self.full_name:
             self.full_name = raw_name
-            self.name_label.setText(raw_name)
             self.name_label.setToolTip(raw_name)
+            self._elide_name()
         self._sync(protect_user=True)
 
     def _sync(self, protect_user: bool) -> None:
