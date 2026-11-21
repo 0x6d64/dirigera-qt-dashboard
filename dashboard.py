@@ -41,6 +41,9 @@ from widgets.segments import SegmentedControl
 # Constants
 DEFAULT_BRIGHTNESS = 50
 
+# Section label for devices that are not assigned to a room.
+UNKNOWN_ROOM = "Unknown room"
+
 # View switcher segments, in display order (design-doc.md §4.2).
 VIEW_ROOMS = 0
 VIEW_SCENES = 1
@@ -629,19 +632,12 @@ class DirigeraDashboard(QMainWindow):
         self.scenes = scenes
 
         # Group devices by room
-        devices_by_room: Dict[str, List[Any]] = {}
-        for device in self.devices:
-            room_name = self.get_room_name(device)
-            if room_name not in devices_by_room:
-                devices_by_room[room_name] = []
-            devices_by_room[room_name].append(device)
+        devices_by_room = self.group_by_room(self.devices)
 
         # Create UI for each room
         sections: List[Tuple[QWidget, CardGrid]] = []
-        for room_name in sorted(devices_by_room.keys()):
-            section, grid = self.create_room_section(
-                room_name, devices_by_room[room_name]
-            )
+        for room_name, room_devices in devices_by_room:
+            section, grid = self.create_room_section(room_name, room_devices)
             self.devices_layout.insertWidget(self.devices_layout.count() - 1, section)
             sections.append((section, grid))
         self._room_sections = sections
@@ -652,16 +648,13 @@ class DirigeraDashboard(QMainWindow):
         )
 
         # Energy view: outlets and electrical sensors grouped by room (§9.4).
-        energy_by_room: Dict[str, List[Any]] = {}
-        for device in self.devices:
-            if not self.is_energy_device(device):
-                continue
-            room_name = self.get_room_name(device)
-            energy_by_room.setdefault(room_name, []).append(device)
+        energy_by_room = self.group_by_room(
+            [device for device in self.devices if self.is_energy_device(device)]
+        )
         self.energy_view.set_rooms(
             [
                 (self.format_room_label(room), sorted(devices, key=device_sort_key))
-                for room, devices in sorted(energy_by_room.items())
+                for room, devices in energy_by_room
             ]
         )
 
@@ -929,7 +922,7 @@ class DirigeraDashboard(QMainWindow):
         """
         name = room_name.strip()
         if not name:
-            return "Unknown room"
+            return UNKNOWN_ROOM
         return name[0].upper() + name[1:]
 
     @staticmethod
@@ -938,10 +931,30 @@ class DirigeraDashboard(QMainWindow):
         return getattr(device, "device_type", "") in ("outlet", "electrical_sensor")
 
     @staticmethod
-    def get_room_name(device: Any) -> str:
-        """Get the room name for a device"""
-        # device.room is a pydantic Room model (or None), not a dict.
+    def get_room(device: Any) -> Tuple[str, str]:
+        """Return (room id, room name) for a device.
+
+        `device.room` is a pydantic Room model (or None), not a dict. Devices
+        without a room share one group under an empty id.
+        """
         room = getattr(device, "room", None)
         if room is None:
-            return "Unknown Room"
-        return room.name or "Unknown Room"
+            return "", UNKNOWN_ROOM
+        return str(getattr(room, "id", "") or ""), room.name or UNKNOWN_ROOM
+
+    @classmethod
+    def group_by_room(cls, devices: List[Any]) -> List[Tuple[str, List[Any]]]:
+        """Group devices into (room name, devices) pairs in display order.
+
+        Groups are keyed by room id, so two rooms that share a name stay
+        separate. Sections sort by name case-insensitively (design-doc.md §15
+        item 2: alphabetical), with the id as a stable tie-breaker.
+        """
+        groups: Dict[str, Tuple[str, List[Any]]] = {}
+        for device in devices:
+            room_id, room_name = cls.get_room(device)
+            groups.setdefault(room_id, (room_name, []))[1].append(device)
+        ordered = sorted(
+            groups.items(), key=lambda item: (item[1][0].casefold(), item[0])
+        )
+        return [(name, members) for _, (name, members) in ordered]
