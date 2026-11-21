@@ -8,8 +8,10 @@ from conftest import make_device
 
 from widgets.card import DeviceCard, device_sort_key
 from widgets.text import (
+    energy_totals,
     format_cost,
     relative_time,
+    totals_text,
     type_label,
     usage_kwh,
     usage_text,
@@ -190,3 +192,32 @@ def test_zero_reset_value_still_counts_as_a_reset() -> None:
 
 def test_usage_text_is_none_without_energy_data() -> None:
     assert usage_text(_attrs(), 1.54, "RON", date(2026, 11, 21)) is None
+
+
+def test_totals_sum_only_what_each_device_reports() -> None:
+    devices = [
+        make_device("outlet", "a", power=None, total_energy_consumed=None),
+        make_device(
+            "outlet",
+            "b",
+            current_active_power=10.0,
+            total_energy_consumed=2.0,
+            energy_consumed_at_last_reset=1.0,
+        ),
+        make_device("outlet", "c", current_active_power=5.0, total_energy_consumed=3.0),
+    ]
+    watts, kwh = energy_totals(devices)
+    assert watts == 15.0
+    assert kwh == pytest.approx(4.0)
+
+
+def test_totals_are_none_when_nothing_reports() -> None:
+    assert energy_totals([make_device("outlet", "a")]) == (None, None)
+    assert energy_totals([]) == (None, None)
+
+
+def test_totals_text_leaves_out_missing_parts() -> None:
+    assert totals_text(45.0, 1.3, 1.54, "RON") == "45 W now · 1.30 kWh · 2.00 RON"
+    assert totals_text(45.0, None, 1.54, "RON") == "45 W now"
+    assert totals_text(None, 0.0, 1.54, "RON") == "0.00 kWh · 0.00 RON"
+    assert totals_text(None, None, 1.54, "RON") is None

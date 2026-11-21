@@ -2,7 +2,7 @@
 
 import re
 from datetime import date, datetime
-from typing import Any, Optional
+from typing import Any, Iterable, List, Optional, Tuple
 
 # The library's `device_type` strings, which are camelCase (see
 # `.venv/Lib/site-packages/dirigera/hub/hub.py`).
@@ -119,6 +119,40 @@ def usage_text(
         year = "" if day.year == today.year else f" {day.year}"
         return f"Since {day:%d %b}{year}: {kwh:.2f} kWh · {cost}"
     return f"Usage {kwh:.2f} kWh · {cost}"
+
+
+def energy_totals(devices: Iterable[Any]) -> Tuple[Optional[float], Optional[float]]:
+    """Sum the live power (W) and the usage (kWh) of `devices`.
+
+    Each sum counts only the devices that report it; None when none does.
+    """
+    watts: Optional[float] = None
+    kwh: Optional[float] = None
+    for device in devices:
+        attrs = getattr(device, "attributes", None)
+        power = _number(attrs, "current_active_power")
+        if power is not None:
+            watts = (watts or 0.0) + power
+        used = usage_kwh(attrs)
+        if used is not None:
+            kwh = (kwh or 0.0) + used
+    return watts, kwh
+
+
+def totals_text(
+    watts: Optional[float], kwh: Optional[float], price_per_kwh: float, currency: str
+) -> Optional[str]:
+    """A totals line such as "45 W now · 1.30 kWh · 2.00 RON", None when empty.
+
+    Parts without data are left out; the cost goes with the usage.
+    """
+    parts: List[str] = []
+    if watts is not None:
+        parts.append(f"{watts:.0f} W now")
+    if kwh is not None:
+        parts.append(f"{kwh:.2f} kWh")
+        parts.append(format_cost(kwh, price_per_kwh, currency))
+    return " · ".join(parts) or None
 
 
 def energy_footer(attrs: Any, with_power: bool = False) -> str:

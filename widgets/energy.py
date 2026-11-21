@@ -34,7 +34,14 @@ from settings import DEFAULT_CURRENCY, DEFAULT_PRICE_PER_KWH
 from widgets.cardbase import CardBase, label_style
 from widgets.grid import CardGrid
 from widgets.metric import MetricWidget
-from widgets.text import format_amps, format_kwh, format_volts, usage_text
+from widgets.text import (
+    energy_totals,
+    format_amps,
+    format_kwh,
+    format_volts,
+    totals_text,
+    usage_text,
+)
 
 # How long the reset waits for the confirming second click (req-18).
 RESET_CONFIRM_MS = 5000
@@ -265,6 +272,8 @@ class EnergyView(QWidget):
         # PyQt6 stubs mis-type the first argument of QWidget.__init__ here.
         super().__init__(parent)  # type: ignore[arg-type]
         self._shape: List[Tuple[str, List[Any]]] = []
+        self._rooms: List[Tuple[str, List[Any]]] = []
+        self._captions: List[QLabel] = []
         self.price_per_kwh = DEFAULT_PRICE_PER_KWH
         self.currency = DEFAULT_CURRENCY
         self.on_reset = on_reset
@@ -272,6 +281,13 @@ class EnergyView(QWidget):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
+
+        # Home total above the rooms (§9.4); hidden while nothing reports energy.
+        self.home_label = QLabel()
+        self.home_label.setStyleSheet(label_style(theme.TEXT, theme.FONT_BODY, 600))
+        self.home_label.setContentsMargins(theme.SP24, theme.SP20, theme.SP24, 0)
+        self.home_label.hide()
+        outer.addWidget(self.home_label)
 
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
@@ -299,6 +315,27 @@ class EnergyView(QWidget):
         self.currency = currency
         for card in self.cards():
             card.set_price(price_per_kwh, currency)
+        self._refresh_totals()
+
+    def _refresh_totals(self) -> None:
+        """Show the room captions and the home line for the current readings.
+
+        Totals are sums of the live readings, the usage and its cost at the
+        current price (§14 item 5; t-87). Parts without data are left out.
+        """
+        for (_, devices), caption in zip(self._rooms, self._captions):
+            text = totals_text(
+                *energy_totals(devices), self.price_per_kwh, self.currency
+            )
+            caption.setText(text or "")
+            caption.setVisible(text is not None)
+
+        everything = [device for _, devices in self._rooms for device in devices]
+        home = totals_text(
+            *energy_totals(everything), self.price_per_kwh, self.currency
+        )
+        self.home_label.setText(f"Home: {home}" if home else "")
+        self.home_label.setVisible(home is not None)
 
     def update_rooms(self, rooms: List[Tuple[str, List[Any]]]) -> None:
         """Show (room label, devices) pairs, updating cards in place (t-19).
@@ -318,6 +355,8 @@ class EnergyView(QWidget):
                 for _, devices in rooms
                 for device in devices
             ):
+                self._rooms = rooms
+                self._refresh_totals()
                 return
         bar = self.scroll_area.verticalScrollBar()
         value = bar.value() if bar is not None else 0
@@ -333,6 +372,8 @@ class EnergyView(QWidget):
     def set_rooms(self, rooms: List[Tuple[str, List[Any]]]) -> None:
         """Rebuild the view from (room label, devices) pairs."""
         self.clear()
+        self._rooms = rooms
+        self._captions = []
         self._shape = [
             (label, [getattr(d, "id", None) for d in devs]) for label, devs in rooms
         ]
@@ -351,6 +392,13 @@ class EnergyView(QWidget):
             label.setProperty("role", "section")
             layout.addWidget(label)
 
+            # Room totals; hidden until the room reports something.
+            caption = QLabel()
+            caption.setStyleSheet(label_style(theme.TEXT2, theme.FONT_CAPTION))
+            caption.hide()
+            layout.addWidget(caption)
+            self._captions.append(caption)
+
             grid = CardGrid()
             grid.set_cards(
                 [
@@ -366,6 +414,7 @@ class EnergyView(QWidget):
             layout.addWidget(grid)
 
             self.content_layout.insertWidget(self.content_layout.count() - 1, section)
+        self._refresh_totals()
 
     def clear(self) -> None:
         """Remove every room section, keeping the trailing stretch."""
@@ -374,6 +423,10 @@ class EnergyView(QWidget):
             widget = item.widget() if item is not None else None
             if widget is not None:
                 widget.deleteLater()
+
+    def room_captions(self) -> List[str]:
+        """Return the totals caption of each room, in display order ("" if none)."""
+        return [caption.text() for caption in self._captions]
 
     def cards(self) -> List[EnergyCard]:
         """Return every energy card in display order."""
