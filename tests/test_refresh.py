@@ -162,3 +162,121 @@ def test_filter_survives_an_in_place_refresh(
         if not c.isHidden()
     ]
     assert visible == ["Lamp"]
+
+
+# --- periodic refresh (t-56) -------------------------------------------------
+
+
+def test_timer_runs_every_30_seconds_once_connected(
+    window: Any, connected: Any
+) -> None:
+    assert window.refresh_timer.isActive()
+    assert window.refresh_timer.interval() == 30_000
+    assert "every 30 s" in window.update_label.text()
+    assert window.update_label.text().startswith("Updated ")
+
+
+def test_timer_is_idle_without_a_hub(window: Any) -> None:
+    assert not window.refresh_timer.isActive()
+    window._poll()  # no hub: nothing happens
+    assert window._refresh_worker is None
+
+
+def test_poll_during_an_in_flight_refresh_starts_no_second_worker(
+    connected: Any, wait_until: Wait
+) -> None:
+    connected.refresh_devices()
+    worker = connected._refresh_worker
+    assert worker is not None
+    connected._poll()
+    assert connected._refresh_worker is worker
+    wait_until(lambda: connected._refresh_worker is None)
+
+
+def test_poll_refreshes_when_idle(
+    connected: Any, hub: StubHub, wait_until: Wait
+) -> None:
+    hub.devices = _devices(level=90)
+    connected._poll()
+    assert connected._refresh_worker is not None
+    wait_until(lambda: connected._refresh_worker is None)
+    assert _cards(connected)["l1"].brightness_slider.value() == 90
+
+
+def test_poll_while_minimised_does_nothing(
+    connected: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(connected, "isMinimized", lambda: True)
+    connected._poll()
+    assert connected._refresh_worker is None
+
+
+def test_minimising_pauses_the_timer_and_restoring_polls_at_once(
+    connected: Any, monkeypatch: pytest.MonkeyPatch, wait_until: Wait
+) -> None:
+    from PyQt6.QtCore import QEvent
+
+    event = QEvent(QEvent.Type.WindowStateChange)
+    monkeypatch.setattr(connected, "isMinimized", lambda: True)
+    connected.changeEvent(event)
+    assert not connected.refresh_timer.isActive()
+
+    monkeypatch.setattr(connected, "isMinimized", lambda: False)
+    connected.changeEvent(event)
+    assert connected.refresh_timer.isActive()
+    assert connected._refresh_worker is not None  # the catch-up poll
+    wait_until(lambda: connected._refresh_worker is None)
+
+
+def test_failed_background_refresh_shows_no_dialog_but_marks_stale_data(
+    connected: Any, hub: StubHub, dialogs: list, wait_until: Wait
+) -> None:
+    before = list(_cards(connected))
+    hub.fail = True
+    connected._poll()
+    wait_until(lambda: connected._refresh_worker is None)
+    assert dialogs == []
+    assert connected.status_label.text().startswith("Refresh failed")
+    assert not connected.stale_label.isHidden()
+    assert connected.stale_label.text().startswith("Showing data from")
+    assert list(_cards(connected)) == before
+
+
+def test_failed_manual_refresh_still_reports(
+    connected: Any, hub: StubHub, dialogs: list, wait_until: Wait
+) -> None:
+    hub.fail = True
+    _refresh(connected, wait_until)
+    assert [kind for kind, _ in dialogs] == ["critical"]
+
+
+def test_recovery_with_unchanged_data_clears_the_failure_caption(
+    connected: Any, hub: StubHub, wait_until: Wait
+) -> None:
+    summary = connected.status_label.text()
+    hub.fail = True
+    connected._poll()
+    wait_until(lambda: connected._refresh_worker is None)
+    hub.fail = False
+    connected._poll()
+    wait_until(lambda: connected._refresh_worker is None)
+    assert connected.status_label.text() == summary
+    assert connected.stale_label.isHidden()
+
+
+def test_update_caption_warns_when_older_than_two_intervals(
+    connected: Any,
+) -> None:
+    from datetime import datetime, timedelta
+
+    connected._last_refresh = datetime.now() - timedelta(seconds=61)
+    connected._update_caption()
+    assert connected.update_label.property("tone") == "warn"
+    connected._last_refresh = datetime.now()
+    connected._update_caption()
+    assert not connected.update_label.property("tone")
+
+
+def test_close_stops_the_timer(connected: Any) -> None:
+    connected.close()
+    assert not connected.refresh_timer.isActive()

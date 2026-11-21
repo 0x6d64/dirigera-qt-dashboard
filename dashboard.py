@@ -7,7 +7,7 @@ from dirigera import Hub
 from dirigera.devices.blinds import BlindsStateEnum
 from dirigera.devices.scene import Scene
 from PyQt6 import sip
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtCore import QEvent, Qt, QThread, QTimer, pyqtSignal
 from PyQt6.QtGui import QCloseEvent
 from PyQt6.QtWidgets import (
     QApplication,
@@ -37,6 +37,9 @@ from widgets.energy import EnergyView
 from widgets.grid import CardGrid
 from widgets.scene import SceneTile
 from widgets.segments import SegmentedControl
+
+# Seconds between automatic background refreshes (req-13, t-56).
+POLL_INTERVAL_S = 30
 
 # Section label for devices that are not assigned to a room.
 UNKNOWN_ROOM = "Unknown room"
@@ -260,6 +263,12 @@ class DirigeraDashboard(QMainWindow):
         self._signature: Optional[Tuple[Any, ...]] = None
         self._summary_text = ""
         self._status_is_failure = False
+        # True while the running fetch was started by the timer, not the user.
+        self._refresh_is_background = False
+        self._poll_interval = POLL_INTERVAL_S
+        self.refresh_timer = QTimer(self)
+        self.refresh_timer.setInterval(self._poll_interval * 1000)
+        self.refresh_timer.timeout.connect(self._poll)
         self.init_ui()
         self.load_config()
 
@@ -305,6 +314,10 @@ class DirigeraDashboard(QMainWindow):
         self.status_label.setProperty("role", "caption")
         status_row_layout.addWidget(self.status_label)
         status_row_layout.addStretch()
+        # Last successful update and polling schedule (design-doc.md §10.2).
+        self.update_label = QLabel("")
+        self.update_label.setProperty("role", "caption")
+        status_row_layout.addWidget(self.update_label)
         main_layout.addWidget(status_row)
 
         # Content area: the centred connection block until a hub is
@@ -467,10 +480,33 @@ class DirigeraDashboard(QMainWindow):
 
     def set_status_text(self, text: str, tone: Optional[str] = None) -> None:
         """Set the caption under the header, optionally coloured by token."""
-        self.status_label.setText(text)
-        self.status_label.setProperty("tone", tone or "")
-        self.status_label.style().unpolish(self.status_label)
-        self.status_label.style().polish(self.status_label)
+        self._set_caption(self.status_label, text, tone)
+
+    @staticmethod
+    def _set_caption(label: QLabel, text: str, tone: Optional[str]) -> None:
+        label.setText(text)
+        label.setProperty("tone", tone or "")
+        style = label.style()
+        if style is not None:
+            style.unpolish(label)
+            style.polish(label)
+
+    def _update_caption(self) -> None:
+        """Show the last successful update and the polling schedule.
+
+        The caption turns to warn tone when the last success is older than two
+        intervals, so silently stale data is marked without a dialog.
+        """
+        if self._last_refresh is None or self.hub is None:
+            self._set_caption(self.update_label, "", None)
+            return
+        age = (datetime.now() - self._last_refresh).total_seconds()
+        stale = age > 2 * self._poll_interval
+        self._set_caption(
+            self.update_label,
+            f"Updated {self._last_refresh:%H:%M} · every {self._poll_interval} s",
+            "warn" if stale else None,
+        )
 
     def discover_hubs(self):
         """Start the hub discovery process in a background thread."""
@@ -575,11 +611,13 @@ class DirigeraDashboard(QMainWindow):
         self.refresh_button.setEnabled(True)
         self.show_views()
         self.refresh_devices()
+        self.refresh_timer.start()
 
     def _on_connect_failed(self, message: str) -> None:
         """Report a failed attempt and hand the form back to the user."""
         # A half-built hub must not look connected.
         self.hub = None
+        self.refresh_timer.stop()
         self.show_connection_block()
         self.status_chip.set_status("Hub unreachable", "warn")
         self.set_status_text(f"Connection failed: {message}", "danger")
@@ -591,7 +629,27 @@ class DirigeraDashboard(QMainWindow):
         self._connect_worker = None
 
     def refresh_devices(self):
-        """Start a background refresh (t-17)."""
+        """Start a refresh the user asked for (t-17)."""
+        self._start_refresh(background=False)
+
+    def _poll(self) -> None:
+        """Timer tick: refresh unless that would be wasteful or stack up.
+
+        Skipped without a hub, while a connect or fetch is in flight, and
+        while the window is minimised (t-56).
+        """
+        self._update_caption()
+        if (
+            self.hub is None
+            or self._connect_worker is not None
+            or self._refresh_worker is not None
+            or self.isMinimized()
+        ):
+            return
+        self._start_refresh(background=True)
+
+    def _start_refresh(self, background: bool) -> None:
+        """Start the fetch worker; a background one never opens a dialog."""
         hub = self.hub
         if hub is None:
             return
@@ -606,7 +664,23 @@ class DirigeraDashboard(QMainWindow):
         worker.failed.connect(self._on_refresh_failed)
         worker.finished.connect(self._on_refresh_worker_done)
         self._refresh_worker = worker
+        self._refresh_is_background = background
         worker.start()
+
+    @override
+    def changeEvent(self, event: Optional[QEvent]) -> None:
+        """Pause polling while minimised; catch up when restored (t-56)."""
+        super().changeEvent(event)
+        if (
+            event is not None
+            and event.type() == QEvent.Type.WindowStateChange
+            and self.hub is not None
+        ):
+            if self.isMinimized():
+                self.refresh_timer.stop()
+            elif not self.refresh_timer.isActive():
+                self.refresh_timer.start()
+                self._poll()
 
     @staticmethod
     def _data_signature(devices: List[Any], scenes: List[Scene]) -> Tuple[Any, ...]:
@@ -637,6 +711,7 @@ class DirigeraDashboard(QMainWindow):
         vanished ids remove them.
         """
         self._last_refresh = datetime.now()
+        self._update_caption()
         self.stale_label.hide()
         if self._hub_ip:
             self.status_chip.set_status(f"Hub online · {self._hub_ip}", "ok")
@@ -804,7 +879,9 @@ class DirigeraDashboard(QMainWindow):
         if self._last_refresh is not None:
             self.stale_label.setText(f"Showing data from {self._last_refresh:%H:%M}")
             self.stale_label.show()
-        QMessageBox.critical(self, "Error", f"Failed to refresh devices: {message}")
+        self._update_caption()
+        if not self._refresh_is_background:
+            QMessageBox.critical(self, "Error", f"Failed to refresh devices: {message}")
 
     def _on_refresh_worker_done(self) -> None:
         self._refresh_worker = None
@@ -985,6 +1062,7 @@ class DirigeraDashboard(QMainWindow):
         while any worker runs, the window only hides; the close completes,
         and the application quits, once the last worker has finished.
         """
+        self.refresh_timer.stop()
         running = self._running_workers()
         if not running:
             super().closeEvent(event)
