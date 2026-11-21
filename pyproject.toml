@@ -2,13 +2,37 @@
 name = "dirigera-qt-dashboard"
 version = "0.1.0"
 description = "A PyQt based dashboard for IKEA Dirigera hubs"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.12"
+keywords = ["dirigera", "ikea", "smart-home", "dashboard", "pyqt6"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: X11 Applications :: Qt",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Home Automation",
+]
 dependencies = [
     "dirigera>=1.6.1",
     "getmac>=0.9.6",
     "netifaces2>=0.0.22",
     "pyqt6>=6.12.1",
 ]
+
+[project.scripts]
+dirigera-dashboard = "main:main"
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["dashboard", "main", "network_discovery", "theme"]
+packages = ["widgets"]
 
 [dependency-groups]
 dev = [

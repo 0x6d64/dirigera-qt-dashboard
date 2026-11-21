@@ -83,7 +83,7 @@ Found by comparing the implementation with `doc/design-doc.md` in the 2026-11-21
 - [x] **t-73 [C·S]** Refresh button shows "Refreshing…" while running (§10.2.1); first-load skeleton (§8.13).
 - [ ] **t-74 [C·M]** Keyboard and accessibility: arrow keys in the segmented control, fixed width for metric values, accessible names on blind buttons and sliders, reduced-motion setting (§10.4.5, §10.5, §12.3). Done except the reduced-motion setting (§14 item 7 still open).
 - [x] **t-75 [C·S]** Outlets with metering show their energy footer in the Rooms view, as electrical sensors do.
-- [ ] **t-76 [C·S]** Fix the design doc itself. Done on `docs/design-doc-cleanup`: missing-doc references, stale `[open]`/`[verified]` tags, §5.2 pairings (now owned by the contrast test), chip radius vs height. Remaining: window size (1080 vs code 1000, with t-70), "Dirigera" as the app title against §2.2, and polling in §10.2 (see t-56).
+- [x] **t-76 [C·S]** Fix the design doc itself. Done on `docs/design-doc-cleanup`: missing-doc references, stale `[open]`/`[verified]` tags, §5.2 pairings (now owned by the contrast test), chip radius vs height. Window size was fixed by t-72 and polling added by t-56; the "Dirigera" app title moved to `design-doc.md` §14 item 1 (app name, open).
 - [ ] **t-77 [C·S]** Decide whether "automatic scenes" exist: the library's `SceneType` has no automatic type, so §8.10.5 and §9.3 cannot be built as written.
 - [ ] **t-78 [C·S]** *(deferred indefinitely 2026-11-21: no real blind available; the card keeps 100 = "Open")* Verify on a real blind whether level 100 means open or closed; the card labels the slider "Open" and the chip says "Open" at 100 (§8.1).
 
@@ -98,10 +98,10 @@ Found by comparing the implementation with `doc/design-doc.md` in the 2026-11-21
 ## Repository & documentation
 
 - [x] **t-35 [B·S]** Get `refactor` merged: `master` is still at the initial commit while all work lives on `refactor`. *(done: `master` merged `rc1` as `4031d1e`, so all work through the design-doc backlog is on `master`; the working branch is now `improve-ui`)*
-- [ ] **t-36 [C·S]** Update README: `netifaces2` requirement, Python 3.12/uv setup, and known discovery limitations. *(token-generation docs were updated in t-11; this covers the remaining gaps)*
-- [ ] **t-37 [C·S]** Add a `[project.scripts]` entry point (e.g. `dirigera-dashboard = "main:main"`) so the app can be launched without `python main.py`.
-- [ ] **t-38 [C·M]** Add package metadata (license expression, classifiers, keywords) to `pyproject.toml`.
-- [ ] **t-39 [C·S]** Document the security model in the README: the hub uses a self-signed certificate and the `dirigera` library disables TLS verification, so the token should be treated as a network secret.
+- [x] **t-36 [C·S]** Update README: `netifaces2` requirement, Python 3.12/uv setup, and known discovery limitations. *(token-generation docs were updated in t-11; this covers the remaining gaps)*
+- [x] **t-37 [C·S]** Add a `[project.scripts]` entry point (e.g. `dirigera-dashboard = "main:main"`) so the app can be launched without `python main.py`.
+- [x] **t-38 [C·M]** Add package metadata (license expression, classifiers, keywords) to `pyproject.toml`.
+- [x] **t-39 [C·S]** Document the security model in the README: the hub uses a self-signed certificate and the `dirigera` library disables TLS verification, so the token should be treated as a network secret.
 
 ## Design document implementation (v1.0)
 

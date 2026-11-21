@@ -851,6 +851,11 @@ Affected files: `README.md`, `pyproject.toml`, `uv.lock`, `main.py`,
 
 Check off t-36, t-37, t-38, t-39, t-76, Executed markers.
 
+> **Executed 2026-11-21** on branch `docs/readme-packaging`: commit 1 `752493e`
+> "add launcher entry point and metadata" (setuptools backend, `py-modules` +
+> `packages = ["widgets"]`), commit 2 `465551e` "update readme", commit 3
+> "record readme and packaging".
+
 ---
 
 ### Plan: responsive header and window defaults (t-54, t-72)

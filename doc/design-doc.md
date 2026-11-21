@@ -520,7 +520,7 @@ See `qt-gotchas.md`.
 
 | # | Decision | Status |
 | --- | --- | --- |
-| 1 | Application name | Open. Neutral name, checked for availability; "Home" is a placeholder |
+| 1 | Application name | Open. Neutral name, checked for availability; "Home" is a placeholder. The window title is currently "Dirigera Dashboard", which section 2.2 allows only descriptively; rename together with this decision |
 | 2 | Room section order | Decided and implemented: alphabetical, case-insensitive |
 | 3 | Show automatic scenes by default | Open. Default proposed: no (t-77) |
 | 4 | Low-battery threshold | Decided and implemented: 20 % (`LOW_BATTERY_PERCENT`) |
