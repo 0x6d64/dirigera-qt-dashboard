@@ -36,7 +36,7 @@ from widgets.metric import MetricWidget
 from widgets.segments import SegmentedControl
 from widgets.slider import LabeledSlider
 from widgets.switch import ToggleSwitch
-from widgets.text import energy_footer, filter_text, relative_time
+from widgets.text import energy_footer, filter_text, pm25_band, relative_time
 
 # Device category sorting weight per design-doc.md §8.1 rule 3
 # (keys are the library's camelCase `device_type` values; every controller
@@ -56,6 +56,9 @@ _TYPE_SORT_WEIGHT = {
 }
 _CONTROLLER_WEIGHT = 100
 
+# PM2.5 is in µg/m³; its reading also gets a band word (t-88).
+PM25_UNIT = "µg/m³"
+
 # Read-only readings per device type: (caption, unit, attribute). Units the
 # library does not document are left empty rather than guessed
 # (dirigera-api.md §1 finding 7). Only values that are not None are shown.
@@ -63,12 +66,12 @@ _READINGS: dict[str, tuple[tuple[str, str, str], ...]] = {
     "environmentSensor": (
         ("Temperature", "°C", "current_temperature"),
         ("Humidity", "%", "current_r_h"),
-        ("PM2.5", "", "current_p_m25"),
+        ("PM2.5", PM25_UNIT, "current_p_m25"),
         ("CO₂", "ppm", "current_c_o2"),
         ("VOC index", "", "voc_index"),
     ),
     "lightSensor": (("Illuminance", "", "illuminance"),),
-    "airPurifier": (("PM2.5", "", "current_p_m25"),),
+    "airPurifier": (("PM2.5", PM25_UNIT, "current_p_m25"),),
 }
 
 # Fan segments of the air purifier card (req-15): the labels, and the
@@ -108,6 +111,16 @@ def kelvin_bounds(attrs: Any) -> Optional[Tuple[int, int]]:
     bounds = (_bound_to_kelvin(low), _bound_to_kelvin(high))
     lower, upper = min(bounds), max(bounds)
     return (lower, upper) if lower < upper else None
+
+
+def _set_reading(metric: MetricWidget, attr: str, value: Any) -> None:
+    """Show a reading; PM2.5 also gets its band word and tone (t-88)."""
+    metric.set_value(value)
+    band = pm25_band(value) if attr == "current_p_m25" else None
+    if band is None:
+        metric.set_note()
+    else:
+        metric.set_note(*band)
 
 
 def fan_speed_index(motor_state: Any, fan_mode: Any) -> Optional[int]:
@@ -468,7 +481,7 @@ class DeviceCard(CardBase):
             if attr not in values:
                 continue
             metric = MetricWidget(caption=caption, initial_value=None, unit=unit)
-            metric.set_value(values[attr])
+            _set_reading(metric, attr, values[attr])
             index = len(self._readings)
             grid.addWidget(metric, index // READINGS_PER_ROW, index % READINGS_PER_ROW)
             self._readings[attr] = metric
@@ -485,7 +498,7 @@ class DeviceCard(CardBase):
             self._fill_readings()
             return
         for attr, metric in self._readings.items():
-            metric.set_value(values[attr])
+            _set_reading(metric, attr, values[attr])
 
     def _update_status_chip(self) -> None:
         attrs = getattr(self.device, "attributes", None)

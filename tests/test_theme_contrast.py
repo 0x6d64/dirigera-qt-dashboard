@@ -36,6 +36,9 @@ TEXT_PAIRS = [
     ("WARN", "WARN_BG"),
     ("DANGER", "DANGER_BG"),
     ("DANGER", "SURFACE"),
+    # PM2.5 band words sit on the card surface (t-88).
+    ("OK", "SURFACE"),
+    ("WARN", "SURFACE"),
 ]
 
 # Non-text indicators (switch track, focus ring) need 3:1 against their surface.

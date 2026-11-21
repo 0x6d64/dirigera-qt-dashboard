@@ -200,3 +200,23 @@ def filter_text(lifetime: Any, elapsed: Any, alarm: Any) -> Optional[str]:
     else:
         when = f"change in {days} days"
     return f"Filter {percent} % · {when}"
+
+
+# WHO-style PM2.5 bands in µg/m³ (design-doc.md §14 item 9): the upper bound
+# of each band, the word shown and the tone that colours it.
+_PM25_BANDS = ((15, "Good", "ok"), (35, "Moderate", "warn"))
+
+
+def pm25_band(value: Any) -> Optional[Tuple[str, str]]:
+    """The (word, tone) of a PM2.5 reading, None for anything not a number.
+
+    At or below 15 is "Good" (ok), at or below 35 "Moderate" (warn), above
+    that "Poor" (danger). The word is always shown, so colour is never the
+    only signal.
+    """
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return None
+    for limit, word, tone in _PM25_BANDS:
+        if value <= limit:
+            return word, tone
+    return "Poor", "danger"

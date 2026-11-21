@@ -31,7 +31,7 @@ def test_environment_sensor_shows_only_reported_values() -> None:
     assert readings(card) == {
         "Temperature": ("21.5", "°C"),
         "Humidity": ("40", "%"),
-        "PM2.5": ("7", ""),
+        "PM2.5": ("7", "µg/m³"),
     }
     assert card.status_chip.text() == ""
     assert card.status_chip.isHidden()
@@ -109,7 +109,7 @@ class Fan(Enum):
 
 def test_air_purifier_shows_pm25_and_its_fan_control() -> None:
     card = DeviceCard(make_device("airPurifier", current_p_m25=12, fan_mode=Fan.AUTO))
-    assert readings(card) == {"PM2.5": ("12", "")}
+    assert readings(card) == {"PM2.5": ("12", "µg/m³")}
     assert card.fan_speed.current_index() == 1
     assert card.status_chip.isHidden()
     card.update_from_device(
