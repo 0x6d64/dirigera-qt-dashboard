@@ -41,10 +41,10 @@ def _count_refreshes(win: Any, monkeypatch: pytest.MonkeyPatch) -> list[int]:
     started: list[int] = []
     original = win._start_refresh
 
-    def counting() -> None:
+    def counting(*args: Any, **kwargs: Any) -> None:
         if win._refresh_worker is None:
             started.append(1)
-        original()
+        original(*args, **kwargs)
 
     monkeypatch.setattr(win, "_start_refresh", counting)
     return started

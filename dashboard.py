@@ -3,7 +3,7 @@ import ipaddress
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, cast, override
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, cast, override
 
 from dirigera import Hub
 from dirigera.devices.air_purifier import FanModeEnum
@@ -33,6 +33,7 @@ from PyQt6.QtWidgets import (
 )
 
 import theme
+from adaptive import profile_options
 from network_discovery import (
     get_local_networks,
     hosts_to_scan,
@@ -248,6 +249,7 @@ class DirigeraDashboard(QMainWindow):
         self.hub: Optional[Hub] = None
         self.devices: List[Any] = []
         self.scenes: List[Scene] = []
+        self.adaptive_profiles: List[Any] = []  # t-15; only the hub changes them
         self._show_automatic = load_show_automatic()
         self._room_colours = load_room_colours()
         self._hub_ip: Optional[str] = None
@@ -867,8 +869,8 @@ class DirigeraDashboard(QMainWindow):
         self._connect_worker = None
 
     def refresh_devices(self) -> None:
-        """Start a refresh the user asked for (t-17)."""
-        self._start_refresh()
+        """Start a refresh the user asked for (t-17); connect uses it too."""
+        self._start_refresh(with_profiles=True)
 
     def _poll(self) -> None:
         """Timer tick: refresh unless that would be wasteful or stack up.
@@ -884,10 +886,14 @@ class DirigeraDashboard(QMainWindow):
             or self.isMinimized()
         ):
             return
-        self._start_refresh()
+        self._start_refresh(with_profiles=True)
 
-    def _start_refresh(self) -> None:
-        """Start the fetch worker. Failures are reported inline, never in a dialog."""
+    def _start_refresh(self, with_profiles: bool = False) -> None:
+        """Start the fetch worker. Failures are reported inline, never in a dialog.
+
+        Adaptive profiles change only in the IKEA app, so only connect, manual
+        and timer refreshes fetch them, not the event-driven ones (t-15).
+        """
         hub = self.hub
         if hub is None:
             return
@@ -898,7 +904,7 @@ class DirigeraDashboard(QMainWindow):
         self.refresh_button.setText("Refreshing…")
         self.refresh_button.setEnabled(False)
 
-        worker = RefreshWorker(hub, self)
+        worker = RefreshWorker(hub, self, with_profiles=with_profiles)
         worker.refreshed.connect(self._on_refreshed)
         worker.failed.connect(self._on_refresh_failed)
         worker.finished.connect(self._on_refresh_worker_done)
@@ -990,14 +996,21 @@ class DirigeraDashboard(QMainWindow):
                 self._poll()
 
     @staticmethod
-    def _data_signature(devices: List[Any], scenes: List[Scene]) -> Tuple[Any, ...]:
-        """Return a cheap fingerprint of a fetch, to skip no-op refreshes."""
+    def _data_signature(
+        devices: List[Any], scenes: List[Scene], profiles: Iterable[Any] = ()
+    ) -> Tuple[Any, ...]:
+        """Return a cheap fingerprint of a fetch, to skip no-op refreshes.
+
+        A light's adaptive profile state is not on `attributes`, so it is
+        part of the fingerprint on its own (t-15).
+        """
         device_part = sorted(
             (
                 str(getattr(d, "id", "")),
                 bool(getattr(d, "is_reachable", True)),
                 repr(getattr(d, "room", None)),
                 repr(getattr(d, "attributes", None)),
+                repr(getattr(d, "adaptive_profile", None)),
             )
             for d in devices
         )
@@ -1008,16 +1021,25 @@ class DirigeraDashboard(QMainWindow):
             )
             for s in scenes
         ]
-        return (tuple(device_part), tuple(scene_part))
+        return (tuple(device_part), tuple(scene_part), tuple(profile_options(profiles)))
 
-    def _on_refreshed(self, devices: List[Any], scenes: List[Scene]) -> None:
+    def _on_refreshed(
+        self,
+        devices: List[Any],
+        scenes: List[Scene],
+        profiles: Optional[List[Any]] = None,
+    ) -> None:
         """Bring the views up to date with a successful fetch (t-19).
 
         Existing cards are updated in place, so scroll position, order, focus
         and a slider being dragged survive; only new ids add cards and only
         vanished ids remove them. Devices the hub marks hidden are left out
-        everywhere: cards, energy view and the status counts (t-89).
+        everywhere: cards, energy view and the status counts (t-89). `profiles`
+        is `None` when this fetch did not ask for them or failed: the earlier
+        list stays (t-15).
         """
+        if profiles is not None:
+            self.adaptive_profiles = profiles
         devices = [device for device in devices if not is_hidden_device(device)]
         self._remove_skeleton()
         self._last_refresh = datetime.now()
@@ -1026,7 +1048,7 @@ class DirigeraDashboard(QMainWindow):
         if self._hub_ip:
             self.status_chip.set_status(f"Hub online · {self._hub_ip}", "ok")
 
-        signature = self._data_signature(devices, scenes)
+        signature = self._data_signature(devices, scenes, self.adaptive_profiles)
         if signature == self._signature:
             # Nothing changed: leave the widget tree and caption alone, except
             # for undoing an earlier failure message.
