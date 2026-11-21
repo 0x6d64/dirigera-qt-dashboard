@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 
 import dashboard
+from settings import DiscoverySettings
 
 
 @pytest.fixture
@@ -160,7 +161,7 @@ def test_configured_scope_is_used_instead_of_detection(
         raise AssertionError("auto-detection must not run")
 
     monkeypatch.setattr(dashboard, "get_local_networks", detect)
-    window.discovery_settings = dashboard.DiscoverySettings(
+    window.discovery_settings = DiscoverySettings(
         networks=["10.5.0.0/30"], max_workers=7, timeout=0.5
     )
     window.discover_hubs()

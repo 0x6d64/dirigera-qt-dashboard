@@ -6,6 +6,7 @@ from typing import Any
 import pytest
 
 import dashboard
+from settings import DEFAULT_DISCOVERY_TIMEOUT, DEFAULT_DISCOVERY_WORKERS
 
 
 def write_config(path: Path, text: str) -> None:
@@ -110,8 +111,8 @@ def test_discovery_defaults_without_a_section(window: Any, tmp_path: Path) -> No
     window.load_config()
     settings = window.discovery_settings
     assert settings.networks is None
-    assert settings.max_workers == dashboard.DEFAULT_DISCOVERY_WORKERS
-    assert settings.timeout == dashboard.DEFAULT_DISCOVERY_TIMEOUT
+    assert settings.max_workers == DEFAULT_DISCOVERY_WORKERS
+    assert settings.timeout == DEFAULT_DISCOVERY_TIMEOUT
 
 
 @pytest.mark.parametrize(
@@ -135,8 +136,8 @@ def test_invalid_discovery_values_fall_back_with_a_message(
     window.load_config()
     settings = window.discovery_settings
     assert settings.networks is None
-    assert settings.max_workers == dashboard.DEFAULT_DISCOVERY_WORKERS
-    assert settings.timeout == dashboard.DEFAULT_DISCOVERY_TIMEOUT
+    assert settings.max_workers == DEFAULT_DISCOVERY_WORKERS
+    assert settings.timeout == DEFAULT_DISCOVERY_TIMEOUT
     assert window.status_label.property("tone") == "danger"
     assert "[discovery]" in window.status_label.text()
     assert dialogs == []
@@ -150,5 +151,5 @@ def test_one_bad_discovery_value_keeps_the_good_ones(
     )
     window.load_config()
     assert window.discovery_settings.max_workers == 12
-    assert window.discovery_settings.timeout == dashboard.DEFAULT_DISCOVERY_TIMEOUT
+    assert window.discovery_settings.timeout == DEFAULT_DISCOVERY_TIMEOUT
     assert window.status_label.property("tone") == "danger"
