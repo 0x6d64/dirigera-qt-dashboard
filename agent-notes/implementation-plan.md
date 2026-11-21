@@ -866,8 +866,10 @@ view switcher on a second header row", Executed markers.
 > `5fd6160` "window defaults from the design", commit 1 `06ab673` "two-row
 > header below 760 px", commit 2 "record responsive header". Deviation: the
 > single header row needs about 870 px (measured with the offscreen fonts), so
-> `HEADER_BREAKPOINT` is 900, not 760; a test asserts the breakpoint is never
-> narrower than the row.
+> `HEADER_BREAKPOINT` is 900, not 760, and only a floor: commit 3
+> "derive header breakpoint from its contents" switches to two rows below
+> max(900, width the one-row header needs from its size hints), so larger
+> fonts or scaling stay correct.
 
 ---
 

@@ -64,7 +64,24 @@ def test_window_can_shrink_to_minimum(window: Any, qapp: Any) -> None:
 
 
 def test_single_row_fits_at_the_breakpoint(window: Any, qapp: Any) -> None:
-    """The breakpoint must not be narrower than the row it protects."""
+    """The floor must not be narrower than the row at the default font."""
     _show(window, qapp, 1080)
-    needed = window.header_row1.minimumSizeHint().width()
-    assert needed <= dashboard.HEADER_BREAKPOINT
+    assert window._header_row_width() <= dashboard.HEADER_BREAKPOINT
+
+
+def test_larger_font_switches_to_two_rows_earlier(window: Any, qapp: Any) -> None:
+    _show(window, qapp, 1080)
+    font = window.header.font()
+    font.setPointSizeF(font.pointSizeF() * 2)
+    window.header.setFont(font)
+    qapp.processEvents()
+    needed = window._header_row_width()
+    assert needed > 1000
+    _show(window, qapp, 1000)
+    assert 1000 > dashboard.HEADER_BREAKPOINT
+    assert window.header.height() == 96
+    assert _is_on_row2(window)
+    # Wide enough for the bigger row again: one row.
+    _show(window, qapp, needed + 20)
+    assert window.header.height() == 56
+    assert not _is_on_row2(window)

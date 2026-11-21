@@ -49,8 +49,9 @@ POLL_INTERVAL_S = 30
 # scene asynchronously, so an immediate fetch can miss the change.
 SCENE_REFRESH_DELAY_MS = 1500
 # Header: one 56 px row from this window width up, two 48 px rows below it
-# (design-doc.md §4.2, §11). The single row needs about 870 px (offscreen
-# fonts), so the plan's 760 px would clip it; 900 px leaves a little slack.
+# (design-doc.md §4.2, §11). This is only a floor: the single row needs about
+# 870 px with the offscreen fonts and more with larger fonts or scaling, so the
+# switch point is derived from the row's contents (`_header_row_width`).
 HEADER_BREAKPOINT = 900
 HEADER_HEIGHT = 56
 HEADER_HEIGHT_COMPACT = 96
@@ -350,7 +351,7 @@ class DirigeraDashboard(QMainWindow):
 
         # Header bar (design-doc.md §4.2)
         self.header = self.build_header()
-        self._apply_header_layout(self.width() < HEADER_BREAKPOINT)
+        self._apply_header_layout(self._header_compact_needed())
         main_layout.addWidget(self.header)
 
         # Caption line for detailed status messages
@@ -467,9 +468,9 @@ class DirigeraDashboard(QMainWindow):
         self.header_row1_layout.setSpacing(theme.SP12)
         layout = self.header_row1_layout
 
-        title = QLabel("Dirigera")
-        title.setProperty("role", "appTitle")
-        layout.addWidget(title)
+        self.header_title = QLabel("Dirigera")
+        self.header_title.setProperty("role", "appTitle")
+        layout.addWidget(self.header_title)
 
         self.status_chip = StatusChip("Not connected", "neutral")
         layout.addWidget(self.status_chip)
@@ -543,11 +544,34 @@ class DirigeraDashboard(QMainWindow):
         self.header_row2.setVisible(compact)
         self.header.setFixedHeight(HEADER_HEIGHT_COMPACT if compact else HEADER_HEIGHT)
 
+    def _header_row_width(self) -> int:
+        """Width the one-row header needs with the current fonts.
+
+        Summed from the size hints of its parts (search field at its minimum)
+        plus spacing and margins, so it holds whichever row the switcher
+        currently sits in.
+        """
+        widgets = (
+            self.header_title,
+            self.status_chip,
+            self.view_switcher,
+            self.refresh_button,
+        )
+        width = sum(w.minimumSizeHint().width() for w in widgets)
+        width += self.search_input.minimumWidth()
+        # Five gaps: title, chip, flexible space, search, switcher, Refresh.
+        width += 5 * self.header_row1_layout.spacing() + 2 * theme.SP20
+        return width
+
+    def _header_compact_needed(self) -> bool:
+        """True when the window is too narrow for the single-row header."""
+        return self.width() < max(HEADER_BREAKPOINT, self._header_row_width())
+
     @override
     def resizeEvent(self, event: Optional[QResizeEvent]) -> None:
         """Switch the header layout when the width crosses the breakpoint."""
         super().resizeEvent(event)
-        self._apply_header_layout(self.width() < HEADER_BREAKPOINT)
+        self._apply_header_layout(self._header_compact_needed())
 
     def show_connection_block(self, busy: bool = False) -> None:
         """Show the not-connected block instead of the views (§9.1).
