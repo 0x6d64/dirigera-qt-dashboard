@@ -2,8 +2,6 @@ name: CI
 
 on:
   push:
-    branches: [master]
-  pull_request:
 
 jobs:
   checks:
@@ -21,7 +19,7 @@ jobs:
       - run: uv run black --check .
       - run: uv run ruff check .
       - run: uv run mypy .
-      # Branches and pull requests skip slow tests; master runs them too.
+      # Feature branches skip slow tests; master runs them too.
       # Tests marked `hardware` need a real hub and never run in CI.
       - name: Tests (fast)
         if: github.ref != 'refs/heads/master'
