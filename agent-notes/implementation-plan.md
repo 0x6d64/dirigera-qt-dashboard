@@ -511,6 +511,11 @@ thread boundaries. Gates green.
 
 Check off t-26, Executed marker.
 
+> **Executed 2026-11-21** on branch `chore/specific-exceptions`: commit 1
+> `6f9a388` "log errors and narrow exception handling" (also removed the
+> unused `background` parameter of `_start_refresh`), commit 2 "record
+> exception cleanup".
+
 ---
 
 ### Plan: card text and footers (t-67, t-68, t-70, t-75)
