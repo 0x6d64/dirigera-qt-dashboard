@@ -26,6 +26,141 @@ may end with an `> **Executed …**` note listing branch and commit hashes.
 
 ## Plans
 
+### Plan: live updates via websocket (t-16)
+
+Status: open
+
+Goal: A change made outside the dashboard (IKEA app, wall switch, remote)
+shows on the cards within about two seconds, without waiting for the 30 s poll.
+Polling stays as the safety net (`req-13`, `design-doc.md` §10.3.1: the design
+must work without push).
+
+Approach: events are only a *hint*. Any parsable event schedules one coalesced
+background refresh through the existing `_request_background_refresh()`; the
+existing in-place update and `_data_signature` check do the rest. This avoids
+parsing event shapes (still undocumented, `doc/dirigera-api.md` §2.6 items 3
+and 4), avoids a per-device widget registry (t-10 stays as decided) and avoids
+extra hub calls from a second thread (`doc/dirigera-api.md` §5 item 6: the
+shared `requests.Session` is not documented as thread-safe). It supersedes
+commit 4 of the plan "dirigera 1.6.1 migration follow-ups", whose per-device
+reload design needed all three.
+
+Affected files: `workers.py`, `dashboard.py`, `doc/design-doc.md` §10.2 and
+§10.3, `doc/dirigera-api.md` §2.6 and §5 item 5, `doc/reqs.md`,
+`agent-notes/todo.md`, new `tests/test_events.py`
+
+Rules: as in "Execution order, batch 3" (gates, theme tokens, no modal
+dialogs, LF endings). Branch `feat/live-events`.
+
+#### Commit 1 — "add event listener worker"
+
+1. `workers.py`: `parse_event(message) -> Optional[dict]`, a pure function:
+   JSON-decode a `str`/`bytes` message; return the dict when it has a string
+   `type`, else `None` (never raises).
+2. `workers.py`: `EventWorker(QThread)` wrapping
+   `hub.create_event_listener(on_open, on_message, on_error, on_close,
+   reconnect=EVENT_RECONNECT_S)` (`EVENT_RECONNECT_S = 5`). Signals:
+   `opened()`, `event(object)` (the parsed dict), `lost()` (socket closed or
+   errored). The callbacks only emit signals and never raise or touch widgets;
+   `on_message` drops what `parse_event` rejects and logs the event `type` at
+   debug level (this is how the event shapes get recorded later).
+3. `request_stop()`: set a `threading.Event`, then call
+   `hub.stop_event_listener()`. `run()` returns at once when the flag is set
+   before the socket exists, and ignores callbacks that arrive after the flag.
+   `run()` has the usual one thread-boundary `except Exception` with
+   `log.exception`, and emits `lost()` when it returns for any other reason
+   than a requested stop.
+4. `tests/test_events.py`: `parse_event` (valid, bad JSON, no `type`, bytes);
+   `EventWorker` against a fake hub whose `create_event_listener` calls the
+   callbacks synchronously: signals fire, a raising callback path does not
+   kill the thread, `request_stop()` before and during `run()` ends it.
+
+Verification: gates; the new tests.
+
+#### Commit 2 — "refresh on live events"
+
+1. `dashboard.py`: `_start_events()` after a successful `_on_connected`
+   (after the first refresh is started); `_stop_events()` stops and drops the
+   worker. Call `_stop_events()` before adopting a new hub, in
+   `_on_connect_failed`, and in `closeEvent`; include the event worker in
+   `_running_workers()` so the existing deferred-close logic waits for it.
+2. Event slot: ignored while no hub, while minimised (restoring already polls
+   at once), and while a refresh is pending anyway. Otherwise start a
+   single-shot `QTimer` (`EVENT_COALESCE_MS = 1000`) if it is not running; its
+   timeout calls `_request_background_refresh()`. Later events inside the
+   window do not restart the timer, so a metering plug that reports every
+   second cannot cause more than one refresh per second, and a burst is one
+   refresh.
+3. `opened()` (first open and every reconnect): `_live = True` and one
+   `_request_background_refresh()`, because events during a gap are lost
+   (`doc/dirigera-api.md` §2.6 item 5). `lost()`: `_live = False`.
+4. Poll interval follows the state: `POLL_INTERVAL_S` (30) while not live,
+   `LIVE_POLL_INTERVAL_S` (300) while live, applied with
+   `refresh_timer.setInterval()` on each change. `_update_caption()` reads
+   `Live · updated HH:MM` while live and keeps `Updated HH:MM · every N s`
+   otherwise; the stale threshold stays two intervals of the current one.
+5. Tests (fake hub, no real socket; use the existing `connected` fixture and
+   the `settle()` helper): an event triggers exactly one refresh after the
+   coalesce window; ten events in the window still trigger one; an event while
+   a fetch runs queues one more; `opened` after a loss refreshes; `lost`
+   returns the interval to 30 s and the caption to the polling text; no
+   refresh while minimised; closing with a running event worker waits and then
+   quits; reconnecting to another hub stops the old worker.
+
+Verification: gates; the new tests.
+
+#### Commit 3 — "document live updates"
+
+1. `doc/design-doc.md`: §10.3 states what is built (events as a hint, the
+   coalesce window, the live caption, polling as fallback, tags `[verified]`
+   only for what a test covers); §10.2 item 5 mentions the slower live poll.
+2. `doc/dirigera-api.md` §5 item 5 and §2.6: what the implementation relies on
+   (callback signature, `reconnect`, `stop_event_listener`); the tags for the
+   event shapes stay `[unverified]` until the real-hub run.
+3. `agent-notes/todo.md`: check off t-16. `doc/reqs.md`: add an inferred
+   requirement for the behaviour (next free `req-` number, found with the
+   command in `AGENTS.md`). Set this plan's `Status:` and add the Executed
+   note; mark commit 4 of the migration plan as superseded and fix the
+   "Not planned" line in "Execution order, batch 3".
+
+Verification: gates; no stale "planned (`t-16`)" wording left
+(`grep -rn "t-16" doc agent-notes`).
+
+#### Real-hub check (owner, after commit 2 or 3)
+
+Not a blocker for the commits; it confirms behaviour a fake cannot.
+
+1. Change a light or plug from the IKEA app: the card follows within about two
+   seconds and the caption says `Live`.
+2. Drag a slider while the same light is changed from the app: the slider
+   stays under the pointer.
+3. Wi-Fi off for a minute, then on: caption falls back to the polling text,
+   returns to `Live`, and state changed meanwhile is correct.
+4. Leave idle 15 to 30 minutes (the hub drops idle sockets): still `Live`.
+5. Close the window while live, and reconnect to the hub: no hang, no second
+   listener (one event refreshes once).
+6. Optional: run with debug logging, press a remote button, unplug a device,
+   and add the logged event shapes to `doc/dirigera-api.md` §2.6.
+
+#### Risks
+
+- **Silent socket death:** a dropped connection might not fire `on_close`. The
+  library's ping (`ping_intervall`, default 60 s) usually triggers
+  `on_error`/`on_close`; if the real-hub check shows otherwise, treat "no event
+  and no pong for N seconds" as lost. The slow safety-net poll bounds the damage
+  at 300 s.
+- **Stop while reconnecting:** `stop_event_listener()` only closes an existing
+  socket; a thread sleeping in its reconnect wait may linger up to
+  `EVENT_RECONNECT_S`. The deferred-close logic tolerates that; confirm in step
+  5 of the real-hub check.
+- **Refresh cost:** each event costs a full fetch (`get_all_devices` plus
+  `get_scenes`). The coalesce window caps it at one per second; raise
+  `EVENT_COALESCE_MS` if a busy home makes the hub sluggish. A per-device
+  `reload()` is the follow-up optimisation, only worth it with the session
+  thread-safety question settled.
+
+---
+
 ### Execution order, batch 3 (2026-11-21)
 
 Status: done 2026-11-21
@@ -61,8 +196,9 @@ by Haiku subagents in this order, one branch per plan, each merged into
 4. `feat/room-colours` — room colours with a toggle (t-86); reuses the UI
    settings helper from plan 3
 
-Not planned: t-15 and t-16 (L effort, polling meets `req-13`), t-82 (no hub
-route for history), t-78 (no blind).
+Not planned: t-15 (L effort), t-82 (no hub route for history), t-78 (no
+blind). t-16 (L effort, polling meets `req-13`) was not part of this batch; it
+has its own plan "live updates via websocket".
 
 ### Plan: air purifier filter health and fan speed (t-85, t-80)
 
@@ -591,7 +727,10 @@ Affected files: `widgets/card.py`, `dashboard.py`
 5. Note: adds blocking calls to the refresh flow — they belong in
    `RefreshWorker.run()` (t-17, done), never on the GUI thread.
 
-#### Commit 4 — "live updates via websocket" (t-16) — large, after t-17 and t-10 decision
+#### Commit 4 — "live updates via websocket" (t-16) — superseded by the plan "live updates via websocket"
+
+> The design below reloads single devices and needs a widget registry; the
+> newer plan refreshes through the existing in-place update instead.
 
 1. Add an `EventListenerThread(QThread)` wrapping
    `hub.create_event_listener(on_message=..., on_error=..., on_close=...)`;
