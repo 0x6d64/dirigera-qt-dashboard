@@ -628,6 +628,11 @@ metric on the same card object. Gates green.
 
 Check off t-69, Executed marker.
 
+> **Executed 2026-11-21** on branch `feat/sensor-cards`: "key icons by device
+> type" (`5c69ca2`, icon keys renamed to the camelCase `device_type` values
+> with `*Controller` and `*Sensor` fallbacks), commit 1 "show sensor readings
+> on cards" (`0f78f1a`), docs and checkbox in "record sensor cards".
+
 ---
 
 ### Plan: scene grid, refresh feedback, keyboard (t-71, t-73, t-74)
