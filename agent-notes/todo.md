@@ -127,6 +127,8 @@ Stated by the user; recorded, not yet planned.
 
 - [x] **t-92 [B·M]** Module refactor before the energy work (owner request 2026-11-21, after a structure review): `settings.py`, `rooms.py`, `workers.py`, shared `widgets/cardbase.py` for device and energy cards, shared power row and callback wiring in `widgets/card.py`. No behaviour change. Plan in `agent-notes/implementation-plan.md`.
 
+- [x] **t-93 [C·S]** Metric unit and band note ("µg/m³ Good") sit directly after the number on its baseline instead of far right and at the top (owner feedback 2026-11-21); the value label no longer reserves a minimum width, so the unit shifts slightly when the digit count changes (`design-doc.md` §8.5, §6.1.3).
+
 ## Design document implementation (v1.0)
 
 Design tasks build on each other. Recommended order: t-40 → t-43/t-44 → t-41/t-42 → t-45 → t-46/t-47/t-48 → t-49/t-51/t-52 → t-50/t-53. Run t-17 before t-49.

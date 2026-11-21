@@ -16,11 +16,20 @@ from PyQt6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 import theme
 
-# Representative reading whose width the value label reserves.
-REFERENCE_VALUE = "8888"
-
 # Text colour of a note's tone (see `set_note`).
 _NOTE_COLOURS = {"ok": theme.OK, "warn": theme.WARN, "danger": theme.DANGER}
+
+
+_BOTTOM_LEFT = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom
+
+
+def _descent(pixel_size: int, bold: bool) -> int:
+    """Descent in pixels of the default font at `pixel_size`."""
+    font = QFont()
+    font.setPixelSize(pixel_size)
+    if bold:
+        font.setWeight(QFont.Weight.DemiBold)
+    return QFontMetrics(font).descent()
 
 
 class MetricWidget(QWidget):
@@ -61,15 +70,6 @@ class MetricWidget(QWidget):
             }}
             """)
 
-        # Reserve the width of a typical reading so changing digits do not
-        # shift the unit or the layout (design-doc.md §6.1.3).
-        font = QFont(self._value_label.font())
-        font.setPixelSize(theme.FONT_METRIC)
-        font.setWeight(QFont.Weight.DemiBold)
-        self._value_label.setMinimumWidth(
-            QFontMetrics(font).horizontalAdvance(REFERENCE_VALUE)
-        )
-
         self._unit_label = QLabel(unit)
         self._unit_label.setStyleSheet(f"""
             QLabel {{
@@ -79,14 +79,26 @@ class MetricWidget(QWidget):
             }}
             """)
 
-        value_layout.addWidget(self._value_label)
-        value_layout.addWidget(self._unit_label)
+        # The unit and note sit right after the number on its baseline; the
+        # number gets no reserved width, or a gap would open before the unit.
+        # QBoxLayout ignores AlignBaseline, so bottom-align the labels and lift
+        # the small ones by the difference of the fonts' descents.
+        baseline = Qt.AlignmentFlag.AlignBottom
+        self._lift = _descent(theme.FONT_METRIC, True) - _descent(
+            theme.FONT_CAPTION, False
+        )
+        self._unit_label.setContentsMargins(0, 0, 0, self._lift)
+        self._unit_label.setAlignment(_BOTTOM_LEFT)
+        value_layout.addWidget(self._value_label, 0, baseline)
+        value_layout.addWidget(self._unit_label, 0, baseline)
 
         # Optional word beside the value, e.g. a PM2.5 band; hidden when empty.
         self._note_label = QLabel()
         self._note_colour = theme.TEXT2
+        self._note_label.setContentsMargins(0, 0, 0, self._lift)
+        self._note_label.setAlignment(_BOTTOM_LEFT)
         self._note_label.setVisible(False)
-        value_layout.addWidget(self._note_label)
+        value_layout.addWidget(self._note_label, 0, baseline)
         value_layout.addStretch()
 
         # Bottom row: Caption label
