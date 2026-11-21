@@ -252,6 +252,14 @@ class DirigeraDashboard(QMainWindow):
         self._close_pending = False
         # (room section, its card grid), in display order, for search filtering.
         self._room_sections: List[Tuple[QWidget, CardGrid]] = []
+        # Live widgets, so a refresh updates them in place (t-19): room id ->
+        # (section, grid, label) and device id -> card.
+        self._sections: Dict[str, Tuple[QWidget, CardGrid, QLabel]] = {}
+        self._device_cards: Dict[str, DeviceCard] = {}
+        # Fingerprint of the last applied fetch; an equal fetch is a no-op.
+        self._signature: Optional[Tuple[Any, ...]] = None
+        self._summary_text = ""
+        self._status_is_failure = False
         self.init_ui()
         self.load_config()
 
@@ -600,55 +608,172 @@ class DirigeraDashboard(QMainWindow):
         self._refresh_worker = worker
         worker.start()
 
+    @staticmethod
+    def _data_signature(devices: List[Any], scenes: List[Scene]) -> Tuple[Any, ...]:
+        """Return a cheap fingerprint of a fetch, to skip no-op refreshes."""
+        device_part = sorted(
+            (
+                str(getattr(d, "id", "")),
+                bool(getattr(d, "is_reachable", True)),
+                repr(getattr(d, "room", None)),
+                repr(getattr(d, "attributes", None)),
+            )
+            for d in devices
+        )
+        scene_part = [
+            (
+                str(getattr(s, "id", "")),
+                str(getattr(getattr(s, "info", None), "name", "")),
+            )
+            for s in scenes
+        ]
+        return (tuple(device_part), tuple(scene_part))
+
     def _on_refreshed(self, devices: List[Any], scenes: List[Scene]) -> None:
-        """Rebuild the views from a successful fetch."""
+        """Bring the views up to date with a successful fetch (t-19).
+
+        Existing cards are updated in place, so scroll position, order, focus
+        and a slider being dragged survive; only new ids add cards and only
+        vanished ids remove them.
+        """
         self._last_refresh = datetime.now()
         self.stale_label.hide()
         if self._hub_ip:
             self.status_chip.set_status(f"Hub online · {self._hub_ip}", "ok")
 
-        # Clear existing widgets and rebuild from the fetched data
-        self.clear_layout(self.devices_layout)
-        self.scenes_grid.clear()
+        signature = self._data_signature(devices, scenes)
+        if signature == self._signature:
+            # Nothing changed: leave the widget tree and caption alone, except
+            # for undoing an earlier failure message.
+            if self._status_is_failure:
+                self._status_is_failure = False
+                self.set_status_text(self._summary_text)
+            return
+        self._signature = signature
 
         self.devices = devices
         self.scenes = scenes
 
-        # Group devices by room
-        devices_by_room = self.group_by_room(self.devices)
+        focus = QApplication.focusWidget()
+        areas = (self.devices_scroll, self.scenes_scroll)
+        scroll_values = [area.verticalScrollBar().value() for area in areas]
 
-        # Create UI for each room
-        sections: List[Tuple[QWidget, CardGrid]] = []
-        for room_name, room_devices in devices_by_room:
-            section, grid = self.create_room_section(room_name, room_devices)
-            self.devices_layout.insertWidget(self.devices_layout.count() - 1, section)
-            sections.append((section, grid))
-        self._room_sections = sections
-
-        # Display scenes as tiles in the same reflowing grid as the rooms.
-        self.scenes_grid.set_cards(
-            [self.create_scene_tile(scene) for scene in self.scenes]
-        )
+        devices_by_room = self._update_rooms(devices)
+        self._update_scenes(scenes)
 
         # Energy view: outlets and electrical sensors grouped by room (§9.4).
         energy_by_room = self.group_by_room(
             [device for device in self.devices if self.is_energy_device(device)]
         )
-        self.energy_view.set_rooms(
+        self.energy_view.update_rooms(
             [
-                (self.format_room_label(room), sorted(devices, key=device_sort_key))
-                for room, devices in energy_by_room
+                (self.format_room_label(room), sorted(devs, key=device_sort_key))
+                for room, devs in energy_by_room
             ]
         )
 
-        self.set_status_text(
+        self._summary_text = (
             f"Found {len(self.devices)} devices in {len(devices_by_room)} rooms "
             f"and {len(self.scenes)} scenes"
         )
+        self._status_is_failure = False
+        self.set_status_text(self._summary_text)
 
-        # A rebuild resets every card to visible, so put the active filter back
-        # on the fresh widgets (t-50).
+        # New cards start visible, so put the active filter back (t-50).
         self.filter_devices(self.search_input.text())
+
+        # Restore the view state when the widgets survived.
+        for area, value in zip(areas, scroll_values):
+            bar = area.verticalScrollBar()
+            if bar.value() != value:
+                bar.setValue(value)
+        if (
+            focus is not None
+            and not sip.isdeleted(focus)
+            and QApplication.focusWidget() is not focus
+        ):
+            focus.setFocus()
+
+    def _update_rooms(self, devices: List[Any]) -> List[Tuple[str, List[Any]]]:
+        """Reconcile room sections and device cards with `devices`."""
+        groups = self.group_by_room(devices)
+        old_cards = self._device_cards
+        new_cards: Dict[str, DeviceCard] = {}
+        wanted: List[Tuple[str, str, List[QWidget]]] = []
+
+        for room_name, room_devices in groups:
+            room_key = self.get_room(room_devices[0])[0]
+            cards: List[QWidget] = []
+            for device in sorted(room_devices, key=device_sort_key):
+                device_id = str(getattr(device, "id", ""))
+                card = old_cards.get(device_id)
+                if card is None:
+                    card = self.create_device_widget(device)
+                else:
+                    card.update_from_device(device)
+                new_cards[device_id] = card
+                cards.append(card)
+            wanted.append((room_key, room_name, cards))
+
+        # Sections for rooms that are gone.
+        wanted_keys = {key for key, _, _ in wanted}
+        for key in [k for k in self._sections if k not in wanted_keys]:
+            section, _grid, _label = self._sections.pop(key)
+            self.devices_layout.removeWidget(section)
+            section.hide()
+            section.deleteLater()
+        # Cards for devices that are gone (their section may live on).
+        for device_id, card in old_cards.items():
+            if device_id not in new_cards:
+                card.hide()
+                card.deleteLater()
+        self._device_cards = new_cards
+
+        for key, room_name, cards in wanted:
+            if key not in self._sections:
+                self._sections[key] = self._new_room_section(room_name)
+            _section, grid, label = self._sections[key]
+            label.setText(self.format_room_label(room_name))
+            if grid.cards() != cards:
+                grid.set_cards(cards)
+
+        # Section order: rebuild the layout order only when it differs.
+        ordered = [self._sections[key][0] for key, _, _ in wanted]
+        current = []
+        for index in range(self.devices_layout.count() - 1):
+            item = self.devices_layout.itemAt(index)
+            current.append(item.widget() if item is not None else None)
+        if current != ordered:
+            for section in ordered:
+                self.devices_layout.removeWidget(section)
+            for index, section in enumerate(ordered):
+                self.devices_layout.insertWidget(index, section)
+                section.show()
+        self._room_sections = [
+            (self._sections[key][0], self._sections[key][1]) for key, _, _ in wanted
+        ]
+        return groups
+
+    def _update_scenes(self, scenes: List[Scene]) -> None:
+        """Reconcile scene tiles with `scenes`, keeping the hub's order."""
+        old_tiles = {
+            str(getattr(t.scene, "id", "")): t
+            for t in self.scenes_grid.cards()
+            if isinstance(t, SceneTile)
+        }
+        tiles: List[QWidget] = []
+        for scene in scenes:
+            tile = old_tiles.pop(str(getattr(scene, "id", "")), None)
+            if tile is None:
+                tile = self.create_scene_tile(scene)
+            else:
+                tile.update_from_scene(scene)
+            tiles.append(tile)
+        for tile in old_tiles.values():
+            tile.hide()
+            tile.deleteLater()
+        if self.scenes_grid.cards() != tiles:
+            self.scenes_grid.set_cards(tiles)
 
     def filter_devices(self, query: str) -> None:
         """Filter device cards and scene tiles by name as the user types (§8.8).
@@ -675,6 +800,7 @@ class DirigeraDashboard(QMainWindow):
         """Keep the last good data and say how old it is (§3.1 row 4)."""
         self.status_chip.set_status("Hub unreachable", "warn")
         self.set_status_text(f"Refresh failed: {message}", "danger")
+        self._status_is_failure = True
         if self._last_refresh is not None:
             self.stale_label.setText(f"Showing data from {self._last_refresh:%H:%M}")
             self.stale_label.show()
@@ -684,10 +810,12 @@ class DirigeraDashboard(QMainWindow):
         self._refresh_worker = None
         self.refresh_button.setEnabled(self.hub is not None)
 
-    def create_room_section(
-        self, room_name: str, devices: List[Any]
-    ) -> Tuple[QWidget, CardGrid]:
-        """Build one room section: section label plus reflowing card grid."""
+    def _new_room_section(self, room_name: str) -> Tuple[QWidget, CardGrid, QLabel]:
+        """Build one empty room section: section label plus reflowing grid.
+
+        Cards are placed by `_update_rooms`, already sorted for a stable order
+        (design-doc.md §8.1 rule 3).
+        """
         section = QWidget()
         layout = QVBoxLayout(section)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -697,19 +825,12 @@ class DirigeraDashboard(QMainWindow):
         label.setProperty("role", "section")
         layout.addWidget(label)
 
-        # Sort devices in room for stable order (design-doc.md §8.1 rule 3);
-        # the sort key is deterministic, so refresh cycles keep the same order.
-        cards = [
-            self.create_device_widget(device)
-            for device in sorted(devices, key=device_sort_key)
-        ]
         grid = CardGrid()
-        grid.set_cards([card for card in cards if card is not None])
         layout.addWidget(grid)
+        self.devices_layout.insertWidget(self.devices_layout.count() - 1, section)
+        return section, grid, label
 
-        return section, grid
-
-    def create_device_widget(self, device: Any) -> Optional[QWidget]:
+    def create_device_widget(self, device: Any) -> DeviceCard:
         """Create a DeviceCard instance with connected action handlers."""
         return DeviceCard(
             device=device,
