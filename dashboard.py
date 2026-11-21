@@ -15,6 +15,7 @@ from PyQt6.QtGui import QCloseEvent, QResizeEvent
 from PyQt6.QtWidgets import (
     QApplication,
     QDialog,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -48,6 +49,9 @@ POLL_INTERVAL_S = 30
 # Delay before the refresh that follows a scene activation: the hub applies a
 # scene asynchronously, so an immediate fetch can miss the change.
 SCENE_REFRESH_DELAY_MS = 1500
+# First-load placeholders: how many, and how tall (about one device card).
+SKELETON_CARDS = 3
+SKELETON_HEIGHT = theme.SP24 * 5
 # Header: one 56 px row from this window width up, two 48 px rows below it
 # (design-doc.md §4.2, §11). This is only a floor: the single row needs about
 # 870 px with the offscreen fonts and more with larger fonts or scaling, so the
@@ -298,6 +302,8 @@ class DirigeraDashboard(QMainWindow):
         self._device_cards: Dict[str, DeviceCard] = {}
         # Fingerprint of the last applied fetch; an equal fetch is a no-op.
         self._signature: Optional[Tuple[Any, ...]] = None
+        # Placeholder cards shown until the first successful fetch.
+        self.skeleton: Optional[CardGrid] = None
         self._summary_text = ""
         self._status_is_failure = False
         # True while the running fetch was started by the timer, not the user.
@@ -765,8 +771,41 @@ class DirigeraDashboard(QMainWindow):
         self.set_status_text(f"Connected to hub at {ip_address}", "ok")
         self.refresh_button.setEnabled(True)
         self.show_views()
+        self._show_skeleton()
         self.refresh_devices()
         self.refresh_timer.start()
+
+    def _show_skeleton(self) -> None:
+        """Show placeholder cards until the first fetch arrives (§8.13).
+
+        Plain sunken frames, no animation. Skipped when cards from an earlier
+        connection are still on screen.
+        """
+        if self.skeleton is not None or self._device_cards:
+            return
+        grid = CardGrid()
+        cards: List[QWidget] = []
+        for _ in range(SKELETON_CARDS):
+            card = QFrame()
+            card.setMinimumHeight(SKELETON_HEIGHT)
+            card.setStyleSheet(
+                f"QFrame {{ background-color: {theme.SUNKEN};"
+                f" border-radius: {theme.RADIUS_CARD}px; }}"
+            )
+            cards.append(card)
+        grid.set_cards(cards)
+        self.skeleton = grid
+        self.devices_layout.insertWidget(0, grid)
+
+    def _remove_skeleton(self) -> None:
+        """Drop the placeholder cards, if any."""
+        grid = self.skeleton
+        if grid is None:
+            return
+        self.skeleton = None
+        self.devices_layout.removeWidget(grid)
+        grid.hide()
+        grid.deleteLater()
 
     def _on_connect_failed(self, message: str) -> None:
         """Report a failed attempt and hand the form back to the user."""
@@ -812,6 +851,7 @@ class DirigeraDashboard(QMainWindow):
             return  # one fetch at a time
 
         # Disable Refresh while loading so clicks cannot stack up fetches.
+        self.refresh_button.setText("Refreshing…")
         self.refresh_button.setEnabled(False)
 
         worker = RefreshWorker(hub, self)
@@ -873,6 +913,7 @@ class DirigeraDashboard(QMainWindow):
         and a slider being dragged survive; only new ids add cards and only
         vanished ids remove them.
         """
+        self._remove_skeleton()
         self._last_refresh = datetime.now()
         self._update_caption()
         self.stale_label.hide()
@@ -1046,6 +1087,7 @@ class DirigeraDashboard(QMainWindow):
 
     def _on_refresh_worker_done(self) -> None:
         self._refresh_worker = None
+        self.refresh_button.setText("Refresh")
         self.refresh_button.setEnabled(self.hub is not None)
         if self._refresh_pending:
             self._refresh_pending = False

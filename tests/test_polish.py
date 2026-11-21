@@ -1,7 +1,17 @@
 """Small design gaps: scene grid width, refresh feedback, keyboard, names."""
 
+import threading
+from collections.abc import Callable, Iterator
+from typing import Any
+
+import pytest
+from conftest import StubHub, make_device
+
+import dashboard
 from widgets.grid import CardGrid
 from widgets.scene import SCENE_MIN_WIDTH
+
+Wait = Callable[..., None]
 
 
 def test_scene_grid_fits_more_columns_than_device_grid(qapp) -> None:
@@ -10,3 +20,50 @@ def test_scene_grid_fits_more_columns_than_device_grid(qapp) -> None:
     for grid in (devices, scenes):
         grid.resize(800, 400)
     assert scenes.columns() > devices.columns()
+
+
+class GatedHub(StubHub):
+    """A hub whose device fetch waits until the test releases it."""
+
+    def __init__(self) -> None:
+        super().__init__(devices=[make_device("light", "l1", "Lamp", is_on=True)])
+        self.gate = threading.Event()
+
+    def get_all_devices(self) -> list[Any]:
+        self.gate.wait(timeout=5)
+        return super().get_all_devices()
+
+
+@pytest.fixture
+def gated(window: Any, monkeypatch: pytest.MonkeyPatch) -> Iterator[GatedHub]:
+    hub = GatedHub()
+    monkeypatch.setattr(dashboard, "Hub", lambda token, ip_address: hub)
+    window.connection_block.ip_input.setText("10.0.0.2")
+    window.connection_block.token_input.setText("tok")
+    window.connect_to_hub()
+    yield hub
+    hub.gate.set()  # never leave the worker waiting
+
+
+def test_refresh_button_shows_progress_until_the_fetch_ends(
+    window: Any, gated: GatedHub, wait_until: Wait
+) -> None:
+    wait_until(lambda: window._refresh_worker is not None)
+    assert window.refresh_button.text() == "Refreshing…"
+    assert not window.refresh_button.isEnabled()
+    gated.gate.set()
+    wait_until(lambda: window._refresh_worker is None)
+    assert window.refresh_button.text() == "Refresh"
+    assert window.refresh_button.isEnabled()
+
+
+def test_skeleton_cards_show_until_the_first_refresh(
+    window: Any, gated: GatedHub, wait_until: Wait
+) -> None:
+    wait_until(lambda: window._refresh_worker is not None)
+    assert window.skeleton is not None
+    assert len(window.skeleton.cards()) > 0
+    gated.gate.set()
+    wait_until(lambda: window._refresh_worker is None)
+    assert window.skeleton is None
+    assert window._device_cards
