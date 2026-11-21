@@ -6,7 +6,9 @@ Follows design-doc.md §7.3:
 - Rendered from SVG strings in code via `QtSvg` (part of PyQt6), recoloured by
   substituting `currentColor` with a theme token at load time.
 - Device-category glyphs are keyed by `device_type` (`"light"`, `"outlet"`,
-  `"blinds"`, …), so `render_icon(device.device_type, …)` needs no mapping.
+  `"blinds"`, `"airPurifier"`, …; the library's camelCase strings), so
+  `render_icon(device.device_type, …)` needs no mapping. Controller and sensor
+  types without a glyph of their own use `"controller"` and `"sensor"`.
 - Scene glyphs are keyed by the hub's scene icon value; common ones are mapped
   in `SCENE_ICONS` and everything else falls back to the generic `"scene"`
   glyph (§7.3.4).
@@ -50,23 +52,23 @@ ICON_SVG: Dict[str, str] = {
         '<rect x="4" y="4" width="16" height="11" rx="1"/>'
         '<path d="M4 8h16M4 11.5h16M12 15v5"/>'
     ),
-    "air_purifier": _svg(
+    "airPurifier": _svg(
         '<rect x="6" y="3" width="12" height="18" rx="3"/>'
         '<circle cx="12" cy="9.5" r="3"/><path d="M9 16.5h6"/>'
     ),
-    "environment_sensor": _svg(
+    "environmentSensor": _svg(
         '<path d="M14 14.8V6a2 2 0 0 0-4 0v8.8a4 4 0 1 0 4 0Z"/>' '<path d="M12 9v6"/>'
     ),
-    "electrical_sensor": _svg('<path d="M13 3 5.5 13.5H11l-1 7.5 8-11H12l1-7Z"/>'),
+    "electricalSensor": _svg('<path d="M13 3 5.5 13.5H11l-1 7.5 8-11H12l1-7Z"/>'),
     "sensor": _svg(
         '<circle cx="12" cy="12" r="2"/>'
         '<path d="M8.2 8.2a5.4 5.4 0 0 0 0 7.6M15.8 8.2a5.4 5.4 0 0 1 0 7.6"/>'
     ),
-    "motion_sensor": _svg(
+    "motionSensor": _svg(
         '<path d="M4 15a8 8 0 0 1 16 0"/><path d="M7.5 15a4.5 4.5 0 0 1 9 0"/>'
         '<circle cx="12" cy="18" r="1.6"/>'
     ),
-    "open_close_sensor": _svg(
+    "openCloseSensor": _svg(
         '<path d="M6 21V4a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v17"/>'
         '<path d="M3.5 21h17"/><circle cx="14" cy="12" r="1"/>'
     ),
@@ -234,9 +236,22 @@ def scene_icon_name(icon: Any) -> str:
     return SCENE_ICONS.get(str(getattr(icon, "value", icon)), "scene")
 
 
+def _glyph_name(name: str) -> str:
+    """Resolve `name`, falling back for device types without a glyph of their
+    own: every `*Controller` uses `"controller"`, every other `*Sensor` the
+    generic `"sensor"` glyph."""
+    if name in ICON_SVG:
+        return name
+    if name.endswith("Controller"):
+        return "controller"
+    if name.endswith("Sensor"):
+        return "sensor"
+    return name
+
+
 def render_icon(name: str, color: str, size: int = 24) -> QPixmap:
     """Render glyph `name` in `color` at `size` px; empty pixmap if unknown."""
-    svg = ICON_SVG.get(name)
+    svg = ICON_SVG.get(_glyph_name(name))
     if svg is None:
         return QPixmap()
 

@@ -23,6 +23,7 @@ from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QResizeEvent
 from PyQt6.QtWidgets import (
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -55,6 +56,27 @@ _TYPE_SORT_WEIGHT = {
     "motionSensor": 90,
 }
 _CONTROLLER_WEIGHT = 100
+
+# Read-only readings per device type: (caption, unit, attribute). Units the
+# library does not document are left empty rather than guessed
+# (dirigera-api.md §1 finding 7). Only values that are not None are shown.
+_READINGS: dict[str, tuple[tuple[str, str, str], ...]] = {
+    "environmentSensor": (
+        ("Temperature", "°C", "current_temperature"),
+        ("Humidity", "%", "current_r_h"),
+        ("PM2.5", "", "current_p_m25"),
+        ("CO₂", "ppm", "current_c_o2"),
+        ("VOC index", "", "voc_index"),
+    ),
+    "lightSensor": (("Illuminance", "", "illuminance"),),
+    "airPurifier": (
+        ("PM2.5", "", "current_p_m25"),
+        ("Fan mode", "", "fan_mode"),
+    ),
+}
+
+# Readings shown side by side before the next row starts (§8.5.3).
+READINGS_PER_ROW = 3
 
 # Battery level at or below which the chip warns (design-doc.md §14 item 4).
 LOW_BATTERY_PERCENT = 20
@@ -99,6 +121,8 @@ class DeviceCard(QFrame):
         self._on_blind_state = on_blind_state
 
         self._controls: list[QWidget] = []
+        self._readings_box: Optional[QWidget] = None
+        self._readings: dict[str, MetricWidget] = {}
         self._is_offline = False
         self._pending = False
         self._error: Optional[str] = None
@@ -192,7 +216,11 @@ class DeviceCard(QFrame):
             self.width()
             - 2 * theme.SP16
             - theme.SP8
-            - self.status_chip.sizeHint().width()
+            - (
+                0
+                if self.status_chip.isHidden()
+                else self.status_chip.sizeHint().width()
+            )
         )
         text = str(self.full_name)
         if available > 0:
@@ -329,6 +357,11 @@ class DeviceCard(QFrame):
                     self._controls.append(btn)
                 self.control_zone.addLayout(btn_row)
 
+        elif dtype in _READINGS:
+            self._readings_box = QWidget()
+            self.control_zone.addWidget(self._readings_box)
+            self._fill_readings()
+
         elif dtype == "electricalSensor":
             # Power metric display (closes t-13)
             attrs = getattr(self.device, "attributes", None)
@@ -337,6 +370,70 @@ class DeviceCard(QFrame):
                 caption="Active power", initial_value=power, unit="W"
             )
             self.control_zone.addWidget(self.power_metric)
+
+    def _reading_values(self) -> dict[str, Any]:
+        """The non-None readings of this device, keyed by attribute name."""
+        attrs = getattr(self.device, "attributes", None)
+        values: dict[str, Any] = {}
+        for _caption, _unit, attr in _READINGS.get(
+            getattr(self.device, "device_type", ""), ()
+        ):
+            value = getattr(attrs, attr, None)
+            if value is None:
+                continue
+            if attr == "fan_mode":
+                # An enum in the library; show the word ("Auto").
+                value = str(getattr(value, "value", value)).capitalize()
+            values[attr] = value
+        return values
+
+    def _fill_readings(self) -> None:
+        """(Re)build the metric grid for the readings the device reports."""
+        box = self._readings_box
+        if box is None:
+            return
+        values = self._reading_values()
+        old = box.layout()
+        if old is not None:
+            while old.count():
+                item = old.takeAt(0)
+                widget = item.widget() if item is not None else None
+                if widget is not None:
+                    widget.deleteLater()
+            QWidget().setLayout(old)  # detach the old layout from the box
+        grid = QGridLayout(box)
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(theme.SP16)
+        grid.setVerticalSpacing(theme.SP12)
+        self._readings = {}
+        dtype = getattr(self.device, "device_type", "")
+        for caption, unit, attr in _READINGS.get(dtype, ()):
+            if attr not in values:
+                continue
+            metric = MetricWidget(caption=caption, initial_value=None, unit=unit)
+            metric.set_value(values[attr])
+            index = len(self._readings)
+            grid.addWidget(metric, index // READINGS_PER_ROW, index % READINGS_PER_ROW)
+            self._readings[attr] = metric
+        for column in range(READINGS_PER_ROW):
+            grid.setColumnStretch(column, 1)
+        box.setVisible(bool(self._readings))
+
+    def _sync_readings(self) -> None:
+        """Update the readings in place; rebuild only if the set changed."""
+        if self._readings_box is None:
+            return
+        values = self._reading_values()
+        if set(values) != set(self._readings):
+            self._fill_readings()
+            return
+        for attr, metric in self._readings.items():
+            metric.set_value(values[attr])
+
+    def _set_chip(self, text: str, variant: str) -> None:
+        """Show the state chip, or hide it when there is no state to show."""
+        self.status_chip.set_status(text, variant)
+        self.status_chip.setVisible(bool(text))
 
     def _update_status_chip(self) -> None:
         attrs = getattr(self.device, "attributes", None)
@@ -352,30 +449,54 @@ class DeviceCard(QFrame):
         if dtype in ("light", "outlet"):
             is_on = getattr(attrs, "is_on", None)
             if is_on is True:
-                self.status_chip.set_status("On", "ok")
+                self._set_chip("On", "ok")
             elif is_on is False:
-                self.status_chip.set_status("Off", "neutral")
+                self._set_chip("Off", "neutral")
             else:
-                self.status_chip.set_status("Ready", "neutral")
+                self._set_chip("", "neutral")
         elif dtype == "blinds":
             lvl = getattr(attrs, "blinds_current_level", None)
             if lvl == 100:
-                self.status_chip.set_status("Open", "neutral")
+                self._set_chip("Open", "neutral")
             elif lvl == 0:
-                self.status_chip.set_status("Closed", "neutral")
+                self._set_chip("Closed", "neutral")
             elif lvl is not None:
-                self.status_chip.set_status("Partly open", "neutral")
+                self._set_chip("Partly open", "neutral")
             else:
-                self.status_chip.set_status("Ready", "neutral")
+                self._set_chip("", "neutral")
+        elif dtype in ("motionSensor", "occupancySensor"):
+            detected = getattr(attrs, "is_detected", None)
+            if detected is True:
+                self._set_chip("Motion", "ok")
+            elif detected is False:
+                self._set_chip("Clear", "neutral")
+            else:
+                self._set_chip("", "neutral")
+        elif dtype == "openCloseSensor":
+            is_open = getattr(attrs, "is_open", None)
+            if is_open is None:
+                self._set_chip("", "neutral")
+            else:
+                self._set_chip("Open" if is_open else "Closed", "neutral")
+        elif dtype == "waterSensor":
+            leak = getattr(attrs, "water_leak_detected", None)
+            if leak is True:
+                self._set_chip("Leak", "danger")
+            elif leak is False:
+                self._set_chip("Dry", "neutral")
+            else:
+                self._set_chip("", "neutral")
         else:
-            self.status_chip.set_status("Ready", "neutral")
+            # No readable state (remotes, air quality sensors): no chip
+            # rather than an invented one (design-doc.md §1 principle 1).
+            self._set_chip("", "neutral")
 
         # A low battery is the one fact that overrides the state chip (§8.1
         # state 4). It lives here, not in the footer, so the order in which
         # chip and footer are refreshed cannot hide it.
         battery = getattr(attrs, "battery_percentage", None)
         if isinstance(battery, (int, float)) and battery <= LOW_BATTERY_PERCENT:
-            self.status_chip.set_status("Low battery", "warn")
+            self._set_chip("Low battery", "warn")
 
     def _style_footer(self, danger: bool) -> None:
         color = theme.DANGER if danger else theme.TEXT2
@@ -454,7 +575,7 @@ class DeviceCard(QFrame):
         for ctrl in self._controls:
             ctrl.setEnabled(not offline)
         if offline:
-            self.status_chip.set_status("Offline", "neutral")
+            self._set_chip("Offline", "neutral")
             if not self._pending:
                 self._set_footer(self._offline_text())
         else:
@@ -514,6 +635,7 @@ class DeviceCard(QFrame):
             slider.blockSignals(True)
             slider.set_value(int(value))
             slider.blockSignals(False)
+        self._sync_readings()
         metric = getattr(self, "power_metric", None)
         if isinstance(metric, MetricWidget):
             metric.set_value(getattr(attrs, "current_active_power", None))

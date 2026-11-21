@@ -76,7 +76,7 @@ Found by comparing the implementation with `doc/design-doc.md` in the 2026-11-21
 - [x] **t-66 [B·M]** Replace modal `QMessageBox` errors for routine failures (device commands, refresh) with inline status (§8.14, §10.1). Coordinate with t-56, which must not raise a dialog every poll. *(done: commands, refresh, connection and discovery report inline; only `HubSelectionDialog` is modal)*
 - [x] **t-67 [B·S]** Truncate long device names with an ellipsis and tooltip; today a long name widens the card or clips (§8.1 rule 2, acceptance item 6).
 - [x] **t-68 [B·S]** Offline footer should read "Last seen <relative time>" from `device.last_seen`, not "Device unreachable" (§8.1 state 2).
-- [ ] **t-69 [B·M]** Give the remaining device types real state instead of an empty card with an invented "Ready" chip: environment, motion, open/close, water, occupancy and light sensors, air purifiers, controllers (§8.5, principle 1). Add the missing types to the card sort map (§8.1 rule 3).
+- [x] **t-69 [B·M]** Give the remaining device types real state instead of an empty card with an invented "Ready" chip: environment, motion, open/close, water, occupancy and light sensors, air purifiers, controllers (§8.5, principle 1). Add the missing types to the card sort map (§8.1 rule 3).
 - [x] **t-70 [C·S]** Chip text rules: no percentage in blind chips, sentence case, and no raw `device_type` captions such as "Open close sensor" (§8.2, acceptance item 4).
 - [ ] **t-71 [C·S]** Scene tiles should use a 240 px minimum column width, not the 280 px card width (§8.10.1); give `CardGrid` a configurable minimum.
 - [x] **t-72 [C·S]** Window defaults: 1080 × 700 default, 640 × 480 minimum, no extra tab-layout margins outside the spacing scale (§4.1, §4.4). Related to t-54.
