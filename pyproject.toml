@@ -31,7 +31,7 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-py-modules = ["dashboard", "main", "network_discovery", "settings", "theme"]
+py-modules = ["dashboard", "main", "network_discovery", "rooms", "settings", "theme"]
 packages = ["widgets"]
 
 [dependency-groups]

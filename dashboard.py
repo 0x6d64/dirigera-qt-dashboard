@@ -39,6 +39,7 @@ from network_discovery import (
     get_local_networks,
     hosts_to_scan,
 )
+from rooms import format_room_label, get_room, group_by_room, is_energy_device
 from settings import DiscoverySettings, parse_discovery_settings
 from widgets.card import DeviceCard, device_sort_key
 from widgets.chip import StatusChip
@@ -69,9 +70,6 @@ QWIDGETSIZE_MAX = 16777215
 
 # Saved credentials live next to this file, whatever the working directory.
 CONFIG_PATH = Path(__file__).resolve().parent / "config.ini"
-
-# Section label for devices that are not assigned to a room.
-UNKNOWN_ROOM = "Unknown room"
 
 # The fan mode the hub reports for each fan motor state (req-15); used to
 # update a purifier's `fan_mode` right after a successful speed change.
@@ -1010,12 +1008,12 @@ class DirigeraDashboard(QMainWindow):
         self._update_scenes(scenes)
 
         # Energy view: outlets and electrical sensors grouped by room (§9.4).
-        energy_by_room = self.group_by_room(
-            [device for device in self.devices if self.is_energy_device(device)]
+        energy_by_room = group_by_room(
+            [device for device in self.devices if is_energy_device(device)]
         )
         self.energy_view.update_rooms(
             [
-                (self.format_room_label(room), sorted(devs, key=device_sort_key))
+                (format_room_label(room), sorted(devs, key=device_sort_key))
                 for room, devs in energy_by_room
             ]
         )
@@ -1044,13 +1042,13 @@ class DirigeraDashboard(QMainWindow):
 
     def _update_rooms(self, devices: List[Any]) -> List[Tuple[str, List[Any]]]:
         """Reconcile room sections and device cards with `devices`."""
-        groups = self.group_by_room(devices)
+        groups = group_by_room(devices)
         old_cards = self._device_cards
         new_cards: Dict[str, DeviceCard] = {}
         wanted: List[Tuple[str, str, List[QWidget]]] = []
 
         for room_name, room_devices in groups:
-            room_key = self.get_room(room_devices[0])[0]
+            room_key = get_room(room_devices[0])[0]
             cards: List[QWidget] = []
             for device in sorted(room_devices, key=device_sort_key):
                 device_id = str(getattr(device, "id", ""))
@@ -1081,7 +1079,7 @@ class DirigeraDashboard(QMainWindow):
             if key not in self._sections:
                 self._sections[key] = self._new_room_section(room_name)
             _section, grid, label = self._sections[key]
-            label.setText(self.format_room_label(room_name))
+            label.setText(format_room_label(room_name))
             if grid.cards() != cards:
                 grid.set_cards(cards)
 
@@ -1173,7 +1171,7 @@ class DirigeraDashboard(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(theme.SP12)  # label-to-grid gap (design-doc.md §4.3)
 
-        label = QLabel(self.format_room_label(room_name))
+        label = QLabel(format_room_label(room_name))
         label.setProperty("role", "section")
         layout.addWidget(label)
 
@@ -1387,49 +1385,3 @@ class DirigeraDashboard(QMainWindow):
         self.close()
         # A hidden window closing does not trigger quit-on-last-window.
         QApplication.quit()
-
-    @staticmethod
-    def format_room_label(room_name: str) -> str:
-        """Sentence-case a room name for a section label (design-doc.md §8.9).
-
-        Only the first character is capitalised so acronyms and proper nouns a
-        user typed into the IKEA app keep their casing.
-        """
-        name = room_name.strip()
-        if not name:
-            return UNKNOWN_ROOM
-        return name[0].upper() + name[1:]
-
-    @staticmethod
-    def is_energy_device(device: Any) -> bool:
-        """Return True for devices that can report energy data (§9.4)."""
-        return getattr(device, "device_type", "") in ("outlet", "electricalSensor")
-
-    @staticmethod
-    def get_room(device: Any) -> Tuple[str, str]:
-        """Return (room id, room name) for a device.
-
-        `device.room` is a pydantic Room model (or None), not a dict. Devices
-        without a room share one group under an empty id.
-        """
-        room = getattr(device, "room", None)
-        if room is None:
-            return "", UNKNOWN_ROOM
-        return str(getattr(room, "id", "") or ""), room.name or UNKNOWN_ROOM
-
-    @classmethod
-    def group_by_room(cls, devices: List[Any]) -> List[Tuple[str, List[Any]]]:
-        """Group devices into (room name, devices) pairs in display order.
-
-        Groups are keyed by room id, so two rooms that share a name stay
-        separate. Sections sort by name case-insensitively (design-doc.md §14
-        item 2: alphabetical), with the id as a stable tie-breaker.
-        """
-        groups: Dict[str, Tuple[str, List[Any]]] = {}
-        for device in devices:
-            room_id, room_name = cls.get_room(device)
-            groups.setdefault(room_id, (room_name, []))[1].append(device)
-        ordered = sorted(
-            groups.items(), key=lambda item: (item[1][0].casefold(), item[0])
-        )
-        return [(name, members) for _, (name, members) in ordered]
