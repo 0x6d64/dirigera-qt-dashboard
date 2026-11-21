@@ -84,7 +84,7 @@ Found by comparing the implementation with `doc/design-doc.md` in the 2026-11-21
 - [x] **t-74 [C·M]** Keyboard and accessibility: arrow keys in the segmented control, fixed width for metric values, accessible names on blind buttons and sliders, reduced-motion setting (§10.4.5, §10.5, §12.3). *(done; the reduced-motion setting was dropped by the owner on 2026-11-21, §14 item 7)*
 - [x] **t-75 [C·S]** Outlets with metering show their energy footer in the Rooms view, as electrical sensors do.
 - [x] **t-76 [C·S]** Fix the design doc itself. Done on `docs/design-doc-cleanup`: missing-doc references, stale `[open]`/`[verified]` tags, §5.2 pairings (now owned by the contrast test), chip radius vs height. Window size was fixed by t-72 and polling added by t-56; the "Dirigera" app title moved to `design-doc.md` §14 item 1 (app name, open).
-- [ ] **t-77 [C·S]** Decide whether "automatic scenes" exist: the library's `SceneType` has no automatic type, so §8.10.5 and §9.3 cannot be built as written.
+- [x] **t-77 [C·S]** Decide whether "automatic scenes" exist: the library's `SceneType` has no automatic type, so §8.10.5 and §9.3 cannot be built as written. *(decided 2026-11-21: automatic = any scene type other than `userScene`; hidden behind a toggle, implemented by t-90)*
 - [ ] **t-78 [C·S]** *(deferred indefinitely 2026-11-21: no real blind available; the card keeps 100 = "Open")* Verify on a real blind whether level 100 means open or closed; the card labels the slider "Open" and the chip says "Open" at 100 (§8.1).
 
 ## Typing, tests & CI
@@ -121,6 +121,7 @@ Stated by the user; recorded, not yet planned.
 - [ ] **t-87 [C·S]** Energy totals (`design-doc.md` §14 item 5): show a total per room on the Energy tab and one home total. Coordinate with t-84 so the cost totals use the same sums.
 - [ ] **t-88 [C·S]** PM2.5 bands (`design-doc.md` §14 item 9): label PM2.5 readings on the purifier and air quality sensor cards as good (≤ 15), moderate (≤ 35) or poor (above), in µg/m³, using the existing ok/warn/error tones with the word always shown.
 - [ ] **t-89 [C·S]** Hide devices the hub flags `is_hidden` (`doc/dirigera-api.md` §2.2 row 6), like the IKEA app. None on the test hub are hidden today, so test it with stubs.
+- [ ] **t-90 [C·S]** Automatic scenes toggle (`design-doc.md` §8.10.5, §9.3, §14 item 3): hide scenes whose `type` is not `userScene` (the test hub has four `customScene` "Smart Notifications@…" entries, two with the same name) unless a "Show automatic scenes" toggle above the scene grid is on; off by default, choice remembered.
 
 ## Design document implementation (v1.0)
 

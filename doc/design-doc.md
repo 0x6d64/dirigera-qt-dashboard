@@ -362,8 +362,10 @@ Label size, medium weight, `text-2`, sentence case. Placed above each room's car
 3. After activation, the button area shows "Activated" in `ok` text for about two
    seconds, then returns. No modal dialog. `[proposed]`
 4. No undo after activation (section 14, item 12).
-5. Automatic (non-user) scenes are hidden by default, shown when "Show automatic scenes"
-   is enabled. `[proposed]` Decision pending (section 14, item 3).
+5. Automatic scenes are those the IKEA app creates itself: every scene whose type is not
+   `userScene` (on the test hub, the `customScene` "Smart Notifications@…" entries). They
+   are hidden by default and shown when "Show automatic scenes" is enabled; the choice is
+   remembered (section 14, item 3; t-90).
 
 ### 8.11 Energy card
 
@@ -403,7 +405,7 @@ with its label and card grid. Sections are ordered alphabetically (section 14, i
 ### 9.3 Scenes
 
 Same header with the Scenes segment selected. Content: scene tiles in a width-driven
-grid, with an optional "Show automatic scenes" toggle above the grid. `[proposed]`
+grid, with a "Show automatic scenes" toggle above the grid (off by default; t-90).
 
 ### 9.4 Energy
 
@@ -520,7 +522,7 @@ See `qt-gotchas.md`.
 | --- | --- | --- |
 | 1 | Application name | Decided: keep "Dirigera Dashboard" |
 | 2 | Room section order | Decided and implemented: alphabetical, case-insensitive |
-| 3 | Show automatic scenes by default | Open. Default proposed: no (t-77) |
+| 3 | Show automatic scenes by default | Decided: no; non-`userScene` scenes are hidden behind a toggle (t-90) |
 | 4 | Low-battery threshold | Decided and implemented: 20 % (`LOW_BATTERY_PERCENT`) |
 | 5 | Energy totals per home or per room | Decided: a total per room and one home total (t-87) |
 | 6 | Icon source | Decided and implemented: icons drawn in code (`widgets/icons.py`) |
