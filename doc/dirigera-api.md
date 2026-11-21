@@ -44,7 +44,14 @@ Section 4 gives a read-only way to dump them.
    `data.id` plus only the changed attributes (README example: `{'isOn': False}`).
    Events during a reconnect are lost, so refetch state after reconnecting. To apply
    an event, either merge its camelCase keys or `reload()` the device (one
-   `GET /devices/{id}`), which is simpler and robust. This is `t-16`.
+   `GET /devices/{id}`), which is simpler and robust. This is `t-16`. The app uses
+   neither: any readable event triggers one coalesced full refresh (`EventWorker` in
+   `workers.py`), so the event shapes are not relied on. It passes
+   `reconnect=5` to `create_event_listener`, takes `(ws, message)` in `on_message`,
+   and ends the listener with `stop_event_listener()`, which only closes an
+   existing socket (a stop that comes before it exists is re-applied in `on_open`).
+   Whether a dropped connection always fires `on_close`/`on_error` is
+   `[unverified]` until the real-hub run.
 6. **The shared `requests.Session` is not documented as thread-safe.** `[lib]` The
    hub object uses one session for all calls. Running slider commands, refreshes and
    the listener concurrently on one `Hub` is a risk `[unverified]`. Serialize hub
@@ -191,7 +198,7 @@ for d in hub.get("/devices"):
 | 4 | Should `is_hidden` devices be shown? | Decided: no, hide them (t-89) |
 | 5 | Values of `color_mode`, `room.icon`, `room.color` | Read from the dump; `room.color` is a hub colour name (e.g. `ikea_green_no_65`) mapped by its hue word to best-guess RGB values (t-86, `theme.ROOM_COLOURS`) |
 | 6 | Does `light_level` stay populated while a light is off? | Answered by the owner: yes, the hub keeps the last value |
-| 7 | Event shapes for button presses, add/remove, reachability | Only needed for live updates (t-16); answer then |
+| 7 | Event shapes for button presses, add/remove, reachability | Not needed by t-16 (events are only a hint); record them from a debug log of the real-hub run if wanted |
 
 ## 5. Observed on a real hub (2026-11-21)
 

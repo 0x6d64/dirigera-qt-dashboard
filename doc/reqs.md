@@ -75,3 +75,7 @@ during implementation. Each entry cites its origin.
 - **req-14** — Closing the window while hub calls are in flight must not
   crash or lose the call; the app may finish them before it exits, but no
   running worker thread may be destroyed. *(t-61, implemented)*
+- **req-23** — A change made outside the dashboard must show on the cards within
+  about two seconds while the hub's event socket is up, and the dashboard must
+  keep working by polling when it is not. Events only prompt a refresh; their
+  shapes are not relied on. *(t-16, implemented)*

@@ -28,7 +28,8 @@ may end with an `> **Executed …**` note listing branch and commit hashes.
 
 ### Plan: live updates via websocket (t-16)
 
-Status: open
+Status: done 2026-11-21 (code and tests; the real-hub check below is still
+outstanding)
 
 Goal: A change made outside the dashboard (IKEA app, wall switch, remote)
 shows on the cards within about two seconds, without waiting for the 30 s poll.
@@ -52,7 +53,7 @@ Affected files: `workers.py`, `dashboard.py`, `doc/design-doc.md` §10.2 and
 Rules: as in "Execution order, batch 3" (gates, theme tokens, no modal
 dialogs, LF endings). Branch `feat/live-events`.
 
-#### Commit 1 — "add event listener worker"
+#### Commit 1 — "add event listener worker" ✓ executed 2026-11-21
 
 1. `workers.py`: `parse_event(message) -> Optional[dict]`, a pure function:
    JSON-decode a `str`/`bytes` message; return the dict when it has a string
@@ -77,7 +78,7 @@ dialogs, LF endings). Branch `feat/live-events`.
 
 Verification: gates; the new tests.
 
-#### Commit 2 — "refresh on live events"
+#### Commit 2 — "refresh on live events" ✓ executed 2026-11-21
 
 1. `dashboard.py`: `_start_events()` after a successful `_on_connected`
    (after the first refresh is started); `_stop_events()` stops and drops the
@@ -109,7 +110,7 @@ Verification: gates; the new tests.
 
 Verification: gates; the new tests.
 
-#### Commit 3 — "document live updates"
+#### Commit 3 — "document live updates" ✓ executed 2026-11-21
 
 1. `doc/design-doc.md`: §10.3 states what is built (events as a hint, the
    coalesce window, the live caption, polling as fallback, tags `[verified]`
@@ -125,6 +126,13 @@ Verification: gates; the new tests.
 
 Verification: gates; no stale "planned (`t-16`)" wording left
 (`grep -rn "t-16" doc agent-notes`).
+
+> **Executed 2026-11-21** on `feat/live-events`: commit 1 `373b322`, commit 2
+> `7de53e6`, commit 3 is the one that records this note. Deviations: the new
+> requirement is `req-23`; events arriving while a refresh is already pending
+> are not filtered separately (the coalesce timer and the pending flag already
+> make that one refresh); the first socket open after connect does not refetch,
+> only an open after a loss does (the connect fetch covers the first).
 
 #### Real-hub check (owner, after commit 2 or 3)
 
