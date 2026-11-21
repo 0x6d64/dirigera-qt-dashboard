@@ -53,7 +53,7 @@ take the next free number (see `AGENTS.md`).
 - [x] **t-27 [B·S]** Surface `config.ini` parse/read errors instead of ignoring them silently *(dashboard.py:137–152)*.
 - [x] **t-28 [B·S]** Resolve `config.ini` relative to the script/home directory instead of the current working directory *(dashboard.py:139)* — launching from elsewhere silently loses saved credentials.
 - [x] **t-29 [B·M]** *(obsolete 2026-11-21: user decided plaintext `config.ini` is acceptable; req-7 withdrawn)* Stop storing the bearer token in plaintext `config.ini`; support an environment variable or OS keyring, with `config.ini` as fallback.
-- [ ] **t-30 [C·S]** Validate the IP address format before attempting a connection *(dashboard.py:282)*.
+- [x] **t-30 [C·S]** Validate the IP address format before attempting a connection *(dashboard.py:282)*. *(done: `connect_to_hub` checks with `ipaddress.ip_address()`)*
 
 ## Review fixes (2026-11-21)
 
@@ -73,7 +73,7 @@ Found in the 2026-11-21 repo review and fixed on `improve-ui` the same day.
 
 Found by comparing the implementation with `doc/design-doc.md` in the 2026-11-21 review. Deliberately deferred: the design topic is revisited as a whole later, and several items need a decision in the doc first.
 
-- [ ] **t-66 [B·M]** Replace modal `QMessageBox` errors for routine failures (device commands, refresh) with inline status (§8.14, §10.1). Coordinate with t-56, which must not raise a dialog every poll.
+- [x] **t-66 [B·M]** Replace modal `QMessageBox` errors for routine failures (device commands, refresh) with inline status (§8.14, §10.1). Coordinate with t-56, which must not raise a dialog every poll. *(done: commands, refresh, connection and discovery report inline; only `HubSelectionDialog` is modal)*
 - [ ] **t-67 [B·S]** Truncate long device names with an ellipsis and tooltip; today a long name widens the card or clips (§8.1 rule 2, acceptance item 6).
 - [ ] **t-68 [B·S]** Offline footer should read "Last seen <relative time>" from `device.last_seen`, not "Device unreachable" (§8.1 state 2).
 - [ ] **t-69 [B·M]** Give the remaining device types real state instead of an empty card with an invented "Ready" chip: environment, motion, open/close, water, occupancy and light sensors, air purifiers, controllers (§8.5, principle 1). Add the missing types to the card sort map (§8.1 rule 3).

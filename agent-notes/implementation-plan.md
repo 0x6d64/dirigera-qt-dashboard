@@ -464,6 +464,10 @@ the hub chooser, Executed markers here.
 
 Verification: as listed per commit; all four gates green.
 
+> **Executed 2026-11-21** on branch `fix/inline-errors`: commit 1 `eb597cf`
+> "show command and refresh failures inline", commit 2 `c8031bd` "show
+> connection and discovery outcomes inline", commit 3 "record inline errors".
+
 ---
 
 ### Plan: specific exceptions and logging (t-26)
