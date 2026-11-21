@@ -767,6 +767,14 @@ Affected files: `network_discovery.py`, `dashboard.py`, `config.ini.example`,
 
 Check off t-22, t-23, Executed markers.
 
+> **Executed 2026-11-21** on branch `fix/discovery-scope`: commit 1 `0af2bcc`
+> "skip link-local and virtual networks", commit 2 `11e7db4` "configurable scan
+> scope", commit 3 "record discovery scope". Deviations: `scan_ip` and the
+> port/API probes now receive the configured per-IP timeout (it was accepted
+> by `discover_dirigera_hubs` but unused); interface-name rules match by
+> prefix; an invalid `networks` entry drops the whole networks setting (auto
+> detection is used) rather than only that entry.
+
 ---
 
 ### Plan: type checking and remaining smoke tests (t-34, t-55)
