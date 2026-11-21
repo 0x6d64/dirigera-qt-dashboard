@@ -141,6 +141,44 @@ def test_command_runs_off_the_gui_thread_and_updates_card(
     assert lamp.threads and lamp.threads[0] is not threading.main_thread()
 
 
+def test_brightness_on_an_off_light_switches_it_on_first(
+    window: Any, wait_until: Wait
+) -> None:
+    # The hub ignores a level sent to an off light, and a level sent before the
+    # on command; so the order must be on, then level (real hub, 2026-11-21).
+    lamp = StubLight()
+    lamp.attributes.is_on = False
+    card = _card(window, lamp)
+    card.brightness_slider.set_value(100)
+    window.set_light_brightness(card, 100)
+    wait_until(lambda: card.status_chip.text() == "On")
+    assert lamp.sent == [("on", True), ("level", 100)]
+    assert card.switch.isChecked() is True
+    assert card.brightness_slider.value() == 100
+
+
+def test_brightness_on_a_lit_light_sends_only_the_level(
+    window: Any, wait_until: Wait
+) -> None:
+    lamp = StubLight()
+    lamp.attributes.is_on = True
+    card = _card(window, lamp)
+    window.set_light_brightness(card, 30)
+    wait_until(lambda: lamp.sent == [("level", 30)])
+
+
+def test_failed_brightness_on_an_off_light_leaves_it_off(
+    window: Any, wait_until: Wait
+) -> None:
+    lamp = StubLight(fail=True)
+    lamp.attributes.is_on = False
+    card = _card(window, lamp)
+    window.set_light_brightness(card, 80)
+    wait_until(lambda: "hub said no" in card.footer_label.text())
+    assert card.switch.isChecked() is False
+    assert lamp.sent == []  # the switch-on failed, so no level followed
+
+
 def test_failed_command_resyncs_card_and_reports(
     window: Any, dialogs: list, wait_until: Wait
 ) -> None:
