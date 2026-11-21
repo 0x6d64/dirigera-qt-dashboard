@@ -9,8 +9,11 @@ Follows design-doc.md §8.11 and §9.4:
 - Devices without metering data get no metric row and a "No energy data"
   footer.
 - Cards are grouped by room in the same flow grid as the Rooms view.
-- Per-home versus per-room totals is `[open]` in the design doc, so no totals
-  are shown yet.
+- Usage since the last reset with its cost at the configured price (req-19),
+  and a reset button with an inline two-step confirm for the metering plugs
+  that the hub lets reset (req-18); no dialog.
+- Totals (§14 item 5, t-87): a caption under each room label and a home line
+  above the rooms, summing live power, usage and cost.
 
 Only outlets and electrical sensors reach this view; the dashboard filters
 them before calling `EnergyView.set_rooms()`.
