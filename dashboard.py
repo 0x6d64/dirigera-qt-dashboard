@@ -38,7 +38,12 @@ from network_discovery import (
     hosts_to_scan,
 )
 from rooms import format_room_label, get_room, group_by_room, is_energy_device
-from settings import DiscoverySettings, parse_discovery_settings
+from settings import (
+    DiscoverySettings,
+    EnergySettings,
+    parse_discovery_settings,
+    parse_energy_settings,
+)
 from widgets.card import DeviceCard, device_sort_key
 from widgets.chip import StatusChip
 from widgets.connection import ConnectionBlock
@@ -237,6 +242,10 @@ class DirigeraDashboard(QMainWindow):
         in the status caption and leaves the fields empty.
         """
         self.discovery_settings = DiscoverySettings()
+        self.energy_settings = EnergySettings()
+        self.energy_view.set_price(
+            self.energy_settings.price_per_kwh, self.energy_settings.currency
+        )
         if not CONFIG_PATH.exists():
             return
         config = configparser.ConfigParser()
@@ -245,17 +254,25 @@ class DirigeraDashboard(QMainWindow):
         except (configparser.Error, OSError, UnicodeDecodeError) as error:
             self.set_status_text(f"Could not read config.ini: {error}", "danger")
             return
+        ignored: List[str] = []
         if "discovery" in config:
             self.discovery_settings, problems = parse_discovery_settings(
                 config["discovery"]
             )
-            if problems:
-                self.set_status_text(
-                    "Ignored invalid [discovery] settings in config.ini ("
-                    + "; ".join(problems)
-                    + "); using defaults",
-                    "danger",
-                )
+            ignored += [f"[discovery] {p}" for p in problems]
+        if "energy" in config:
+            self.energy_settings, problems = parse_energy_settings(config["energy"])
+            self.energy_view.set_price(
+                self.energy_settings.price_per_kwh, self.energy_settings.currency
+            )
+            ignored += [f"[energy] {p}" for p in problems]
+        if ignored:
+            self.set_status_text(
+                "Ignored invalid settings in config.ini ("
+                + "; ".join(ignored)
+                + "); using defaults",
+                "danger",
+            )
         if "hub" not in config:
             return
         hub = config["hub"]

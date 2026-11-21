@@ -98,6 +98,14 @@ timeout = 1.0
 Invalid values are ignored with a message in the status line, and the defaults
 are used.
 
+### Energy price
+
+The Energy tab shows the cost of each metering plug's usage. The price comes
+from an optional `[energy]` section in `config.ini`: `price_per_kwh` (default
+1.54) and `currency` (default RON). The default is the Romanian residential
+price of March 2026, including network costs and taxes; set your own tariff if
+it differs. Invalid values are ignored with a message, as for `[discovery]`.
+
 ## Security
 
 The hub uses a self-signed certificate, and the `dirigera` library does not

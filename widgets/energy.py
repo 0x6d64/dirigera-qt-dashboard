@@ -27,6 +27,7 @@ from PyQt6.QtWidgets import (
 )
 
 import theme
+from settings import DEFAULT_CURRENCY, DEFAULT_PRICE_PER_KWH
 from widgets.cardbase import CardBase, label_style
 from widgets.grid import CardGrid
 from widgets.metric import MetricWidget
@@ -146,6 +147,8 @@ class EnergyView(QWidget):
         # PyQt6 stubs mis-type the first argument of QWidget.__init__ here.
         super().__init__(parent)  # type: ignore[arg-type]
         self._shape: List[Tuple[str, List[Any]]] = []
+        self.price_per_kwh = DEFAULT_PRICE_PER_KWH
+        self.currency = DEFAULT_CURRENCY
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -170,6 +173,11 @@ class EnergyView(QWidget):
         self.empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.empty_label.hide()
         outer.addWidget(self.empty_label, 1)
+
+    def set_price(self, price_per_kwh: float, currency: str) -> None:
+        """Set the price the usage costs are computed from (req-19)."""
+        self.price_per_kwh = price_per_kwh
+        self.currency = currency
 
     def update_rooms(self, rooms: List[Tuple[str, List[Any]]]) -> None:
         """Show (room label, devices) pairs, updating cards in place (t-19).

@@ -20,3 +20,12 @@ token = YOUR_TOKEN_HERE
 # max_workers = 50
 # Seconds to wait for each address (0.1-30, default 1.0)
 # timeout = 1.0
+
+# Optional: the price used for the cost of energy use on the Energy tab.
+# Defaults: Romania, March 2026, residential price including network costs and
+# taxes (1.54 RON per kWh).
+[energy]
+# Price per kWh (above 0 and up to 100; a comma is accepted as the decimal sign)
+# price_per_kwh = 1.54
+# Currency label shown after the cost (1-8 characters)
+# currency = RON
