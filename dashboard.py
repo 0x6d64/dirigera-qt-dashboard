@@ -1354,11 +1354,20 @@ class DirigeraDashboard(QMainWindow):
             )
 
     def set_light_brightness(self, card: DeviceCard, brightness: int) -> None:
-        """Set a light's brightness."""
+        """Set a light's brightness, switching an off light on first.
+
+        The hub ignores a level sent to an off light, and a level sent before
+        the on command, so the order is on, then level (t-94; seen on a real
+        hub, `doc/dirigera-api.md` §5 item 6).
+        """
         device = card.device
-        self.run_device_command(
-            card, lambda: device.set_light_level(brightness), "set brightness"
-        )
+
+        def command() -> None:
+            if not getattr(device.attributes, "is_on", True):
+                device.set_light(lamp_on=True)
+            device.set_light_level(brightness)
+
+        self.run_device_command(card, command, "set brightness")
 
     def set_light_temperature(self, card: DeviceCard, kelvin: int) -> None:
         """Set a light's colour temperature in Kelvin."""

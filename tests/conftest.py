@@ -122,6 +122,7 @@ class StubLight:
         self.colour_calls: list[tuple[float, float]] = []
         self.fail = fail
         self.threads: list[threading.Thread] = []
+        self.sent: list[tuple[str, Any]] = []  # commands in the order sent
 
     def _command(self) -> None:
         self.threads.append(threading.current_thread())
@@ -130,10 +131,12 @@ class StubLight:
 
     def set_light(self, lamp_on: bool) -> None:
         self._command()
+        self.sent.append(("on", lamp_on))
         self.attributes.is_on = lamp_on
 
     def set_light_level(self, level: int) -> None:
         self._command()
+        self.sent.append(("level", level))
         self.attributes.light_level = level
 
     def set_color_temperature(self, color_temp: int) -> None:

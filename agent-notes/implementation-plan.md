@@ -26,6 +26,38 @@ may end with an `> **Executed …**` note listing branch and commit hashes.
 
 ## Plans
 
+### Plan: brightness slider on an off light (t-94)
+
+Status: done 2026-11-21
+
+Goal: Moving the brightness slider of an off light switches it on at that
+level (owner bug report, 2026-11-21: set 50 %, switch off, move the slider to
+100 %: nothing happened).
+
+Cause (real hub, Light Strip, `doc/dirigera-api.md` §5 item 6): the hub
+ignores a `lightLevel` sent to an off light, and also a `lightLevel` that
+comes before or in the same request as `isOn`; only `isOn: true` followed by a
+separate level request works.
+
+Affected files: `dashboard.py`, `tests/conftest.py`, `tests/test_dashboard.py`,
+`doc/dirigera-api.md`
+
+#### Commit 1 — "switch an off light on when its level changes" (t-94) ✓ executed 2026-11-21
+
+1. `set_light_brightness` runs one worker command: `set_light(True)` when the
+   device's `is_on` is false, then `set_light_level`. A failed switch-on skips
+   the level; the existing resync shows the real state.
+2. Tests: off light gets on then level in that order and the card ends on at
+   the new level; a lit light gets only the level; a failing hub leaves the
+   card off and sends nothing. `StubLight` records the commands in order.
+3. Record the hub behaviour in `doc/dirigera-api.md` §5 item 6.
+
+Not covered: colour temperature and colour on an off light behave untested;
+check on the hub before applying the same rule.
+
+Verification: gates; the new tests; on the real hub, move the slider of an off
+light and see it switch on at that level.
+
 ### Plan: live updates via websocket (t-16)
 
 Status: done 2026-11-21 (code and tests; the real-hub check below is still

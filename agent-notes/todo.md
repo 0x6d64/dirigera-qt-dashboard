@@ -129,6 +129,8 @@ Stated by the user; recorded, not yet planned.
 
 - [x] **t-93 [C·S]** Metric unit and band note ("µg/m³ Good") sit directly after the number on its baseline instead of far right and at the top (owner feedback 2026-11-21); the value label no longer reserves a minimum width, so the unit shifts slightly when the digit count changes (`design-doc.md` §8.5, §6.1.3).
 
+- [x] **t-94 [B·S]** Bug (owner report 2026-11-21): moving the brightness slider of an off light did nothing. Expected: the light switches on at the chosen level. Cause: the hub ignores a level sent to an off light (`doc/dirigera-api.md` §5 item 6). *(done on `fix/slider-while-off`: the command sends on, then the level)*
+
 ## Design document implementation (v1.0)
 
 Design tasks build on each other. Recommended order: t-40 → t-43/t-44 → t-41/t-42 → t-45 → t-46/t-47/t-48 → t-49/t-51/t-52 → t-50/t-53. Run t-17 before t-49.
