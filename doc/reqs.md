@@ -12,9 +12,9 @@ reused.
   auto, or a fixed level. *(user, 2026-11-21; t-80, implemented)*
 - **req-16** — The air purifier's PM2.5 reading must be displayed. *(user,
   2026-11-21; t-81, implemented by t-69)*
-- **req-17** — Historical air quality readings should be shown if the hub
-  provides them; whether it does is to be explored. *(user, 2026-11-21; t-82,
-  open)*
+- **req-17** — *Dropped (2026-11-21, user decision).* Historical air quality
+  readings should be shown if the hub provides them. The hub serves none and the
+  owner chose not to record readings in the app. *(t-82, dropped)*
 - **req-18** — The Energy tab must offer the metering plugs' reset of
   accumulated usage. *(user, 2026-11-21; t-83, implemented)*
 - **req-19** — Metering plugs must show the cost of their usage, from a

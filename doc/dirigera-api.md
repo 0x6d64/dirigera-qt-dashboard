@@ -246,7 +246,11 @@ remotes. Answers to section 4 where the data settles them:
    over time. Guessed routes (`/history`, `/devices/{id}/history`,
    `/devices/{id}/measurements`, `/statistics`, `/insights`, `/energy`,
    `/events`, …) return 404, and no public documentation names one. The IKEA
-   app's graphs may come from IKEA's cloud or from a route not found yet.
+   app's graphs may come from IKEA's cloud or from a route not found yet. A web
+   search (2026-11-21) found no history route either: the community projects
+   (Prometheus exporter, Home Assistant, Raspberry Pi guides) poll the hub and
+   store the readings themselves, and the IKEA apps pin their TLS certificate,
+   which makes a traffic capture hard. Decision: history is dropped (t-82).
 6. **A level sent to an off light is ignored.** Light Strip (`canReceive`
    `isOn`, `lightLevel`, `colorHue`, `colorSaturation`), tested 2026-11-21 with
    a 6 s wait before each read (the hub applies changes with a delay of a few
