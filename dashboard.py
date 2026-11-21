@@ -508,8 +508,11 @@ class DirigeraDashboard(QMainWindow):
 
     def on_discovery_finished(self, discovered_hubs: List[Tuple[str, str]]):
         """Handle completion of the discovery process."""
-        # Close the progress dialog
+        # Close the progress dialog. QProgressDialog.close() emits canceled,
+        # which would terminate the thread that just finished and report a
+        # cancel, so disconnect the cancel handler first.
         if hasattr(self, "progress_dialog"):
+            self.progress_dialog.canceled.disconnect(self.on_discovery_canceled)
             self.progress_dialog.close()
 
         if not discovered_hubs:
