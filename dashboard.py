@@ -844,9 +844,17 @@ class DirigeraDashboard(QMainWindow):
             tile.show_error(message)
 
     def _scene_tile_for(self, scene: Scene) -> Optional[SceneTile]:
-        """Return the tile displaying `scene`, if it is still on screen."""
+        """Return the tile displaying `scene`, if it is still on screen.
+
+        Matches by scene id, not identity: a refresh during activation rebuilds
+        the tiles from new Scene objects, and the result belongs on the new
+        tile.
+        """
+        scene_id = getattr(scene, "id", None)
         for card in self.scenes_grid.cards():
-            if isinstance(card, SceneTile) and card.scene is scene:
+            if isinstance(card, SceneTile) and (
+                card.scene is scene or getattr(card.scene, "id", None) == scene_id
+            ):
                 return card
         return None
 
