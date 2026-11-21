@@ -45,3 +45,11 @@ Windows). Add a new one here when it costs time; do not repeat these in other do
     when asserting that no real warnings occurred.
 12. `QMessageBox` static methods block; replace them in tests (see
     `tests/conftest.py`).
+
+## Scroll areas
+
+13. **A `QComboBox` in a scroll area takes wheel events.** A turn of the wheel
+    over it changes its value instead of scrolling the page. Override
+    `wheelEvent` to call `event.ignore()` (see `ProfileBox` in
+    `widgets/card.py`) and use `StrongFocus` so it takes focus only on click or
+    tab.

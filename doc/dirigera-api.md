@@ -165,7 +165,7 @@ disable controls. Never show the raw `device_type` string; humanize it.
 
 | # | Type | Shows | Notes |
 | --- | --- | --- | --- |
-| 1 | `light` | Switch; brightness 1 to 100; colour temperature (gradient slider); hue and saturation | 0 is rejected by the library, "off" goes through the switch. Colour controls belong in a secondary section. `QColor.hueF()` returns 0 to 1 and -1 for greys; convert to 0 to 360 |
+| 1 | `light` | Switch; brightness 1 to 100; colour temperature (gradient slider); hue and saturation | 0 is rejected by the library, "off" goes through the switch. Colour controls belong in a secondary section. An "Adaptive" profile picker shows on lights that carry the `adaptiveProfile` state (`supports_adaptive`, §5 item 7; t-15). `QColor.hueF()` returns 0 to 1 and -1 for greys; convert to 0 to 360 |
 | 2 | `outlet`, `electricalSensor` | Switch (outlets); power W, voltage V, current A, total kWh, only non-None values | Merge a sensor into the outlet with the same `relation_id`; standalone read-only tile only if no outlet matches |
 | 3 | `blinds` | Position slider (0 to 100); Up, Stop, Down buttons; moving state as text | Do not label the ends "open" or "closed" until checked on a real blind |
 | 4 | `airPurifier` | Fan speed (Off, Auto, 1–5 via `motorState`, §5 item 3); PM2.5; filter life and alarm | Child lock is deliberately not shown (owner decision 2026-11-21, `req-21`); status light is not planned. Fan control (t-80) and the filter footer and alarm chip (t-85) are implemented |

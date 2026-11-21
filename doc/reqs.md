@@ -79,3 +79,7 @@ during implementation. Each entry cites its origin.
   about two seconds while the hub's event socket is up, and the dashboard must
   keep working by polling when it is not. Events only prompt a refresh; their
   shapes are not relied on. *(t-16, implemented)*
+- **req-24** — A light's adaptive profile is shown as text on its card;
+  refreshes and resyncs never send a profile command, and after a profile
+  change the card is updated from the hub once the hub has applied it.
+  *(t-15, implemented)*

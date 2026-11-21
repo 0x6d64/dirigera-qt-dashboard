@@ -28,7 +28,7 @@ may end with an `> **Executed …**` note listing branch and commit hashes.
 
 ### Plan: adaptive light profiles (t-15)
 
-Status: open
+Status: partly done (picker and activation built; "Off" command waits for write test W2)
 
 Goal: each light that can follow an adaptive profile shows, as text, which
 profile it follows ("Off" or the profile name), and the owner can pick a
@@ -129,7 +129,7 @@ never printing the token, and wait 6 s before each read (`hub.get(f"/devices/{id
 Record the answers in commit 1. Without them, commits 2 to 5 use the defaults
 named in their steps and commit 6 is skipped.
 
-#### Commit 1 — "record adaptive profile facts" (t-15)
+#### Commit 1 — "record adaptive profile facts" (t-15) ✓ executed 2026-11-22
 
 1. `doc/dirigera-api.md` §5: new item 7 "Adaptive profiles" with the E1 (and,
    if run, W1/W2) answers, dated, in the style of items 3 and 6. §2.5: add that
@@ -138,7 +138,7 @@ named in their steps and commit 6 is skipped.
 
 Verification: no code change; `uv run pytest` still green.
 
-#### Commit 2 — "add adaptive profile helpers" (t-15)
+#### Commit 2 — "add adaptive profile helpers" (t-15) ✓ executed 2026-11-22
 
 1. New `adaptive.py` (flat layout, like `rooms.py`; module docstring cites
    t-15 and `doc/dirigera-api.md` §2.5), pure functions only, no Qt:
@@ -164,7 +164,7 @@ Verification: no code change; `uv run pytest` still green.
 
 Verification: gates; the new tests.
 
-#### Commit 3 — "fetch adaptive profiles with the refresh" (t-15)
+#### Commit 3 — "fetch adaptive profiles with the refresh" (t-15) ✓ executed 2026-11-22
 
 1. `workers.py` `RefreshWorker`: `__init__(self, hub, parent=None,
    with_profiles: bool = False)`; signal `refreshed = pyqtSignal(list, list,
@@ -208,7 +208,7 @@ Verification: gates; the new tests.
 Verification: gates; the new tests; the existing refresh and live tests pass
 unchanged.
 
-#### Commit 4 — "show the adaptive profile on light cards" (t-15)
+#### Commit 4 — "show the adaptive profile on light cards" (t-15) ✓ executed 2026-11-22
 
 1. `widgets/card.py`: constants `ADAPTIVE_LABEL = "Adaptive"`, `OFF_LABEL =
    "Off"`, `PROFILE_COMMIT_MS = 300` (read when the timer starts, so tests can
@@ -260,7 +260,7 @@ unchanged.
 
 Verification: gates; the new tests.
 
-#### Commit 5 — "activate adaptive profiles from the card" (t-15)
+#### Commit 5 — "activate adaptive profiles from the card" (t-15) ✓ executed 2026-11-22
 
 1. `dashboard.py`: `ADAPTIVE_REFRESH_DELAY_MS = 5000` next to
    `SCENE_REFRESH_DELAY_MS`; single-shot `self._adaptive_refresh_timer`
@@ -296,7 +296,7 @@ Verification: gates; the new tests.
 
 Verification: gates; the new tests.
 
-#### Commit 6 — "leave adaptive mode from the card" (t-15) — only if step 0 W2 found a payload
+#### Commit 6 — "leave adaptive mode from the card" (t-15) — skipped: waits for owner-approved write test W2 (t-95)
 
 1. `set_adaptive_profile(card, None)`: run the payload recorded in
    `doc/dirigera-api.md` §5 item 7 through
@@ -310,7 +310,7 @@ Verification: gates; the new tests.
 
 Skipped otherwise: the disabled "Off" item and hint from commit 4 stay.
 
-#### Commit 7 — "record adaptive profiles" (t-15)
+#### Commit 7 — "record adaptive profiles" (t-15) ✓ executed 2026-11-22 (as the sixth commit on the branch, commit 6 being skipped)
 
 Bookkeeping (batch rules): check off t-15; `doc/reqs.md` inferred **req-24**
 (next free number; check with the command in `AGENTS.md`): "A light's
@@ -329,6 +329,23 @@ Verification: gates; `grep -rn "t-15" doc agent-notes` shows no stale "open"
 wording. Owner check on the real hub: pick a profile on a lit light, see the
 box keep it and level and warmth follow within about 5 s; move its brightness
 and see the box after the refresh match the IKEA app; the box survives a poll.
+
+> **Executed 2026-11-22** on `feat/adaptive-profiles`: commit 1 `b988b8f`, commit
+> 2 `913f80f`, commit 3 `b2c35a0`, commit 4 `9c1dd2b`, commit 5 `85e50e0`, commit 6
+> skipped, commit 7 is the one that records this note. Step 0: only E1 (read
+> only) was run; the owner has not permitted the hub writes W1 and W2. E1
+> retired the risk "State missing from `/devices`" (every light carries
+> `adaptiveProfile`, possibly `{}`) and showed the default `supports_adaptive`
+> rule is wrong for this hub (no `adaptiveProfile` capability, and the light
+> that follows a profile has no `colorTemperature`); the rule used is "a light
+> that carries the state object or reports an active profile"
+> (`doc/dirigera-api.md` §5 item 7). The requirement is `req-24`. Other
+> deviations: the picker row is built only when the card is created, so a
+> light that starts sending the key later gets no row until its card is
+> recreated; the card itself skips `set_profiles` when the options did not
+> change; `tests/test_live_updates.py` `_count_refreshes` now accepts the new
+> `with_profiles` argument of `_start_refresh`. Owner check on the real hub
+> still outstanding (see Verification above).
 
 #### Risks
 
