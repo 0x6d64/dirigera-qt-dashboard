@@ -130,6 +130,13 @@ class LabeledSlider(QWidget):
     def value(self) -> int:
         return self._slider.value()
 
+    def is_user_active(self) -> bool:
+        """Return True while the user is dragging or has keyboard focus here.
+
+        Automated refreshes leave such a slider alone (req-13).
+        """
+        return self._slider.isSliderDown() or self._slider.hasFocus()
+
     def set_value(self, value: int) -> None:
         """Show `value` without committing it (used for resyncs)."""
         self._programmatic = True

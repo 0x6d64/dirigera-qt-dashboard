@@ -16,9 +16,9 @@ Only outlets and electrical sensors reach this view; the dashboard filters
 them before calling `EnergyView.set_rooms()`.
 """
 
-from typing import Any, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -108,8 +108,10 @@ class EnergyCard(QFrame):
                 background-color: transparent;
             }}
             """)
-        if self.caption_label.text():
-            layout.addWidget(self.caption_label)
+        # Always in the layout so a refresh can fill it later; hidden while
+        # the device reports no current or voltage.
+        self.caption_label.setVisible(bool(self.caption_label.text()))
+        layout.addWidget(self.caption_label)
 
         # 3. Footer: total energy, or an explicit "no data" line.
         self.footer_label = QLabel(self._format_footer(attrs))
@@ -133,6 +135,31 @@ class EnergyCard(QFrame):
     def is_metered(self) -> bool:
         """Return True when the device reports live power."""
         return self.power_metric is not None
+
+    def update_from_device(self, device: Any) -> bool:
+        """Show the readings of a freshly fetched `device` in place (t-19).
+
+        Returns False when the card cannot follow without being rebuilt,
+        i.e. the device started or stopped reporting live power.
+        """
+        attrs = getattr(device, "attributes", None)
+        power = getattr(attrs, "current_active_power", None)
+        if (power is not None) != (self.power_metric is not None):
+            return False
+        self.device = device
+        if self.power_metric is not None:
+            self.power_metric.set_value(power)
+        text = self._format_captions(attrs)
+        self.caption_label.setText(text)
+        self.caption_label.setVisible(bool(text))
+        self.footer_label.setText(self._format_footer(attrs))
+        offline = getattr(device, "is_reachable", True) is False
+        self._apply_style(offline=offline)
+        if offline:
+            self.status_chip.set_status("Offline", "neutral")
+        else:
+            self._update_chip(attrs, getattr(device, "device_type", "device"))
+        return True
 
     def _apply_style(self, offline: bool) -> None:
         bg = theme.SUNKEN if offline else theme.SURFACE
@@ -182,6 +209,7 @@ class EnergyView(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._shape: List[Tuple[str, List[Any]]] = []
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -207,9 +235,42 @@ class EnergyView(QWidget):
         self.empty_label.hide()
         outer.addWidget(self.empty_label, 1)
 
+    def update_rooms(self, rooms: List[Tuple[str, List[Any]]]) -> None:
+        """Show (room label, devices) pairs, updating cards in place (t-19).
+
+        When the rooms and their devices are unchanged, the existing cards
+        take the new readings and nothing is recreated. Otherwise the view is
+        rebuilt and its scroll position is kept.
+        """
+        shape = [
+            (label, [getattr(d, "id", None) for d in devs]) for label, devs in rooms
+        ]
+        if shape == self._shape:
+            cards = self.cards_by_id()
+            if all(
+                getattr(device, "id", None) in cards
+                and cards[getattr(device, "id", None)].update_from_device(device)
+                for _, devices in rooms
+                for device in devices
+            ):
+                return
+        bar = self.scroll_area.verticalScrollBar()
+        value = bar.value() if bar is not None else 0
+        self.set_rooms(rooms)
+        if bar is not None and value:
+            # The new sections are laid out on the next event-loop turn.
+            QTimer.singleShot(0, lambda: bar.setValue(value))
+
+    def cards_by_id(self) -> Dict[Any, EnergyCard]:
+        """Return the energy cards keyed by device id."""
+        return {getattr(card.device, "id", None): card for card in self.cards()}
+
     def set_rooms(self, rooms: List[Tuple[str, List[Any]]]) -> None:
         """Rebuild the view from (room label, devices) pairs."""
         self.clear()
+        self._shape = [
+            (label, [getattr(d, "id", None) for d in devs]) for label, devs in rooms
+        ]
 
         has_rooms = bool(rooms)
         self.scroll_area.setVisible(has_rooms)

@@ -109,6 +109,15 @@ class SceneTile(QFrame):
         self._reset_timer.setSingleShot(True)
         self._reset_timer.timeout.connect(self.reset)
 
+    def update_from_scene(self, scene: Any) -> None:
+        """Adopt a freshly fetched `scene` object (t-19).
+
+        The tile only shows name and glyph, which a refresh does not change,
+        so nothing is redrawn; only the object that activation triggers is
+        replaced.
+        """
+        self.scene = scene
+
     @property
     def is_activated(self) -> bool:
         """Return True while the transient "Activated" line is showing."""

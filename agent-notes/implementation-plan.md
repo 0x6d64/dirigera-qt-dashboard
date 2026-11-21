@@ -141,6 +141,11 @@ the plan branch.
 
 ### Plan: automated refresh (t-19, t-56)
 
+> **Executed 2026-11-21** on branch `feat/automated-refresh`: commit 1
+> "update cards without rebuilding" (`f26544e`), commit 2 "periodic
+> background refresh" (`38ee1fb`), docs and checkboxes in "record automated
+> refresh".
+
 Goal: stop the dashboard showing stale values. Poll the hub every 30 s and
 update existing cards in place, so a poll keeps scroll position, card order,
 focus, and an in-progress slider drag (`req-13`, `design-doc.md` §10.2,

@@ -87,6 +87,7 @@ class DeviceCard(QFrame):
 
         self._controls: list[QWidget] = []
         self._is_offline = False
+        self._pending = False
 
         self.setMinimumWidth(280)
         self.setFrameShape(QFrame.Shape.StyledPanel)
@@ -333,6 +334,9 @@ class DeviceCard(QFrame):
             self.status_chip.set_status("Low battery", "warn")
 
     def _update_footer(self) -> None:
+        if self._pending:
+            self.footer_label.setText("Sending…")
+            return
         attrs = getattr(self.device, "attributes", None)
         dtype = getattr(self.device, "device_type", "unknown")
 
@@ -368,7 +372,8 @@ class DeviceCard(QFrame):
             ctrl.setEnabled(not offline)
         if offline:
             self.status_chip.set_status("Offline", "neutral")
-            self.footer_label.setText("Device unreachable")
+            if not self._pending:
+                self.footer_label.setText("Device unreachable")
         else:
             self._update_status_chip()
             self._update_footer()
@@ -388,6 +393,25 @@ class DeviceCard(QFrame):
         was reloaded, so the card shows the real state (req-3). Signals are
         blocked so the resync never sends a command of its own.
         """
+        self._sync(protect_user=False)
+
+    def update_from_device(self, device: Any) -> None:
+        """Adopt a freshly fetched `device` and resync the existing controls.
+
+        Used by automated refreshes (t-19): no widget is recreated, and a
+        slider the user is dragging or has focused keeps its value (req-13).
+        """
+        self.device = device
+        raw_name = getattr(device.attributes, "custom_name", None) or getattr(
+            device, "id", "Unknown Device"
+        )
+        if raw_name != self.full_name:
+            self.full_name = raw_name
+            self.name_label.setText(raw_name)
+            self.name_label.setToolTip(raw_name)
+        self._sync(protect_user=True)
+
+    def _sync(self, protect_user: bool) -> None:
         attrs = getattr(self.device, "attributes", None)
         switch = getattr(self, "switch", None)
         if isinstance(switch, ToggleSwitch):
@@ -400,8 +424,14 @@ class DeviceCard(QFrame):
         ):
             slider = getattr(self, name, None)
             value = getattr(attrs, attr, None)
-            if isinstance(slider, LabeledSlider) and value is not None:
-                slider.blockSignals(True)
-                slider.set_value(int(value))
-                slider.blockSignals(False)
+            if not isinstance(slider, LabeledSlider) or value is None:
+                continue
+            if protect_user and slider.is_user_active():
+                continue
+            slider.blockSignals(True)
+            slider.set_value(int(value))
+            slider.blockSignals(False)
+        metric = getattr(self, "power_metric", None)
+        if isinstance(metric, MetricWidget):
+            metric.set_value(getattr(attrs, "current_active_power", None))
         self.set_offline(not getattr(self.device, "is_reachable", True))

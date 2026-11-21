@@ -189,6 +189,10 @@ QLabel[role="caption"][tone="danger"] {{
     color: {DANGER};
 }}
 
+QLabel[role="caption"][tone="warn"] {{
+    color: {WARN};
+}}
+
 /* ── Connection block (design-doc.md §8.12) ─────────────────────────── */
 QFrame[role="connectionCard"] {{
     background-color: {SURFACE};
