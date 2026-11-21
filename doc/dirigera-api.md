@@ -133,8 +133,13 @@ normalizes with a private helper `_bound_to_kelvin` and validates against
 
 `get_adaptive_profiles()` returns `AdaptiveProfile(id, name, adaptive_schedule[])`
 with entries `start_time "HH:MM"`, `light_level`, `color_temperature`. Profiles are
-created in the IKEA app only. Setting a light manually takes it out of adaptive
-mode; `reload()` to see the state.
+created in the IKEA app only. A light's state is the top-level field
+`light.adaptive_profile` (`AdaptiveProfileState(id, active)`, JSON key
+`adaptiveProfile`, `None` when the hub sends nothing), not on `light.attributes`.
+`activate_adaptive_profile(id)` sends `PATCH /devices/{id}`
+`[{"adaptiveProfile": {"id": id, "active": true}}]` without a capability check.
+There is no library call to leave adaptive mode; its docstring says a manual
+change ends it (unverified, see section 5 item 7). `reload()` to see the state.
 
 ### 2.6 Events `[lib]`
 
@@ -259,3 +264,23 @@ remotes. Answers to section 4 where the data settles them:
    in one request switches it on but keeps the old level; `isOn: true` followed
    at once by a separate `lightLevel` request works, and the reverse order
    does not. Colour and temperature commands to an off light were not tested.
+7. **Adaptive profiles (read-only check E1, 2026-11-22).** `/home` returns 3
+   `adaptiveProfiles`, every one with a `name`; each has `id`, `name` and
+   `adaptiveSchedule` (entries with `startTime`, `lightLevel`,
+   `colorTemperature`). Nothing in `/home` links lights to profiles.
+   `/devices` carries a top-level `adaptiveProfile` key for **every** light: one
+   light reports `{"id": "<uuid>", "active": true}` (it follows a profile
+   although it is switched off), another reports `{}` (no profile). So the
+   state does come with a normal refresh. Lights' `canReceive` lists
+   `colorHue`, `colorSaturation`, `customName`, `isOn`, `lightLevel`: there is
+   no `adaptiveProfile` capability, and the light that follows a profile has no
+   `colorTemperature` capability. Rule used by `supports_adaptive`
+   (`adaptive.py`): a `light` that carries the `adaptive_profile` field with a
+   state object (the hub sent the key), or that already reports an active
+   profile. **Unknown:** whether a profile can be activated on the light that
+   reports `{}`; that light also gets the picker, and a failed activation
+   shows the card error. **Pending owner permission (hub writes, not run):**
+   W1 (what activation does to an off light, level and warmth; which manual
+   changes end a profile) and W2 (a payload that leaves adaptive mode).
+   Until W2 is answered, "Off" in the picker is only a state and cannot be
+   chosen while a profile is active.
