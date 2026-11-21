@@ -6,7 +6,7 @@ name over the type and a status chip, a body the subclass fills, and a footer
 caption. This base owns what they share:
 
 - the header, with the name elided to the width the header leaves;
-- the card surface, normal or offline;
+- the card surface, normal or offline, with the room colour edge (req-22);
 - the footer state machine: "Sending…" while a command runs, and a command
   error in danger tone for `CARD_ERROR_MS` before the normal text returns.
 
@@ -57,6 +57,69 @@ def device_name(device: Any) -> str:
     )
 
 
+class RoomSectionHeader(QWidget):
+    """A room's section label, with the room colour dot in front (req-22).
+
+    The dot shows only while the room colour mode is on and the room has a
+    known colour. The label itself never changes colour.
+    """
+
+    def __init__(self, text: str, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)  # type: ignore[arg-type]
+        self._room_colour: Optional[str] = None
+        self._marker_shown = False
+        self._dot_colour: Optional[str] = None
+
+        row = QHBoxLayout(self)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(theme.SP8)
+
+        self.dot = QFrame()
+        self.dot.setFixedSize(theme.ROOM_DOT, theme.ROOM_DOT)
+        self.dot.hide()
+        row.addWidget(self.dot, alignment=Qt.AlignmentFlag.AlignVCenter)
+
+        self.label = QLabel(text)
+        self.label.setProperty("role", "section")
+        row.addWidget(self.label)
+        row.addStretch(1)
+
+    def set_text(self, text: str) -> None:
+        self.label.setText(text)
+
+    def text(self) -> str:
+        return self.label.text()
+
+    @property
+    def dot_colour(self) -> Optional[str]:
+        """The colour of the dot on screen, or None while no dot is shown."""
+        return self._room_colour if self._marker_shown else None
+
+    def set_room_colour(self, colour: Optional[str]) -> None:
+        """Set the room's colour (None for a room without a known colour)."""
+        self._room_colour = colour
+        self._sync_dot()
+
+    def set_marker_shown(self, shown: bool) -> None:
+        """Show or hide the dot (the room colour mode)."""
+        self._marker_shown = shown
+        self._sync_dot()
+
+    def _sync_dot(self) -> None:
+        colour = self.dot_colour
+        if colour != self._dot_colour:
+            self._dot_colour = colour
+            if colour is not None:
+                self.dot.setStyleSheet(f"""
+                    QFrame {{
+                        background-color: {colour};
+                        border: none;
+                        border-radius: {theme.ROOM_DOT // 2}px;
+                    }}
+                    """)
+        self.dot.setVisible(colour is not None)
+
+
 class CardBase(QFrame):
     """Frame, header, footer and command feedback shared by the cards."""
 
@@ -69,6 +132,8 @@ class CardBase(QFrame):
         super().__init__(parent)
         self.device = device
         self._is_offline = False
+        self._room_colour: Optional[str] = None
+        self._marker_shown = False
         self._pending = False
         self._error: Optional[str] = None
         self._error_timer = QTimer(self)
@@ -175,12 +240,38 @@ class CardBase(QFrame):
         super().resizeEvent(event)
         self._elide_name()
 
+    @property
+    def edge_colour(self) -> Optional[str]:
+        """The room colour on the card's left edge, or None while none is shown."""
+        return self._room_colour if self._marker_shown else None
+
+    def set_room_colour(self, colour: Optional[str]) -> None:
+        """Set the card's room colour (None for a room without a known colour)."""
+        before = self.edge_colour
+        self._room_colour = colour
+        if self.edge_colour != before:
+            self._apply_card_style(is_offline=self._is_offline)
+
+    def set_marker_shown(self, shown: bool) -> None:
+        """Show or hide the room colour edge (the room colour mode)."""
+        before = self.edge_colour
+        self._marker_shown = shown
+        if self.edge_colour != before:
+            self._apply_card_style(is_offline=self._is_offline)
+
     def _apply_card_style(self, is_offline: bool) -> None:
         bg = theme.SUNKEN if is_offline else theme.SURFACE
+        edge = self.edge_colour
+        edge_rule = (
+            f"border-left: {theme.ROOM_EDGE}px solid {edge};"
+            if edge is not None
+            else ""
+        )
         self.setStyleSheet(f"""
             {type(self).__name__} {{
                 background-color: {bg};
                 border: 1px solid {theme.BORDER};
+                {edge_rule}
                 border-radius: {theme.RADIUS_CARD}px;
             }}
             """)

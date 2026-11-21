@@ -101,6 +101,11 @@ SP16 = 16
 SP20 = 20
 SP24 = 24
 
+# Room colour marks (req-22, t-86): the dot before a section label and the
+# left edge of a card in that room.
+ROOM_DOT = 10
+ROOM_EDGE = 3
+
 # ---------------------------------------------------------------------------
 # Shape radii (design-doc.md §7.1)
 # ---------------------------------------------------------------------------

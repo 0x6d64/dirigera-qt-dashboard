@@ -37,7 +37,13 @@ from network_discovery import (
     get_local_networks,
     hosts_to_scan,
 )
-from rooms import format_room_label, get_room, group_by_room, is_energy_device
+from rooms import (
+    format_room_label,
+    get_room,
+    group_by_room,
+    is_energy_device,
+    room_colour_name,
+)
 from settings import (
     DiscoverySettings,
     EnergySettings,
@@ -46,7 +52,7 @@ from settings import (
     ui_settings,
 )
 from widgets.card import DeviceCard, device_sort_key
-from widgets.cardbase import label_style
+from widgets.cardbase import RoomSectionHeader, label_style
 from widgets.chip import StatusChip
 from widgets.connection import ConnectionBlock
 from widgets.energy import EnergyCard, EnergyView
@@ -107,6 +113,10 @@ def is_hidden_device(device: Any) -> bool:
 AUTOMATIC_SCENES_LABEL = "Show automatic scenes"
 AUTOMATIC_SCENES_KEY = "scenes/show_automatic"
 
+# Room colour dots and card edges are shown only while this is on (req-22, t-86).
+ROOM_COLOURS_LABEL = "Room colours"
+ROOM_COLOURS_KEY = "rooms/colours"
+
 
 def is_user_scene(scene: Any) -> bool:
     """True for scenes the user made: type `userScene`, or no type reported."""
@@ -119,6 +129,11 @@ def is_user_scene(scene: Any) -> bool:
 def load_show_automatic() -> bool:
     """The remembered "Show automatic scenes" choice, off by default."""
     return bool(ui_settings().value(AUTOMATIC_SCENES_KEY, False, type=bool))
+
+
+def load_room_colours() -> bool:
+    """The remembered "Room colours" choice, off by default (req-22)."""
+    return bool(ui_settings().value(ROOM_COLOURS_KEY, False, type=bool))
 
 
 def widget_name(widget: QWidget) -> str:
@@ -228,6 +243,7 @@ class DirigeraDashboard(QMainWindow):
         self.devices: List[Any] = []
         self.scenes: List[Scene] = []
         self._show_automatic = load_show_automatic()
+        self._room_colours = load_room_colours()
         self._hub_ip: Optional[str] = None
         self._last_refresh: Optional[datetime] = None
         self._connect_worker: Optional[ConnectWorker] = None
@@ -240,7 +256,7 @@ class DirigeraDashboard(QMainWindow):
         self._room_sections: List[Tuple[QWidget, CardGrid]] = []
         # Live widgets, so a refresh updates them in place (t-19): room id ->
         # (section, grid, label) and device id -> card.
-        self._sections: Dict[str, Tuple[QWidget, CardGrid, QLabel]] = {}
+        self._sections: Dict[str, Tuple[QWidget, CardGrid, RoomSectionHeader]] = {}
         self._device_cards: Dict[str, DeviceCard] = {}
         # Fingerprint of the last applied fetch; an equal fetch is a no-op.
         self._signature: Optional[Tuple[Any, ...]] = None
@@ -369,8 +385,23 @@ class DirigeraDashboard(QMainWindow):
         self.devices_layout.addStretch()
         self.devices_scroll.setWidget(self.devices_content)
 
+        # Room colour toggle above the sections, outside the scroll area so it
+        # stays in view (req-22). Its margins line up with the sections.
+        self.room_colours_switch = ToggleSwitch(accessible_name=ROOM_COLOURS_LABEL)
+        self.room_colours_switch.setChecked(self._room_colours)
+        self.room_colours_switch.toggled.connect(self._on_room_colours_toggled)
+        room_colours_label = QLabel(ROOM_COLOURS_LABEL)
+        room_colours_label.setStyleSheet(label_style(theme.TEXT2, theme.FONT_LABEL))
+        room_colours_row = QHBoxLayout()
+        room_colours_row.setContentsMargins(theme.SP24, theme.SP20, theme.SP24, 0)
+        room_colours_row.setSpacing(theme.SP12)
+        room_colours_row.addWidget(room_colours_label)
+        room_colours_row.addWidget(self.room_colours_switch)
+        room_colours_row.addStretch()
+
         devices_tab_layout = QVBoxLayout(self.devices_tab)
         devices_tab_layout.setContentsMargins(0, 0, 0, 0)
+        devices_tab_layout.addLayout(room_colours_row)
         devices_tab_layout.addWidget(self.devices_scroll)
         self.tab_widget.addTab(self.devices_tab, "Devices")
 
@@ -408,6 +439,7 @@ class DirigeraDashboard(QMainWindow):
 
         # Energy tab (t-49)
         self.energy_view = EnergyView(on_reset=self.reset_energy)
+        self.energy_view.set_room_colours(self._room_colours)
         self.tab_widget.addTab(self.energy_view, "Energy")
 
         # The segmented switcher is the only navigation; a visible tab bar
@@ -967,9 +999,13 @@ class DirigeraDashboard(QMainWindow):
         old_cards = self._device_cards
         new_cards: Dict[str, DeviceCard] = {}
         wanted: List[Tuple[str, str, List[QWidget]]] = []
+        section_colours: Dict[str, Optional[str]] = {}
 
         for room_name, room_devices in groups:
             room_key = get_room(room_devices[0])[0]
+            section_colours[room_key] = theme.room_colour(
+                room_colour_name(room_devices[0])
+            )
             cards: List[QWidget] = []
             for device in sorted(room_devices, key=device_sort_key):
                 device_id = str(getattr(device, "id", ""))
@@ -978,6 +1014,8 @@ class DirigeraDashboard(QMainWindow):
                     card = self.create_device_widget(device)
                 else:
                     card.update_from_device(device)
+                card.set_room_colour(theme.room_colour(room_colour_name(device)))
+                card.set_marker_shown(self._room_colours)
                 new_cards[device_id] = card
                 cards.append(card)
             wanted.append((room_key, room_name, cards))
@@ -999,8 +1037,10 @@ class DirigeraDashboard(QMainWindow):
         for key, room_name, cards in wanted:
             if key not in self._sections:
                 self._sections[key] = self._new_room_section(room_name)
-            _section, grid, label = self._sections[key]
-            label.setText(format_room_label(room_name))
+            _section, grid, header = self._sections[key]
+            header.set_text(format_room_label(room_name))
+            header.set_room_colour(section_colours[key])
+            header.set_marker_shown(self._room_colours)
             if grid.cards() != cards:
                 grid.set_cards(cards)
 
@@ -1072,6 +1112,22 @@ class DirigeraDashboard(QMainWindow):
         if not self._status_is_failure:
             self.set_status_text(self._summary_text)
 
+    def _on_room_colours_toggled(self, shown: bool) -> None:
+        """Show or hide the room colours and remember the choice (req-22).
+
+        Restyles the existing cards and section labels in place. No hub
+        command is sent.
+        """
+        self._room_colours = shown
+        settings = ui_settings()
+        settings.setValue(ROOM_COLOURS_KEY, shown)
+        settings.sync()
+        for card in self._device_cards.values():
+            card.set_marker_shown(shown)
+        for _section, _grid, header in self._sections.values():
+            header.set_marker_shown(shown)
+        self.energy_view.set_room_colours(shown)
+
     def filter_devices(self, query: str) -> None:
         """Filter device cards and scene tiles by name as the user types (§8.8).
 
@@ -1111,7 +1167,9 @@ class DirigeraDashboard(QMainWindow):
             self._refresh_pending = False
             self._start_refresh()
 
-    def _new_room_section(self, room_name: str) -> Tuple[QWidget, CardGrid, QLabel]:
+    def _new_room_section(
+        self, room_name: str
+    ) -> Tuple[QWidget, CardGrid, RoomSectionHeader]:
         """Build one empty room section: section label plus reflowing grid.
 
         Cards are placed by `_update_rooms`, already sorted for a stable order
@@ -1122,14 +1180,13 @@ class DirigeraDashboard(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(theme.SP12)  # label-to-grid gap (design-doc.md §4.3)
 
-        label = QLabel(format_room_label(room_name))
-        label.setProperty("role", "section")
-        layout.addWidget(label)
+        header = RoomSectionHeader(format_room_label(room_name))
+        layout.addWidget(header)
 
         grid = CardGrid()
         layout.addWidget(grid)
         self.devices_layout.insertWidget(self.devices_layout.count() - 1, section)
-        return section, grid, label
+        return section, grid, header
 
     def create_device_widget(self, device: Any) -> DeviceCard:
         """Create a DeviceCard instance with connected action handlers."""

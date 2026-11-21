@@ -33,8 +33,9 @@ from PyQt6.QtWidgets import (
 )
 
 import theme
+from rooms import room_colour_name
 from settings import DEFAULT_CURRENCY, DEFAULT_PRICE_PER_KWH
-from widgets.cardbase import CardBase, label_style
+from widgets.cardbase import CardBase, RoomSectionHeader, label_style
 from widgets.grid import CardGrid
 from widgets.metric import MetricWidget
 from widgets.text import (
@@ -295,6 +296,9 @@ class EnergyView(QWidget):
         self._shape: List[Tuple[str, List[Any]]] = []
         self._rooms: List[Tuple[str, List[Any]]] = []
         self._captions: List[QLabel] = []
+        self._headers: List[RoomSectionHeader] = []
+        # Room colour mode (req-22): dots and card edges only when on.
+        self._room_colours_on = False
         self.price_per_kwh = DEFAULT_PRICE_PER_KWH
         self.currency = DEFAULT_CURRENCY
         self.on_reset = on_reset
@@ -378,6 +382,7 @@ class EnergyView(QWidget):
             ):
                 self._rooms = rooms
                 self._refresh_totals()
+                self._apply_room_colours()
                 return
         bar = self.scroll_area.verticalScrollBar()
         value = bar.value() if bar is not None else 0
@@ -395,6 +400,7 @@ class EnergyView(QWidget):
         self.clear()
         self._rooms = rooms
         self._captions = []
+        self._headers = []
         self._shape = [
             (label, [getattr(d, "id", None) for d in devs]) for label, devs in rooms
         ]
@@ -409,9 +415,9 @@ class EnergyView(QWidget):
             layout.setContentsMargins(0, 0, 0, 0)
             layout.setSpacing(theme.SP12)  # label-to-grid gap (§4.3)
 
-            label = QLabel(label_text)
-            label.setProperty("role", "section")
-            layout.addWidget(label)
+            header = RoomSectionHeader(label_text)
+            layout.addWidget(header)
+            self._headers.append(header)
 
             # Room totals; hidden until the room reports something.
             caption = QLabel()
@@ -436,6 +442,27 @@ class EnergyView(QWidget):
 
             self.content_layout.insertWidget(self.content_layout.count() - 1, section)
         self._refresh_totals()
+        self._apply_room_colours()
+
+    def set_room_colours(self, on: bool) -> None:
+        """Show or hide the room colour dots and card edges (req-22).
+
+        Restyles the existing sections and cards in place; nothing is rebuilt.
+        """
+        self._room_colours_on = on
+        self._apply_room_colours()
+
+    def _apply_room_colours(self) -> None:
+        """Give each section and card its room colour, shown per the mode."""
+        for (_, devices), header in zip(self._rooms, self._headers):
+            colour = (
+                theme.room_colour(room_colour_name(devices[0])) if devices else None
+            )
+            header.set_room_colour(colour)
+            header.set_marker_shown(self._room_colours_on)
+        for card in self.cards():
+            card.set_room_colour(theme.room_colour(room_colour_name(card.device)))
+            card.set_marker_shown(self._room_colours_on)
 
     def clear(self) -> None:
         """Remove every room section, keeping the trailing stretch."""
