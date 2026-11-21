@@ -26,6 +26,334 @@ may end with an `> **Executed …**` note listing branch and commit hashes.
 
 ## Plans
 
+### Plan: adaptive light profiles (t-15)
+
+Status: open
+
+Goal: each light that can follow an adaptive profile shows, as text, which
+profile it follows ("Off" or the profile name), and the owner can pick a
+profile from the light's card. The hub's profiles are created in the IKEA app
+only; the dashboard neither creates nor edits them.
+
+Facts (`dirigera` 1.6.1, `doc/dirigera-api.md` §2.5): `hub.get_adaptive_profiles()`
+does `GET /home` and returns `AdaptiveProfile(id, name: Optional, adaptive_schedule[])`
+(entries `start_time "HH:MM"`, `light_level`, `color_temperature`). A light's
+state is the top-level field `light.adaptive_profile`
+(`AdaptiveProfileState(id: Optional[str], active: Optional[bool])`, alias
+`adaptiveProfile`, `None` when the hub sends nothing), **not** on
+`light.attributes`. `light.activate_adaptive_profile(id)` sends
+`PATCH /devices/{id}` `[{"adaptiveProfile": {"id": id, "active": true}}]` with no
+capability guard and stores the state locally. There is no library call to
+leave adaptive mode; its docstring says a manual change (e.g. the level) ends
+it, and the library setters do not clear the local state. The hub applies
+changes with a delay of a few seconds and ignores a level sent to an off light
+(§5 item 6). The test hub reports 3 profiles in `/home`.
+
+Unknown (settled by step 0 below, never guessed in code): whether `/devices`
+carries `adaptiveProfile` for every light or only adaptive ones; whether lights
+list a capability for it in `canReceive`; whether a light without colour
+temperature (the Light Strip) accepts a profile; whether activating switches an
+off light on or changes level and warmth at once; which manual changes end the
+profile (level, warmth, colour, on/off); how to leave adaptive mode without a
+manual change.
+
+Decisions:
+
+1. **Per light card, not per room or on the Scenes tab.** The hub keeps the
+   state per light and activation is per light (`PATCH /devices/{id}`); a room
+   picker would hide mixed states and need N commands, and profiles are not
+   scenes (nothing to "trigger"). The light card gets an "Adaptive" row with a
+   `QComboBox`: "Off", then the profile names. A combo, not a segmented
+   control: names are user-chosen and of unknown length, and four segments do
+   not fit a 280 px card. The combo is already themed (`theme.py`
+   `QComboBox` rules) and its popup is not a modal dialog (§8.14).
+2. **Profiles are fetched by the refresh worker, but only on connect, a manual
+   Refresh and the timer poll.** `get_adaptive_profiles()` downloads the whole
+   `/home` (it includes every device again), and event, scene and command
+   refreshes can run once a second; profiles change only in the IKEA app, so
+   up to 300 s staleness (the live poll) is fine. A failed profile fetch never
+   fails the refresh (`req-2` stays about devices and scenes): it keeps the
+   previous list.
+3. **The card's state comes from the hub, not from the command.** After a
+   successful activation the card shows the library's local state, then a
+   delayed background refresh (5 s, the hub's apply delay) shows what the hub
+   really did, including the level and warmth the profile set. A manual level,
+   warmth or colour change on a light that follows a profile schedules the
+   same refresh, so the card learns whether the profile ended without the app
+   guessing. A failed command reloads the device and resyncs (`req-3`).
+4. **"Off" only sends something once step 0 found a working payload.** Until
+   then "Off" is shown as the state but cannot be chosen while a profile is
+   active; the combo tooltip says how to leave ("Change brightness or warmth to
+   stop following the profile"). Commit 6 enables it if step 0 W2 succeeded.
+
+Affected files: new `adaptive.py`, `workers.py`, `dashboard.py`,
+`widgets/card.py`, `tests/conftest.py`, new `tests/test_adaptive.py`,
+`doc/dirigera-api.md` §2.5, §3 row 1, §5 item 7, `doc/design-doc.md` §8.1,
+§10.1, `doc/qt-gotchas.md`, `doc/reqs.md`, `agent-notes/todo.md`
+
+Rules: as in "Execution order, batch 3" (gates on every commit, theme tokens,
+no modal dialogs, behaviour tests with the `tests/conftest.py` stubs, LF
+endings). Branch `feat/adaptive-profiles`. No test may depend on font metrics
+or pixel sizes (assert texts, enabled states, item data, sent commands).
+
+#### Step 0 — real-hub facts (owner, before commit 1; no code)
+
+E1, read-only, may run whenever the owner allows a hub read (GET only,
+`tools/hub_get.py`; in Git Bash leave out the leading slash):
+
+1. `uv run python tools/hub_get.py home`: note for `adaptiveProfiles` the
+   number of profiles, whether every one has a `name`, and the keys of a
+   schedule entry. Also note whether anything in `/home` (e.g. `devices` or
+   `deviceSets`) links lights to profiles.
+2. `uv run python tools/hub_get.py devices`: for each light note whether it
+   has an `adaptiveProfile` key, its value, and whether `canReceive` contains
+   a name such as `adaptiveProfile`. Strip serial numbers (the tool does).
+
+W1 and W2 are **writes: only with the owner's explicit permission**, on one
+light the owner picks, restoring its state afterwards. Use a short script with
+`Hub(token=os.environ["DIRIGERA_TOKEN"], ip_address=os.environ["DIRIGERA_IP"])`,
+never printing the token, and wait 6 s before each read (`hub.get(f"/devices/{id}")`):
+
+3. W1: note on/off, level, warmth. `activate_adaptive_profile(<id>)` on the lit
+   light: read `adaptiveProfile`, level, warmth. Repeat on the switched-off
+   light: does it switch on? Then `set_light_level` on the adaptive light: is
+   the profile still active? Again with `set_color_temperature`, and with
+   `set_light(False)` then `set_light(True)`. If E1 showed no capability, try
+   activation on the Light Strip (no `colorTemperature`): accepted, ignored or
+   an error?
+4. W2: on an adaptive light send
+   `hub.patch(route=f"/devices/{id}", data=[{"adaptiveProfile": {"id": <id>, "active": False}}])`;
+   read back. If that is rejected or ignored, try `{"active": False}` without
+   the id. Record which payload, if any, ends adaptive mode.
+
+Record the answers in commit 1. Without them, commits 2 to 5 use the defaults
+named in their steps and commit 6 is skipped.
+
+#### Commit 1 — "record adaptive profile facts" (t-15)
+
+1. `doc/dirigera-api.md` §5: new item 7 "Adaptive profiles" with the E1 (and,
+   if run, W1/W2) answers, dated, in the style of items 3 and 6. §2.5: add that
+   the state is the top-level `adaptiveProfile`, that there is no library call
+   to leave it, and link item 7.
+
+Verification: no code change; `uv run pytest` still green.
+
+#### Commit 2 — "add adaptive profile helpers" (t-15)
+
+1. New `adaptive.py` (flat layout, like `rooms.py`; module docstring cites
+   t-15 and `doc/dirigera-api.md` §2.5), pure functions only, no Qt:
+   - `UNNAMED_PROFILE = "Unnamed profile"`, `UNKNOWN_PROFILE = "Unknown profile"`.
+   - `profile_options(profiles: Iterable[Any]) -> List[Tuple[str, str]]`:
+     `(id, label)` per profile whose `id` is a non-empty `str`, in the hub's
+     order; label is the stripped `name`, or `UNNAMED_PROFILE` when missing or
+     blank; a repeated label gets ` (2)`, ` (3)` appended in order. Skips
+     repeated ids.
+   - `active_profile_id(device: Any) -> Optional[str]`: the `id` of
+     `getattr(device, "adaptive_profile", None)` when its `active is True` and
+     the id is a non-empty `str`, else `None`.
+   - `supports_adaptive(device: Any) -> bool`: `device_type == "light"` and
+     the rule from `doc/dirigera-api.md` §5 item 7. Default when item 7 is
+     missing or inconclusive: `"colorTemperature"` in
+     `device.capabilities.can_receive` (profiles schedule warmth), or the
+     light already reports an active profile. If item 7 names a capability,
+     use only that name. Write the rule used in the docstring.
+2. `tests/test_adaptive.py`: table tests for the three helpers (missing name,
+   blank name, duplicate names, duplicate ids, non-str id; state `None`,
+   `active=False`, `active=None`, `active=True` with and without id; a light
+   with and without the capability, an outlet), using `SimpleNamespace`.
+
+Verification: gates; the new tests.
+
+#### Commit 3 — "fetch adaptive profiles with the refresh" (t-15)
+
+1. `workers.py` `RefreshWorker`: `__init__(self, hub, parent=None,
+   with_profiles: bool = False)`; signal `refreshed = pyqtSignal(list, list,
+   object)` (devices, scenes, profiles list or `None`). In `run()`, after
+   devices and scenes succeeded: when `with_profiles`, call
+   `self._hub.get_adaptive_profiles()` in its own `try`; on `Exception` log a
+   warning (`"Fetching adaptive profiles failed: %s"`) and use `None`. Without
+   `with_profiles` emit `None`. Device or scene failures still emit `failed`
+   as today.
+2. `dashboard.py`: `self.adaptive_profiles: List[Any] = []` in `__init__`.
+   `_start_refresh(self, with_profiles: bool = False)` passes the flag on;
+   `refresh_devices()` and `_poll()` call `_start_refresh(with_profiles=True)`
+   (connect goes through `refresh_devices`); `_request_background_refresh` and
+   the pending restart in `_on_refresh_worker_done` keep the default.
+3. `_on_refreshed(self, devices, scenes, profiles: Optional[List[Any]] = None)`
+   (the default keeps the direct calls in `tests/test_display_rules.py`
+   working): when `profiles is not None`, store them in
+   `self.adaptive_profiles` before the signature check.
+4. `_data_signature(devices, scenes, profiles=())`: add
+   `repr(getattr(d, "adaptive_profile", None))` to each device tuple (today a
+   change of only the profile state would be skipped as a no-op fetch, because
+   it is not on `attributes`) and append `tuple(profile_options(profiles))`
+   as a third part. `_on_refreshed` passes `self.adaptive_profiles`.
+5. `tests/conftest.py` `StubHub`: `self.profiles: list[Any] = []`,
+   `self.profiles_fail = False`, `self.profile_calls = 0`, and
+   `get_adaptive_profiles()` that counts the call, raises
+   `RuntimeError("no profiles")` when `profiles_fail` and returns
+   `self.profiles`. It must not call `self.get` (tests count `hub.calls`).
+   Add `make_profile(id_, name) -> SimpleNamespace` next to `make_device`.
+   `make_device` gets `adaptive: tuple[str, bool] | None = None`, stored as
+   `adaptive_profile=SimpleNamespace(id=..., active=...)` or `None`.
+6. Tests in `tests/test_adaptive.py` (copy the `hub`/`connected` fixture
+   pattern from `tests/test_refresh.py`): connect fetches profiles once and
+   stores them; a manual refresh and `_poll()` fetch them again; an event or
+   scene background refresh (`_request_background_refresh()`) does not; a
+   failing profile fetch still applies new device values, keeps the earlier
+   profile list, records no dialog and shows no failure caption; a fetch that
+   differs only in a light's `adaptive_profile`, or only in a profile name,
+   is not skipped by the signature.
+
+Verification: gates; the new tests; the existing refresh and live tests pass
+unchanged.
+
+#### Commit 4 — "show the adaptive profile on light cards" (t-15)
+
+1. `widgets/card.py`: constants `ADAPTIVE_LABEL = "Adaptive"`, `OFF_LABEL =
+   "Off"`, `PROFILE_COMMIT_MS = 300` (read when the timer starts, so tests can
+   monkeypatch it), `LEAVE_HINT = "Change brightness or warmth to stop
+   following the profile"`.
+2. Small class `ProfileBox(QComboBox)` in `widgets/card.py`: focus policy
+   `Qt.FocusPolicy.StrongFocus`; `wheelEvent` calls `event.ignore()` and
+   returns, so scrolling the page over a card never changes a profile.
+3. `DeviceCard.__init__` gets `on_profile: Optional[Callable[["DeviceCard",
+   Optional[str]], None]] = None` and `profiles: Sequence[Tuple[str, str]] =
+   ()` (the `profile_options` output). For lights where
+   `supports_adaptive(device)`, `_build_profile_row()` adds, after the warmth
+   slider and before the colour button, a row widget `self._profile_row`: a
+   label `ADAPTIVE_LABEL` (`label_style(theme.TEXT2, theme.FONT_LABEL)`, as the
+   "Power" label) and `self.profile_box`, accessible name
+   `f"{self.full_name} adaptive profile"`. Append the box to `self._controls`
+   (offline disables it). A single-shot `self._profile_timer` sends.
+4. `set_profiles(self, options)`: refill the items with signals blocked:
+   item 0 `OFF_LABEL` with data `None`, then each label with its id as item
+   data; then `_sync_profile(protect_user=False)`. The row is hidden while
+   `options` is empty (no picker without profiles).
+5. `_sync_profile(protect_user: bool)`: id = `active_profile_id(self.device)`.
+   Skip when `protect_user` and the popup is open or `_profile_timer` is
+   active. With signals blocked: remove a previous `UNKNOWN_PROFILE` item;
+   select the item whose data is the id; when the id is not among the items,
+   append a disabled `UNKNOWN_PROFILE` item and select it. Enable item 0 only
+   while no profile is active (use `cast(QStandardItemModel, box.model())
+   .item(0).setEnabled(...)`) and set the tooltip to `LEAVE_HINT` while one is,
+   else `""`. Call it from `_sync` (with its `protect_user`).
+6. User choice: `profile_box.activated` restarts `_profile_timer` with
+   `PROFILE_COMMIT_MS`; on timeout read `currentData()`, and call
+   `on_profile(self, data)` only when it differs from
+   `active_profile_id(self.device)` (keys and quick clicks send once, the last
+   choice wins, like the sliders, `req-6`).
+7. `dashboard.py`: `create_device_widget` passes
+   `profiles=profile_options(self.adaptive_profiles)`; `_update_rooms` calls
+   `card.set_profiles(...)` on reused light cards only when the options
+   changed (compare with a stored tuple on the card). `on_profile` stays
+   unwired until commit 5.
+8. Tests: row only on supported lights and only with profiles; texts "Off",
+   a profile name, `UNKNOWN_PROFILE`; item 0 disabled with the hint while
+   active; a refresh with a new state or new names updates the box without
+   calling the callback; an open popup or running timer protects the choice
+   from a refresh; offline disables the box; choosing a profile (set the
+   index, emit `activated`, `PROFILE_COMMIT_MS` monkeypatched to 0) calls the
+   callback once with the id; choosing the active one again calls nothing; a
+   `QWheelEvent` sent to the box leaves the index unchanged; the search
+   filter still matches the light by name.
+
+Verification: gates; the new tests.
+
+#### Commit 5 — "activate adaptive profiles from the card" (t-15)
+
+1. `dashboard.py`: `ADAPTIVE_REFRESH_DELAY_MS = 5000` next to
+   `SCENE_REFRESH_DELAY_MS`; single-shot `self._adaptive_refresh_timer`
+   connected to `_request_background_refresh`, stopped in `closeEvent` next
+   to the scene timer. Read the constant when starting the timer.
+2. `set_adaptive_profile(self, card: DeviceCard, profile_id: Optional[str])`:
+   `None` returns at once (commit 6 adds leaving). Otherwise
+   `run_device_command(card, lambda: device.activate_adaptive_profile(profile_id),
+   "set adaptive profile")` and connect the worker's `succeeded` to
+   `_schedule_adaptive_refresh`, which (re)starts the timer. Failure needs no
+   extra code: `CommandWorker` reloads and `_on_command_failed` resyncs and
+   shows "Couldn't set adaptive profile: …" in the footer (`req-3`).
+3. `set_light_brightness`, `set_light_temperature`, `set_light_colour`: when
+   `active_profile_id(device)` is not `None` before the command, connect the
+   worker's `succeeded` to `_schedule_adaptive_refresh` (the hub decides
+   whether the profile ended; step 0 W1 may confirm it). If commit 1 recorded
+   that a change of that kind always ends the profile, also set
+   `device.adaptive_profile = None` inside the command after success, so the
+   resync shows "Off" at once.
+4. Wire `on_profile=self.set_adaptive_profile` in `create_device_widget`.
+5. `tests/conftest.py` `StubLight`: `adaptive_profile` attribute (from
+   `make_device`), `activate_adaptive_profile(profile_id)` using `_command()`
+   (thread, fail), appending `("profile", profile_id)` to `sent` and setting
+   `adaptive_profile = SimpleNamespace(id=profile_id, active=True)`.
+6. Tests (monkeypatch `ADAPTIVE_REFRESH_DELAY_MS` to 10 and
+   `PROFILE_COMMIT_MS` to 0): choosing a profile sends exactly one
+   activation off the GUI thread, the footer shows "Sending…" then the box
+   the profile; one background refresh follows and the box shows what the
+   stub hub now returns; a failing activation shows the footer error, the box
+   back on "Off", and schedules no refresh; a level change on an adaptive
+   light schedules one refresh, on a non-adaptive light none; the `dialogs`
+   fixture stays empty.
+
+Verification: gates; the new tests.
+
+#### Commit 6 — "leave adaptive mode from the card" (t-15) — only if step 0 W2 found a payload
+
+1. `set_adaptive_profile(card, None)`: run the payload recorded in
+   `doc/dirigera-api.md` §5 item 7 through
+   `device.dirigera_client.patch(route=f"/devices/{device.id}", data=...)`
+   (the energy reset pattern), then set `device.adaptive_profile =
+   None`; same success refresh as commit 5.
+2. `_sync_profile`: item 0 always enabled, no tooltip hint.
+3. `StubLight` gets a `dirigera_client` stub recording `patch` calls; tests:
+   "Off" sends exactly the recorded route and data, the box shows "Off", a
+   failure resyncs to the profile with the footer error.
+
+Skipped otherwise: the disabled "Off" item and hint from commit 4 stay.
+
+#### Commit 7 — "record adaptive profiles" (t-15)
+
+Bookkeeping (batch rules): check off t-15; `doc/reqs.md` inferred **req-24**
+(next free number; check with the command in `AGENTS.md`): "A light's
+adaptive profile is shown as text on its card; refreshes and resyncs never
+send a profile command, and after a profile change the card is updated from
+the hub once the hub has applied it. *(t-15, implemented)*";
+`doc/design-doc.md` §8.1 a short "Light card: adaptive row" paragraph
+(label, combo texts, hint, hidden without profiles, popup is not a dialog),
+§10.1 item 5 (profile and manual changes on an adaptive light refresh after
+5 s); `doc/dirigera-api.md` §3 row 1 (adaptive picker implemented, the
+`supports_adaptive` rule); `doc/qt-gotchas.md` new item: a `QComboBox` in a
+scroll area takes wheel events and changes value, so ignore them; set
+`Status:` and add the Executed note.
+
+Verification: gates; `grep -rn "t-15" doc agent-notes` shows no stale "open"
+wording. Owner check on the real hub: pick a profile on a lit light, see the
+box keep it and level and warmth follow within about 5 s; move its brightness
+and see the box after the refresh match the IKEA app; the box survives a poll.
+
+#### Risks
+
+- **Stale refresh in the apply window:** a poll or event refresh in the
+  seconds before the hub applies can show the old state, then the delayed
+  refresh corrects it (a short flicker of the box). Accepted, like the
+  sliders. If the owner check shows it often, hold the sent value on the card
+  for `ADAPTIVE_REFRESH_DELAY_MS` and ignore differing refreshes meanwhile.
+- **State missing from `/devices`:** if E1 shows lights never carry
+  `adaptiveProfile`, the card cannot show the state from a normal refresh.
+  Stop after commit 2 and replan (the `/home` payload the profile fetch
+  already loads may carry it; that needs a raw `hub.get("/home")` parser).
+- **Wrong capability rule:** a light that rejects profiles shows a picker
+  whose command fails with an inline error and a resync; harmless, fix the
+  rule in `supports_adaptive`.
+- **`/home` cost:** one more large request per manual refresh and poll; the
+  hub was fast enough in §14 item 13. Events never fetch it.
+
+Left out deliberately: creating, editing or deleting profiles (IKEA app only);
+showing a profile's schedule; applying a profile to a whole room or device
+set; a profile chip (one chip per card stays On/Off, §8.2); profiles in the
+Energy view.
+
+---
+
 ### Plan: brightness slider on an off light (t-94)
 
 Status: done 2026-11-21
@@ -703,8 +1031,9 @@ Verification: gates; manual by the owner (colours look roughly like the app).
 ### Plan: dirigera 1.6.1 migration follow-ups (t-12, t-14 … t-16)
 
 Status: partly done. Commit 1 (t-12) done 2026-11-15; commit 2 (t-14) done
-2026-11-21 by the plan "light colour controls"; commits 3 (t-15) and 4 (t-16)
-open, not scheduled
+2026-11-21 by the plan "light colour controls"; commit 4 (t-16) done 2026-11-21
+by the plan "live updates via websocket"; commit 3 (t-15) superseded by the plan
+"adaptive light profiles" (open)
 
 Goal: Adopt the capabilities added in `dirigera` 1.6.1 that the card UI does
 not expose yet. t-12 and t-13 landed with the `DeviceCard` refactor (design
@@ -750,7 +1079,7 @@ Affected files: `widgets/card.py`, `dashboard.py`
    `AssertionError` otherwise.
 5. Gates; offscreen smoke test invoking the handlers against a stubbed light.
 
-#### Commit 3 — "adaptive light profiles" (t-15) — t-17 prerequisite is done
+#### Commit 3 — "adaptive light profiles" (t-15) — superseded by the plan "adaptive light profiles"
 
 1. In `RefreshWorker.run`, fetch `self.adaptive_profiles =
    self.hub.get_adaptive_profiles()` inside a guarded `try` (empty list on
