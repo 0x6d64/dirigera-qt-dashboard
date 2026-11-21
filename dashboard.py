@@ -43,6 +43,7 @@ from settings import (
     EnergySettings,
     parse_discovery_settings,
     parse_energy_settings,
+    ui_settings,
 )
 from widgets.card import DeviceCard, device_sort_key
 from widgets.chip import StatusChip
@@ -51,6 +52,7 @@ from widgets.energy import EnergyCard, EnergyView
 from widgets.grid import CardGrid
 from widgets.scene import SCENE_MIN_WIDTH, SceneTile
 from widgets.segments import SegmentedControl
+from widgets.switch import ToggleSwitch
 from workers import (
     CommandTarget,
     CommandWorker,
@@ -98,6 +100,24 @@ FAN_MODE_FOR_MOTOR_STATE = {
 def is_hidden_device(device: Any) -> bool:
     """True when the hub flags the device hidden; the IKEA app hides it too (t-89)."""
     return getattr(device, "is_hidden", False) is True
+
+
+# Scenes the IKEA app creates itself are hidden unless this is on (t-90).
+AUTOMATIC_SCENES_LABEL = "Show automatic scenes"
+AUTOMATIC_SCENES_KEY = "scenes/show_automatic"
+
+
+def is_user_scene(scene: Any) -> bool:
+    """True for scenes the user made: type `userScene`, or no type reported."""
+    scene_type = getattr(scene, "type", None)
+    if scene_type is None:
+        return True
+    return bool(getattr(scene_type, "value", scene_type) == "userScene")
+
+
+def load_show_automatic() -> bool:
+    """The remembered "Show automatic scenes" choice, off by default."""
+    return bool(ui_settings().value(AUTOMATIC_SCENES_KEY, False, type=bool))
 
 
 def widget_name(widget: QWidget) -> str:
@@ -206,6 +226,7 @@ class DirigeraDashboard(QMainWindow):
         self.hub: Optional[Hub] = None
         self.devices: List[Any] = []
         self.scenes: List[Scene] = []
+        self._show_automatic = load_show_automatic()
         self._hub_ip: Optional[str] = None
         self._last_refresh: Optional[datetime] = None
         self._connect_worker: Optional[ConnectWorker] = None
@@ -363,6 +384,18 @@ class DirigeraDashboard(QMainWindow):
         )
         self.scenes_layout.setSpacing(theme.SP24)
         self.scenes_grid = CardGrid(min_width=SCENE_MIN_WIDTH)
+        # Automatic scenes stay hidden unless the remembered toggle is on (t-90).
+        self.automatic_switch = ToggleSwitch(accessible_name=AUTOMATIC_SCENES_LABEL)
+        self.automatic_switch.setChecked(self._show_automatic)
+        self.automatic_switch.toggled.connect(self._on_automatic_toggled)
+        automatic_label = QLabel(AUTOMATIC_SCENES_LABEL)
+        automatic_label.setProperty("role", "section")
+        automatic_row = QHBoxLayout()
+        automatic_row.setSpacing(theme.SP12)
+        automatic_row.addWidget(automatic_label)
+        automatic_row.addWidget(self.automatic_switch)
+        automatic_row.addStretch()
+        self.scenes_layout.addLayout(automatic_row)
         self.scenes_layout.addWidget(self.scenes_grid)
         self.scenes_layout.addStretch()
         self.scenes_scroll.setWidget(self.scenes_content)
@@ -894,8 +927,8 @@ class DirigeraDashboard(QMainWindow):
         areas = (self.devices_scroll, self.scenes_scroll)
         scroll_values = [_scroll_value(area) for area in areas]
 
-        devices_by_room = self._update_rooms(devices)
-        self._update_scenes(scenes)
+        self._update_rooms(devices)
+        self._update_scenes(self._visible_scenes(scenes))
 
         # Energy view: outlets and electrical sensors grouped by room (§9.4).
         energy_by_room = group_by_room(
@@ -908,10 +941,7 @@ class DirigeraDashboard(QMainWindow):
             ]
         )
 
-        self._summary_text = (
-            f"Found {len(self.devices)} devices in {len(devices_by_room)} rooms "
-            f"and {len(self.scenes)} scenes"
-        )
+        self._summary_text = self._summary()
         self._status_is_failure = False
         self.set_status_text(self._summary_text)
 
@@ -1010,6 +1040,36 @@ class DirigeraDashboard(QMainWindow):
             tile.deleteLater()
         if self.scenes_grid.cards() != tiles:
             self.scenes_grid.set_cards(tiles)
+
+    def _visible_scenes(self, scenes: List[Scene]) -> List[Scene]:
+        """The scenes the grid shows: automatic ones only while the toggle is on."""
+        if self._show_automatic:
+            return list(scenes)
+        return [scene for scene in scenes if is_user_scene(scene)]
+
+    def _summary(self) -> str:
+        """The status line counts: devices, rooms and the scenes on screen."""
+        scenes = len(self._visible_scenes(self.scenes))
+        return (
+            f"Found {len(self.devices)} devices in {len(self._room_sections)} rooms "
+            f"and {scenes} scenes"
+        )
+
+    def _on_automatic_toggled(self, shown: bool) -> None:
+        """Show or hide automatic scenes and remember the choice (t-90).
+
+        Only the scene grid, the search filter and the counts change; no hub
+        command is sent.
+        """
+        self._show_automatic = shown
+        settings = ui_settings()
+        settings.setValue(AUTOMATIC_SCENES_KEY, shown)
+        settings.sync()
+        self._update_scenes(self._visible_scenes(self.scenes))
+        self.filter_devices(self.search_input.text())
+        self._summary_text = self._summary()
+        if not self._status_is_failure:
+            self.set_status_text(self._summary_text)
 
     def filter_devices(self, query: str) -> None:
         """Filter device cards and scene tiles by name as the user types (§8.8).

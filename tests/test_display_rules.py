@@ -3,9 +3,10 @@
 from typing import Any
 
 import pytest
-from conftest import make_device
+from conftest import StubScene, make_device
 
 import theme
+from dashboard import DirigeraDashboard, widget_name
 from widgets.card import DeviceCard
 from widgets.text import pm25_band
 
@@ -94,3 +95,84 @@ def test_device_that_becomes_visible_again_gets_a_card(window: Any) -> None:
     window._on_refreshed([make_device("light", "l1", "Lamp", is_on=False)], [])
     assert _card_ids(window) == {"l1"}
     assert window.status_label.text() == ("Found 1 devices in 1 rooms and 0 scenes")
+
+
+# --- automatic scenes (t-90) -------------------------------------------------
+
+
+def _scene_names(win: Any) -> list[str]:
+    return [widget_name(tile) for tile in win.scenes_grid.cards()]
+
+
+def _scenes() -> list[Any]:
+    return [
+        StubScene("s1", "Evening"),
+        StubScene("c1", "Smart Notifications", type_="customScene"),
+    ]
+
+
+def test_automatic_scenes_are_hidden_by_default(window: Any) -> None:
+    window._on_refreshed([], _scenes())
+    assert window.automatic_switch.isChecked() is False
+    assert _scene_names(window) == ["Evening"]
+    assert window.status_label.text().endswith("and 1 scenes")
+
+
+def test_toggle_shows_and_hides_automatic_scenes_without_commands(window: Any) -> None:
+    scenes = _scenes()
+    window._on_refreshed([], scenes)
+    assert window.automatic_switch.accessibleName() == "Show automatic scenes"
+
+    window.automatic_switch.click()
+    assert _scene_names(window) == ["Evening", "Smart Notifications"]
+    assert window.status_label.text().endswith("and 2 scenes")
+
+    window.automatic_switch.click()
+    assert _scene_names(window) == ["Evening"]
+    assert window.status_label.text().endswith("and 1 scenes")
+
+    # Toggling is a view change: no scene or device command was sent.
+    assert window._scene_workers == []
+    assert window._command_workers == []
+    assert not any(scene.triggered for scene in scenes)
+
+
+def test_a_scene_without_a_type_counts_as_a_user_scene(window: Any) -> None:
+    scene = StubScene("s2", "Morning")
+    del scene.type
+    window._on_refreshed([], [scene])
+    assert _scene_names(window) == ["Morning"]
+
+
+def test_the_automatic_scenes_choice_persists_into_a_new_window(window: Any) -> None:
+    window._on_refreshed([], _scenes())
+    window.automatic_switch.click()
+
+    later = DirigeraDashboard()
+    try:
+        assert later.automatic_switch.isChecked() is True
+        later._on_refreshed([], _scenes())
+        assert _scene_names(later) == ["Evening", "Smart Notifications"]
+    finally:
+        later.hide()
+        later.deleteLater()
+
+
+def test_search_still_filters_the_shown_scenes(window: Any) -> None:
+    window._on_refreshed(
+        [],
+        [
+            StubScene("s1", "Evening"),
+            StubScene("c1", "Smart Notifications", type_="customScene"),
+            StubScene("s3", "Smart Lights"),
+        ],
+    )
+    window.automatic_switch.click()
+    window.search_input.setText("smart")
+    shown = [t for t in window.scenes_grid.cards() if not t.isHidden()]
+    assert [widget_name(t) for t in shown] == ["Smart Notifications", "Smart Lights"]
+
+    # Hiding automatic scenes keeps the filter for the scenes that remain.
+    window.automatic_switch.click()
+    shown = [t for t in window.scenes_grid.cards() if not t.isHidden()]
+    assert [widget_name(t) for t in shown] == ["Smart Lights"]
