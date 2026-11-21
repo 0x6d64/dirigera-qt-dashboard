@@ -115,3 +115,51 @@ def test_discover_without_networks_returns_nothing(
 ) -> None:
     monkeypatch.setattr(nd, "get_local_networks", lambda: [])
     assert nd.discover_dirigera_hubs() == []
+
+
+def test_hosts_to_scan_covers_every_24_of_a_large_network() -> None:
+    hosts = nd.hosts_to_scan(["10.1.0.0/22"])
+    assert len(hosts) == 4 * 254
+    for third in range(4):
+        assert f"10.1.{third}.1" in hosts
+        assert f"10.1.{third}.254" in hosts
+
+
+def test_hosts_to_scan_keeps_a_23_whole() -> None:
+    assert len(nd.hosts_to_scan(["10.1.0.0/23"])) == 510
+
+
+def test_hosts_to_scan_respects_the_cap() -> None:
+    hosts = nd.hosts_to_scan(["10.0.0.0/8"], max_hosts=600)
+    assert len(hosts) == 600
+    assert hosts[0] == "10.0.0.1"
+
+
+def test_hosts_to_scan_default_cap() -> None:
+    assert len(nd.hosts_to_scan(["10.0.0.0/8"])) == nd.MAX_SCAN_HOSTS
+
+
+def test_hosts_to_scan_scans_duplicates_once() -> None:
+    hosts = nd.hosts_to_scan(["192.168.1.0/24", "192.168.1.0/24", "192.168.1.0/25"])
+    assert len(hosts) == 254
+    assert len(set(hosts)) == 254
+
+
+def test_hosts_to_scan_small_network_and_bad_input() -> None:
+    assert nd.hosts_to_scan(["junk", "192.168.1.0/30"]) == [
+        "192.168.1.1",
+        "192.168.1.2",
+    ]
+
+
+def test_get_local_networks_lists_a_shared_subnet_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    inet = nd.netifaces.AF_INET
+    ifaces: dict[str, Any] = {
+        "eth0": {inet: [{"addr": "192.168.1.20", "netmask": "255.255.255.0"}]},
+        "wlan0": {inet: [{"addr": "192.168.1.21", "netmask": "255.255.255.0"}]},
+    }
+    monkeypatch.setattr(nd.netifaces, "interfaces", lambda: list(ifaces))
+    monkeypatch.setattr(nd.netifaces, "ifaddresses", lambda name: ifaces[name])
+    assert nd.get_local_networks() == ["192.168.1.0/24"]
