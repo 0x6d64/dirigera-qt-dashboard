@@ -9,7 +9,7 @@ reused.
   Refresh click must not be the only way displayed values update. *(user,
   2026-11-15; t-56, implemented)*
 - **req-15** — The air purifier card must let the user set the fan speed: off,
-  auto, or a fixed level. *(user, 2026-11-21; t-80, open)*
+  auto, or a fixed level. *(user, 2026-11-21; t-80, implemented)*
 - **req-16** — The air purifier's PM2.5 reading must be displayed. *(user,
   2026-11-21; t-81, implemented by t-69)*
 - **req-17** — Historical air quality readings should be shown if the hub
@@ -21,7 +21,7 @@ reused.
   configurable price per kWh and currency; when unset the defaults are Romanian
   prices (RON). *(user, 2026-11-21; t-84, open)*
 - **req-20** — The air purifier card must show the filter's health and when the
-  filter needs changing. *(user, 2026-11-21; t-85, open)*
+  filter needs changing. *(user, 2026-11-21; t-85, implemented)*
 - **req-21** — The dashboard must not show or control the air purifier's child
   lock, although the hub exposes it (`childLock`). *(user, 2026-11-21; decision,
   no task)*

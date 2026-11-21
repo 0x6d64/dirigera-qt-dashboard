@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple, override
 
 from dirigera import Hub
+from dirigera.devices.air_purifier import FanModeEnum
 from dirigera.devices.blinds import BlindsStateEnum
 from dirigera.devices.scene import Scene
 from PyQt6 import sip
@@ -132,6 +133,18 @@ def parse_discovery_settings(
 
 # Section label for devices that are not assigned to a room.
 UNKNOWN_ROOM = "Unknown room"
+
+# The fan mode the hub reports for each fan motor state (req-15); used to
+# update a purifier's `fan_mode` right after a successful speed change.
+FAN_MODE_FOR_MOTOR_STATE = {
+    0: FanModeEnum.OFF,
+    1: FanModeEnum.AUTO,
+    10: FanModeEnum.LOW,
+    20: FanModeEnum.LOW,
+    30: FanModeEnum.MEDIUM,
+    40: FanModeEnum.MEDIUM,
+    50: FanModeEnum.HIGH,
+}
 
 
 def widget_name(widget: QWidget) -> str:
@@ -1240,6 +1253,7 @@ class DirigeraDashboard(QMainWindow):
             on_temperature=self.set_light_temperature,
             on_blind_state=self.set_blind_state,
             on_colour=self.set_light_colour,
+            on_fan_speed=self.set_fan_speed,
         )
 
     def create_scene_tile(self, scene: Scene) -> SceneTile:
@@ -1306,6 +1320,20 @@ class DirigeraDashboard(QMainWindow):
         self.run_device_command(
             card, lambda: device.set_light_color(hue, saturation), "set colour"
         )
+
+    def set_fan_speed(self, card: DeviceCard, motor_state: int) -> None:
+        """Set an air purifier's fan: 0 off, 1 auto, 10 to 50 speeds 1 to 5.
+
+        On success the fan mode the hub would report is stored on the device,
+        so the resync shows the new setting before the next refresh.
+        """
+        device = card.device
+
+        def command() -> None:
+            device.set_motor_state(motor_state)
+            device.attributes.fan_mode = FAN_MODE_FOR_MOTOR_STATE[motor_state]
+
+        self.run_device_command(card, command, "set fan speed")
 
     def set_blind_position(self, card: DeviceCard, position: int) -> None:
         """Move a blind to a target level."""

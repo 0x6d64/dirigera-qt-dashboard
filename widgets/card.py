@@ -35,9 +35,10 @@ from PyQt6.QtWidgets import (
 import theme
 from widgets.chip import StatusChip
 from widgets.metric import MetricWidget
+from widgets.segments import SegmentedControl
 from widgets.slider import LabeledSlider
 from widgets.switch import ToggleSwitch
-from widgets.text import energy_footer, relative_time, type_label
+from widgets.text import energy_footer, filter_text, relative_time, type_label
 
 # Device category sorting weight per design-doc.md §8.1 rule 3
 # (keys are the library's camelCase `device_type` values; every controller
@@ -69,11 +70,13 @@ _READINGS: dict[str, tuple[tuple[str, str, str], ...]] = {
         ("VOC index", "", "voc_index"),
     ),
     "lightSensor": (("Illuminance", "", "illuminance"),),
-    "airPurifier": (
-        ("PM2.5", "", "current_p_m25"),
-        ("Fan mode", "", "fan_mode"),
-    ),
+    "airPurifier": (("PM2.5", "", "current_p_m25"),),
 }
+
+# Fan segments of the air purifier card (req-15): the labels, and the
+# `motorState` each one sends (0 off, 1 auto, 10 to 50 speeds 1 to 5).
+FAN_SPEED_LABELS = ("Off", "Auto", "1", "2", "3", "4", "5")
+FAN_MOTOR_STATES = (0, 1, 10, 20, 30, 40, 50)
 
 # Readings shown side by side before the next row starts (§8.5.3).
 READINGS_PER_ROW = 3
@@ -107,6 +110,30 @@ def kelvin_bounds(attrs: Any) -> Optional[Tuple[int, int]]:
     return (lower, upper) if lower < upper else None
 
 
+def fan_speed_index(motor_state: Any, fan_mode: Any) -> Optional[int]:
+    """The FAN_SPEED_LABELS index of a purifier's fan setting, None if unknown.
+
+    Auto is `fan_mode` "auto" or `motor_state` 1. While in auto the hub reports
+    the speed it picked (e.g. 30) in `motor_state`, so auto wins over the
+    number. Off is `motor_state` 0 or `fan_mode` "off". Otherwise the speed
+    is `motor_state` / 10, clamped to 1 to 5. `fan_mode` may be the library's
+    enum or its string value.
+    """
+    mode = getattr(fan_mode, "value", fan_mode)
+    state = (
+        motor_state
+        if isinstance(motor_state, int) and not isinstance(motor_state, bool)
+        else None
+    )
+    if mode == "auto" or state == 1:
+        return 1
+    if state == 0 or mode == "off":
+        return 0
+    if state is None:
+        return None
+    return min(5, max(1, round(state / 10))) + 1
+
+
 def _can_receive(device: Any) -> list[str]:
     return list(getattr(getattr(device, "capabilities", None), "can_receive", []))
 
@@ -136,6 +163,7 @@ class DeviceCard(QFrame):
         on_temperature: Optional[Callable[["DeviceCard", int], None]] = None,
         on_blind_state: Optional[Callable[["DeviceCard", str], None]] = None,
         on_colour: Optional[Callable[["DeviceCard", float, float], None]] = None,
+        on_fan_speed: Optional[Callable[["DeviceCard", int], None]] = None,
         parent=None,
     ):
         """Build the card. Every callback receives the card itself, so the
@@ -149,9 +177,11 @@ class DeviceCard(QFrame):
         self._on_temperature = on_temperature
         self._on_colour = on_colour
         self._on_blind_state = on_blind_state
+        self._on_fan_speed = on_fan_speed
 
         self._controls: list[QWidget] = []
         self._readings_box: Optional[QWidget] = None
+        self._fan_box: Optional[QWidget] = None
         self._readings: dict[str, MetricWidget] = {}
         self._is_offline = False
         self._pending = False
@@ -417,6 +447,8 @@ class DeviceCard(QFrame):
                 self.control_zone.addLayout(btn_row)
 
         elif dtype in _READINGS:
+            if dtype == "airPurifier":
+                self._build_fan_control()
             self._readings_box = QWidget()
             self.control_zone.addWidget(self._readings_box)
             self._fill_readings()
@@ -481,6 +513,49 @@ class DeviceCard(QFrame):
                 self.saturation_slider.value() / 100,
             )
 
+    def _build_fan_control(self) -> None:
+        """A "Fan" label over Off, Auto and speeds 1 to 5 (req-15).
+
+        Hidden while the device reports no fan setting, rather than showing
+        a segment that would be invented.
+        """
+        self._fan_box = QWidget()
+        box_layout = QVBoxLayout(self._fan_box)
+        box_layout.setContentsMargins(0, 0, 0, 0)
+        box_layout.setSpacing(theme.SP4)
+        fan_label = QLabel("Fan")
+        fan_label.setStyleSheet(
+            f"color: {theme.TEXT2}; font-size: {theme.FONT_LABEL}px;"
+        )
+        box_layout.addWidget(fan_label)
+        self.fan_speed = SegmentedControl(list(FAN_SPEED_LABELS))
+        self.fan_speed.setAccessibleName(f"{self.full_name} fan speed")
+        if self._on_fan_speed is not None:
+            cb_fan = self._on_fan_speed
+            self.fan_speed.current_changed.connect(
+                lambda index, callback=cb_fan: callback(self, FAN_MOTOR_STATES[index])
+            )
+        box_layout.addWidget(self.fan_speed)
+        self._controls.append(self.fan_speed)
+        self.control_zone.addWidget(self._fan_box)
+        self._sync_fan_speed()
+
+    def _sync_fan_speed(self) -> None:
+        """Select the segment for the device's fan setting, without a command."""
+        control = getattr(self, "fan_speed", None)
+        if not isinstance(control, SegmentedControl):
+            return
+        attrs = getattr(self.device, "attributes", None)
+        index = fan_speed_index(
+            getattr(attrs, "motor_state", None), getattr(attrs, "fan_mode", None)
+        )
+        control.blockSignals(True)
+        if index is not None:
+            control.set_current(index)
+        control.blockSignals(False)
+        if self._fan_box is not None:
+            self._fan_box.setVisible(index is not None)
+
     def _reading_values(self) -> dict[str, Any]:
         """The non-None readings of this device, keyed by attribute name."""
         attrs = getattr(self.device, "attributes", None)
@@ -489,12 +564,8 @@ class DeviceCard(QFrame):
             getattr(self.device, "device_type", ""), ()
         ):
             value = getattr(attrs, attr, None)
-            if value is None:
-                continue
-            if attr == "fan_mode":
-                # An enum in the library; show the word ("Auto").
-                value = str(getattr(value, "value", value)).capitalize()
-            values[attr] = value
+            if value is not None:
+                values[attr] = value
         return values
 
     def _fill_readings(self) -> None:
@@ -596,6 +667,12 @@ class DeviceCard(QFrame):
                 self._set_chip("Dry", "neutral")
             else:
                 self._set_chip("", "neutral")
+        elif dtype == "airPurifier":
+            # Only the filter alarm is a state worth a chip (req-20).
+            if getattr(attrs, "filter_alarm_status", None) is True:
+                self._set_chip("Change filter", "warn")
+            else:
+                self._set_chip("", "neutral")
         else:
             # No readable state (remotes, air quality sensors): no chip
             # rather than an invented one (design-doc.md §1 principle 1).
@@ -666,6 +743,17 @@ class DeviceCard(QFrame):
         if isinstance(battery, (int, float)):
             self._set_footer(f"Battery {int(battery)}%")
             return
+
+        # Air purifier: filter life left (req-20).
+        if dtype == "airPurifier":
+            text = filter_text(
+                getattr(attrs, "filter_lifetime", None),
+                getattr(attrs, "filter_elapsed_time", None),
+                getattr(attrs, "filter_alarm_status", None),
+            )
+            if text is not None:
+                self._set_footer(text)
+                return
 
         # Electrical sensors and metering outlets: the energy readings. An
         # outlet has no power metric on its card, so its footer leads with W.
@@ -759,6 +847,7 @@ class DeviceCard(QFrame):
             slider.blockSignals(True)
             slider.set_value(round(value * scale))
             slider.blockSignals(False)
+        self._sync_fan_speed()
         self._sync_readings()
         metric = getattr(self, "power_metric", None)
         if isinstance(metric, MetricWidget):
