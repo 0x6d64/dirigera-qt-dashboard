@@ -22,7 +22,7 @@ class MetricWidget(QWidget):
     def __init__(
         self,
         caption: str = "",
-        initial_value: Optional[float] = None,
+        initial_value: Optional[float | str] = None,
         unit: str = "",
         parent=None,
     ):
@@ -82,7 +82,9 @@ class MetricWidget(QWidget):
 
         self.set_value(initial_value, unit)
 
-    def set_value(self, value: Optional[float], unit: Optional[str] = None) -> None:
+    def set_value(
+        self, value: Optional[float | str], unit: Optional[str] = None
+    ) -> None:
         """Update the displayed numeric value and optional unit string."""
         if unit is not None:
             self._unit_text = unit
