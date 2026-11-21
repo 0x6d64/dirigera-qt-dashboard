@@ -32,6 +32,7 @@ import theme
 from widgets.chip import StatusChip
 from widgets.grid import CARD_MIN_WIDTH, CardGrid
 from widgets.metric import MetricWidget
+from widgets.text import format_amps, format_kwh, format_volts, type_label
 
 
 class EnergyCard(QFrame):
@@ -75,7 +76,7 @@ class EnergyCard(QFrame):
             """)
         titles.addWidget(self.name_label)
 
-        self.type_label = QLabel(dtype.replace("_", " ").capitalize())
+        self.type_label = QLabel(type_label(dtype))
         self.type_label.setStyleSheet(f"""
             QLabel {{
                 color: {theme.TEXT2};
@@ -186,22 +187,14 @@ class EnergyCard(QFrame):
     @staticmethod
     def _format_captions(attrs: Any) -> str:
         """Return the current/voltage caption line, empty when unreported."""
-        parts = []
-        amps = getattr(attrs, "current_amps", None)
-        volts = getattr(attrs, "current_voltage", None)
-        if isinstance(amps, (int, float)):
-            parts.append(f"{amps:.2f} A")
-        if isinstance(volts, (int, float)):
-            parts.append(f"{volts:.0f} V")
-        return " · ".join(parts)
+        parts = [format_amps(attrs), format_volts(attrs)]
+        return " · ".join(p for p in parts if p)
 
     @staticmethod
     def _format_footer(attrs: Any) -> str:
         """Return the total-energy footer; never leave it blank (§8.11)."""
-        kwh = getattr(attrs, "total_energy_consumed", None)
-        if isinstance(kwh, (int, float)):
-            return f"Total {kwh:.2f} kWh"
-        return "No energy data"
+        kwh = format_kwh(attrs)
+        return f"Total {kwh}" if kwh else "No energy data"
 
 
 class EnergyView(QWidget):

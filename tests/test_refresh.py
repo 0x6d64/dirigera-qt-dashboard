@@ -19,7 +19,7 @@ def _devices(level: int = 40, lamp_on: bool = True) -> list[Any]:
         make_device("light", "l1", "Lamp", is_on=lamp_on, light_level=level),
         make_device("outlet", "o1", "Heater", room=("r2", "Bedroom"), is_on=False),
         make_device(
-            "electrical_sensor",
+            "electricalSensor",
             "e1",
             "Meter",
             room=("r2", "Bedroom"),

@@ -520,6 +520,19 @@ Check off t-26, Executed marker.
 
 ### Plan: card text and footers (t-67, t-68, t-70, t-75)
 
+> **Executed 2026-11-21** on branch `fix/card-text`: commit 1 "elide long
+> device names" (`6ba47be`), commit 2 "humanise chips, types and offline
+> footer" (`0b57cca`), commit 3 "show energy on metering outlets"
+> (`a170a88`), checkboxes in "record card text fixes". Deviations: the
+> `device_type` comparisons in `dashboard.is_energy_device` and the card's
+> electrical-sensor branches used `electrical_sensor`; the real value is
+> `electricalSensor`, fixed together with the sort map (which also gained
+> light, water and occupancy sensors, and every `*Controller` type). The
+> name is elided from the card width in `resizeEvent` (not from the label
+> width). A metering outlet's footer leads with its live power, since the
+> outlet card has no power metric. `widgets/icons.py` still keys its glyphs
+> by snake_case names (unused for devices today).
+
 Goal: card text follows `design-doc.md` §8.1 and §8.2: names never wrap or
 widen the card, offline cards say when they were last seen, chips hold one or
 two words, type captions are human words, and metering outlets show energy in
