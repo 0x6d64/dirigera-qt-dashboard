@@ -1,5 +1,6 @@
 """Automated refresh: in-place card updates (t-19) and polling (t-56)."""
 
+import threading
 from collections.abc import Callable
 from typing import Any
 
@@ -280,3 +281,113 @@ def test_update_caption_warns_when_older_than_two_intervals(
 def test_close_stops_the_timer(connected: Any) -> None:
     connected.close()
     assert not connected.refresh_timer.isActive()
+
+
+# --- refresh after a scene activation (t-79) ----------------------------------
+
+
+def _activate(win: Any, wait_until: Wait) -> Any:
+    """Activate the first scene tile and wait for its inline result."""
+    tile = win.scenes_grid.cards()[0]
+    win.trigger_scene(tile)
+    wait_until(lambda: tile.status_label.text() in ("Activated", "Failed"))
+    return tile
+
+
+def test_successful_activation_refreshes_once_and_shows_new_state(
+    connected: Any,
+    hub: StubHub,
+    monkeypatch: pytest.MonkeyPatch,
+    wait_until: Wait,
+) -> None:
+    monkeypatch.setattr(dashboard, "SCENE_REFRESH_DELAY_MS", 10)
+    scene = connected.scenes_grid.cards()[0].scene
+
+    def trigger_changes_hub() -> None:
+        scene.triggered += 1
+        hub.devices = _devices(level=99)  # the hub applies the scene
+
+    monkeypatch.setattr(scene, "trigger", trigger_changes_hub)
+    before = len(hub.calls)
+    _activate(connected, wait_until)
+    wait_until(lambda: len(hub.calls) > before and connected._refresh_worker is None)
+    assert len(hub.calls) == before + 1
+    assert _cards(connected)["l1"].brightness_slider.value() == 99
+
+
+def test_quick_activations_cause_one_fetch(
+    connected: Any,
+    hub: StubHub,
+    monkeypatch: pytest.MonkeyPatch,
+    wait_until: Wait,
+    pump: Callable[[int], None],
+) -> None:
+    monkeypatch.setattr(dashboard, "SCENE_REFRESH_DELAY_MS", 300)
+    tile = connected.scenes_grid.cards()[0]
+    before = len(hub.calls)
+    connected.trigger_scene(tile)
+    connected.trigger_scene(tile)
+    wait_until(lambda: tile.scene.triggered == 2)
+    wait_until(lambda: len(hub.calls) > before and connected._refresh_worker is None)
+    pump(450)  # long enough for a second, uncoalesced fetch to have started
+    assert len(hub.calls) == before + 1
+
+
+def test_activation_during_a_fetch_refreshes_again_after_it(
+    connected: Any,
+    hub: StubHub,
+    monkeypatch: pytest.MonkeyPatch,
+    wait_until: Wait,
+) -> None:
+    monkeypatch.setattr(dashboard, "SCENE_REFRESH_DELAY_MS", 0)
+    gate = threading.Event()
+    fetches: list[int] = []
+    original = hub.get_all_devices
+
+    def gated_fetch() -> list[Any]:
+        fetches.append(1)
+        if len(fetches) == 1:
+            gate.wait(5)  # hold the first fetch in flight
+        return original()
+
+    monkeypatch.setattr(hub, "get_all_devices", gated_fetch)
+    connected.refresh_devices()
+    connected.trigger_scene(connected.scenes_grid.cards()[0])
+    wait_until(lambda: connected._refresh_pending)
+    gate.set()
+    wait_until(lambda: len(fetches) == 2 and connected._refresh_worker is None)
+    assert not connected._refresh_pending
+
+
+def test_failed_activation_schedules_no_fetch(
+    connected: Any,
+    hub: StubHub,
+    monkeypatch: pytest.MonkeyPatch,
+    wait_until: Wait,
+    pump: Callable[[int], None],
+) -> None:
+    monkeypatch.setattr(dashboard, "SCENE_REFRESH_DELAY_MS", 10)
+    tile = connected.scenes_grid.cards()[0]
+    tile.scene.fail = True
+    before = len(hub.calls)
+    connected.trigger_scene(tile)
+    wait_until(lambda: tile.status_label.text() == "Failed")
+    pump(100)  # well past the 10 ms delay
+    assert len(hub.calls) == before
+    assert connected._refresh_worker is None
+
+
+def test_failed_scene_refresh_records_no_dialog(
+    connected: Any,
+    hub: StubHub,
+    dialogs: list,
+    monkeypatch: pytest.MonkeyPatch,
+    wait_until: Wait,
+) -> None:
+    monkeypatch.setattr(dashboard, "SCENE_REFRESH_DELAY_MS", 10)
+    hub.fail = True
+    before = len(hub.calls)
+    _activate(connected, wait_until)
+    wait_until(lambda: len(hub.calls) > before and connected._refresh_worker is None)
+    assert connected.status_label.text().startswith("Refresh failed")
+    assert dialogs == []

@@ -41,6 +41,9 @@ from widgets.segments import SegmentedControl
 
 # Seconds between automatic background refreshes (req-13, t-56).
 POLL_INTERVAL_S = 30
+# Delay before the refresh that follows a scene activation: the hub applies a
+# scene asynchronously, so an immediate fetch can miss the change.
+SCENE_REFRESH_DELAY_MS = 1500
 # Saved credentials live next to this file, whatever the working directory.
 CONFIG_PATH = Path(__file__).resolve().parent / "config.ini"
 
@@ -283,6 +286,12 @@ class DirigeraDashboard(QMainWindow):
         self.refresh_timer = QTimer(self)
         self.refresh_timer.setInterval(self._poll_interval * 1000)
         self.refresh_timer.timeout.connect(self._poll)
+        # Single-shot: restarted by each successful scene activation.
+        self._scene_refresh_timer = QTimer(self)
+        self._scene_refresh_timer.setSingleShot(True)
+        self._scene_refresh_timer.timeout.connect(self._request_background_refresh)
+        # Set when a scene refresh came due while a fetch was already running.
+        self._refresh_pending = False
         self.init_ui()
         self.load_config()
 
@@ -694,6 +703,15 @@ class DirigeraDashboard(QMainWindow):
         self._refresh_is_background = background
         worker.start()
 
+    def _request_background_refresh(self) -> None:
+        """Refresh in the background now, or once the running fetch ends."""
+        if self.hub is None:
+            return
+        if self._refresh_worker is not None:
+            self._refresh_pending = True
+            return
+        self._start_refresh(background=True)
+
     @override
     def changeEvent(self, event: Optional[QEvent]) -> None:
         """Pause polling while minimised; catch up when restored (t-56)."""
@@ -913,6 +931,9 @@ class DirigeraDashboard(QMainWindow):
     def _on_refresh_worker_done(self) -> None:
         self._refresh_worker = None
         self.refresh_button.setEnabled(self.hub is not None)
+        if self._refresh_pending:
+            self._refresh_pending = False
+            self._start_refresh(background=True)
 
     def _new_room_section(self, room_name: str) -> Tuple[QWidget, CardGrid, QLabel]:
         """Build one empty room section: section label plus reflowing grid.
@@ -1037,6 +1058,8 @@ class DirigeraDashboard(QMainWindow):
         tile = self._scene_tile_for(scene)
         if tile is not None:
             tile.show_activated()
+        # Restarting coalesces quick activations into one fetch.
+        self._scene_refresh_timer.start(SCENE_REFRESH_DELAY_MS)
 
     def _on_scene_failed(self, scene: Scene, message: str) -> None:
         """Report a failed activation inline instead of with a dialog."""
@@ -1090,6 +1113,7 @@ class DirigeraDashboard(QMainWindow):
         and the application quits, once the last worker has finished.
         """
         self.refresh_timer.stop()
+        self._scene_refresh_timer.stop()
         discovery = getattr(self, "discovery_thread", None)
         if discovery is not None and discovery.isRunning():
             discovery.request_stop()

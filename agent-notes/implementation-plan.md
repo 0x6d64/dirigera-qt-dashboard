@@ -223,6 +223,51 @@ set a short interval. Gates as above.
 
 ---
 
+### Plan: refresh after a scene activation (t-79)
+
+Goal: after a scene is activated, the device views show the new state within
+about two seconds instead of waiting for the next 30 s poll. Branch
+`fix/scene-refresh`.
+
+Affected files: `dashboard.py`, `tests/test_refresh.py`, `doc/design-doc.md`
+§10.2, `agent-notes/todo.md`
+
+#### Commit 1 — "refresh after a scene activation" (t-79)
+
+> **Executed 2026-11-21** on branch `fix/scene-refresh`: commit `69645e0`.
+
+1. `dashboard.py`: module constant `SCENE_REFRESH_DELAY_MS = 1500` (the hub
+   applies a scene asynchronously, so an immediate fetch can miss it). In
+   `__init__` add a single-shot `QTimer` `self._scene_refresh_timer`, timeout
+   connected to `self._request_background_refresh`. Read the constant when the
+   timer is started, so tests can monkeypatch it.
+2. `_on_scene_triggered`: after `show_activated()`, (re)start
+   `_scene_refresh_timer` with the delay. Restarting coalesces several quick
+   activations into one fetch. A failed activation (`_on_scene_failed`)
+   schedules nothing.
+3. New `_request_background_refresh()`: if no hub, do nothing; if a refresh
+   worker is running, set `self._refresh_pending = True`; otherwise
+   `self._start_refresh(background=True)` (no dialog on failure, like a poll).
+4. `_on_refresh_worker_done`: after the existing lines, if `_refresh_pending`
+   is set, clear it and call `_start_refresh(background=True)`.
+5. `closeEvent`: stop `_scene_refresh_timer` next to `refresh_timer`.
+
+Verification: tests in `tests/test_refresh.py` with `SCENE_REFRESH_DELAY_MS`
+monkeypatched to 0 or 10: a successful activation leads to one more
+`get_all_devices` call on the stub hub and the card shows the state the stub
+now returns; two quick activations cause one fetch, not two; an activation
+while a refresh is in flight causes a second fetch after the first finishes; a
+failed activation causes no fetch; a failed follow-up fetch records no dialog.
+Gates green.
+
+#### Commit 2 — "record scene refresh" (t-79)
+
+Check off t-79, add one line to `design-doc.md` §10.2 (a scene activation
+triggers a background refresh after a short delay), add the Executed marker
+here.
+
+---
+
 ### Plan: config file location and errors (t-28, t-27)
 
 > **Executed 2026-11-21** on branch `fix/config-file`: commit 1 "load
