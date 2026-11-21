@@ -19,6 +19,9 @@ import theme
 # Representative reading whose width the value label reserves.
 REFERENCE_VALUE = "8888"
 
+# Text colour of a note's tone (see `set_note`).
+_NOTE_COLOURS = {"ok": theme.OK, "warn": theme.WARN, "danger": theme.DANGER}
+
 
 class MetricWidget(QWidget):
     """Composite widget presenting a primary numeric reading with unit and label."""
@@ -78,6 +81,12 @@ class MetricWidget(QWidget):
 
         value_layout.addWidget(self._value_label)
         value_layout.addWidget(self._unit_label)
+
+        # Optional word beside the value, e.g. a PM2.5 band; hidden when empty.
+        self._note_label = QLabel()
+        self._note_colour = theme.TEXT2
+        self._note_label.setVisible(False)
+        value_layout.addWidget(self._note_label)
         value_layout.addStretch()
 
         # Bottom row: Caption label
@@ -114,6 +123,23 @@ class MetricWidget(QWidget):
         else:
             self._value_label.setText(str(value))
 
+    def set_note(self, text: str = "", tone: Optional[str] = None) -> None:
+        """Show `text` beside the value in the colour of `tone` (ok, warn or
+        danger; any other tone uses the secondary text colour). Empty `text`
+        hides the note."""
+        colour = _NOTE_COLOURS.get(tone or "", theme.TEXT2)
+        self._note_colour = colour
+        self._note_label.setText(text)
+        self._note_label.setStyleSheet(f"""
+            QLabel {{
+                color: {colour};
+                font-size: {theme.FONT_CAPTION}px;
+                font-weight: 600;
+                background-color: transparent;
+            }}
+            """)
+        self._note_label.setVisible(bool(text))
+
     def set_caption(self, caption: str) -> None:
         """Update the caption beneath the reading."""
         self._caption_text = caption
@@ -130,3 +156,12 @@ class MetricWidget(QWidget):
     @property
     def caption_text(self) -> str:
         return self._caption_label.text()
+
+    @property
+    def note_text(self) -> str:
+        return self._note_label.text()
+
+    @property
+    def note_colour(self) -> str:
+        """The text colour the note was last given (a theme token's value)."""
+        return self._note_colour

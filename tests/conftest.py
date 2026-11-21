@@ -151,9 +151,19 @@ class StubLight:
 
 
 class StubScene:
-    def __init__(self, id_: str = "s1", name: str = "Evening", fail: bool = False):
+    """A scene; `type_` is the hub's scene type (`userScene` unless told otherwise)."""
+
+    def __init__(
+        self,
+        id_: str = "s1",
+        name: str = "Evening",
+        fail: bool = False,
+        type_: str = "userScene",
+    ):
         self.id = id_
         self.info = SimpleNamespace(name=name)
+        # Like the library's SceneType enum: the string is in `.value`.
+        self.type = SimpleNamespace(value=type_)
         self.fail = fail
         self.triggered = 0
 
