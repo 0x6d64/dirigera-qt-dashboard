@@ -235,7 +235,7 @@ check the 150 % scaling note in §11. Gates: black, ruff, mypy clean.
 
 ## Done
 
-### Plan: pytest suite (t-32, t-55; t-53 test part)
+### Plan: pytest suite (t-32, t-33, t-53, t-55)
 
 Goal: a small suite that guards behaviour (requirements) and pure logic, not
 layout or styling, so it survives UI work. Executed on branch
@@ -253,11 +253,13 @@ layout or styling, so it survives UI work. Executed on branch
    failed refresh keeps view (req-2), failed command resync (req-3), no GUI-thread
    hub calls (req-4), inline scene errors, scene lookup after refresh, filter,
    deferred close (req-14).
-5. Bookkeeping in `todo.md`.
+5. GitHub Actions CI (t-33): gates plus pytest; `slow` tests run on master
+   only, `hardware` tests never.
+6. Bookkeeping in `todo.md`.
 
 Rules for new tests: assert state a user can observe or a requirement, use the
 stubs in `conftest.py`, never assert pixel sizes, stylesheet text or widget-tree
-shape. Not covered here: CI (t-33), real-hub runs, the remaining ad-hoc scripts
+shape. Not covered here: real-hub runs, the remaining ad-hoc scripts
 of t-55 (energy view, header responsiveness).
 
 Verification: `uv run pytest`, plus the three gates.
