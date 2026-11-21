@@ -5,7 +5,10 @@ from collections.abc import Callable, Iterator
 from typing import Any
 
 import pytest
-from conftest import StubHub, make_device
+from conftest import StubHub, StubScene, make_device
+from PyQt6.QtCore import Qt
+from PyQt6.QtTest import QTest
+from PyQt6.QtWidgets import QPushButton
 
 import dashboard
 from widgets.grid import CardGrid
@@ -79,3 +82,33 @@ def test_energy_card_without_readable_state_has_no_chip(qapp) -> None:
     assert card.status_chip.text() == "On" and not card.status_chip.isHidden()
     card.update_from_device(make_device("outlet", "o1", "Heater", is_on=None))
     assert card.status_chip.isHidden()
+
+
+def test_arrow_keys_switch_the_view(window: Any) -> None:
+    window.show_views()
+    switcher = window.view_switcher
+    assert switcher.current_index() == 0
+    QTest.keyClick(switcher.button(0), Qt.Key.Key_Right)  # type: ignore[call-overload]
+    assert switcher.current_index() == 1
+    assert window.tab_widget.currentIndex() == 1
+    QTest.keyClick(switcher.button(1), Qt.Key.Key_Left)  # type: ignore[call-overload]
+    assert window.tab_widget.currentIndex() == 0
+
+
+def test_accessible_names_on_cards_and_scene_tiles(qapp) -> None:
+    from widgets.card import DeviceCard
+    from widgets.scene import SceneTile
+
+    light = DeviceCard(make_device("light", "l1", "Lamp", is_on=True, light_level=40))
+    assert light.switch.accessibleName() == "Lamp power"
+    assert light.brightness_slider.accessibleName() == "Lamp brightness"
+
+    blind = make_device("blinds", "b1", "Shade", blinds_current_level=50)
+    blind.capabilities.can_receive = ["blindsState"]
+    card = DeviceCard(blind)
+    assert card.blind_slider.accessibleName() == "Shade position"
+    names = {b.accessibleName() for b in card.findChildren(QPushButton)}
+    assert {"Shade up", "Shade stop", "Shade down"} <= names
+
+    tile = SceneTile(StubScene("s1", "Evening"))
+    assert tile.activate_button.accessibleName() == "Activate Evening"

@@ -5,14 +5,16 @@ Follows design-doc.md §8.6:
 - Segments are joined; only the outer corners are rounded.
 - The selected segment uses `accent-soft` background and `accent` text/border.
 - Selection is exclusive.
+- Left/Right arrows move the selection when a segment has focus.
 
 The selected state is expressed as a `selected` dynamic property so the colours
 come from the theme stylesheet instead of per-widget styling.
 """
 
-from typing import List, Sequence
+from typing import List, Optional, Sequence, override
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import QEvent, QObject, Qt, pyqtSignal
+from PyQt6.QtGui import QKeyEvent
 from PyQt6.QtWidgets import QButtonGroup, QFrame, QHBoxLayout, QPushButton
 
 
@@ -46,6 +48,8 @@ class SegmentedControl(QFrame):
             layout.addWidget(button)
             self._buttons.append(button)
 
+        for button in self._buttons:
+            button.installEventFilter(self)  # type: ignore[arg-type]
         self._group.idClicked.connect(self._on_clicked)
         if self._buttons:
             self.set_current(0)
@@ -71,6 +75,25 @@ class SegmentedControl(QFrame):
             return
         self._buttons[index].setChecked(True)
         self._apply_selection(index)
+
+    @override
+    def eventFilter(self, a0: Optional[QObject], a1: Optional[QEvent]) -> bool:
+        """Left/Right move the selection like a click, without wrapping."""
+        if (
+            a1 is not None
+            and a1.type() == QEvent.Type.KeyPress
+            and isinstance(a1, QKeyEvent)
+            and a1.key() in (Qt.Key.Key_Left, Qt.Key.Key_Right)
+            and a0 in self._buttons
+        ):
+            step = -1 if a1.key() == Qt.Key.Key_Left else 1
+            target = self._buttons.index(a0) + step  # type: ignore[arg-type]
+            if 0 <= target < len(self._buttons):
+                self._buttons[target].setChecked(True)
+                self._buttons[target].setFocus()
+                self._on_clicked(target)
+            return True
+        return super().eventFilter(a0, a1)  # type: ignore[arg-type]
 
     def _on_clicked(self, index: int) -> None:
         self._apply_selection(index)
