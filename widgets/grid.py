@@ -144,7 +144,7 @@ class FlowLayout(QLayout):
 class CardGrid(QWidget):
     """Grid of cards that reflows to the largest column count that fits."""
 
-    def __init__(self, parent=None, min_width: int = CARD_MIN_WIDTH):
+    def __init__(self, parent=None, min_width: int = CARD_MIN_WIDTH) -> None:
         super().__init__(parent)
         self._min_width = min_width
         self._flow = FlowLayout(self, min_width=min_width)

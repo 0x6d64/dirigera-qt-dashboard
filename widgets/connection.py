@@ -33,8 +33,9 @@ class ConnectionBlock(QWidget):
     discover_requested = pyqtSignal()  # type: ignore[call-arg]
     connect_requested = pyqtSignal()  # type: ignore[call-arg]
 
-    def __init__(self, parent=None):
-        super().__init__(parent)
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
+        # PyQt6 stubs mis-type the first argument of QWidget.__init__ here.
+        super().__init__(parent)  # type: ignore[arg-type]
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(theme.SP24, theme.SP24, theme.SP24, theme.SP24)
