@@ -38,16 +38,8 @@ from widgets.grid import CardGrid
 from widgets.scene import SceneTile
 from widgets.segments import SegmentedControl
 
-# Constants
-DEFAULT_BRIGHTNESS = 50
-
 # Section label for devices that are not assigned to a room.
 UNKNOWN_ROOM = "Unknown room"
-
-# View switcher segments, in display order (design-doc.md §4.2).
-VIEW_ROOMS = 0
-VIEW_SCENES = 1
-VIEW_ENERGY = 2
 
 
 def widget_name(widget: QWidget) -> str:
@@ -242,15 +234,6 @@ class HubSelectionDialog(QDialog):
             QMessageBox.warning(
                 self, "Selection Error", "Please select a hub or enter an IP."
             )
-
-    def handle_manual_ip(self):
-        """Handle manual IP entry."""
-        ip = self.manual_ip_input.text().strip()
-        if ip:
-            self.selected_ip = ip
-            self.accept()
-        else:
-            QMessageBox.warning(self, "Input Error", "Please enter an IP address.")
 
 
 class DirigeraDashboard(QMainWindow):
@@ -903,15 +886,6 @@ class DirigeraDashboard(QMainWindow):
         self.close()
         # A hidden window closing does not trigger quit-on-last-window.
         QApplication.quit()
-
-    @staticmethod
-    def get_device_name(device: Any) -> str:
-        """Get the display name for a device"""
-        return str(
-            getattr(device, "custom_name", None)
-            or getattr(getattr(device, "attributes", None), "custom_name", None)
-            or "Unknown Device"
-        )
 
     @staticmethod
     def format_room_label(room_name: str) -> str:
