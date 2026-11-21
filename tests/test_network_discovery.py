@@ -200,3 +200,64 @@ def test_one_failing_probe_does_not_abort_the_scan(
     monkeypatch.setattr(nd, "scan_ip", scan)
     result = nd.discover_dirigera_hubs(max_workers=2)
     assert sorted(result) == [("10.9.0.1", None), ("10.9.0.3", None)]
+
+
+def _mock_ifaces(monkeypatch: pytest.MonkeyPatch, ifaces: dict[str, Any]) -> None:
+    monkeypatch.setattr(nd.netifaces, "interfaces", lambda: list(ifaces))
+    monkeypatch.setattr(nd.netifaces, "ifaddresses", lambda name: ifaces[name])
+
+
+def test_get_local_networks_skips_link_local(monkeypatch: pytest.MonkeyPatch) -> None:
+    inet = nd.netifaces.AF_INET
+    _mock_ifaces(
+        monkeypatch,
+        {
+            "eth0": {inet: [{"addr": "169.254.3.4", "netmask": "255.255.0.0"}]},
+            "eth1": {inet: [{"addr": "192.168.1.2", "netmask": "255.255.255.0"}]},
+        },
+    )
+    assert nd.get_local_networks() == ["192.168.1.0/24"]
+
+
+def test_get_local_networks_skips_single_host_networks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    inet = nd.netifaces.AF_INET
+    _mock_ifaces(
+        monkeypatch,
+        {
+            "ppp0": {inet: [{"addr": "10.8.0.2", "netmask": "255.255.255.255"}]},
+            "eth1": {inet: [{"addr": "192.168.1.2", "netmask": "255.255.255.0"}]},
+        },
+    )
+    assert nd.get_local_networks() == ["192.168.1.0/24"]
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["docker0", "veth1a2b", "vboxnet0", "vmnet8", "tun0", "tap0", "wg0", "utun3"],
+)
+def test_get_local_networks_skips_virtual_interfaces(
+    monkeypatch: pytest.MonkeyPatch, name: str
+) -> None:
+    inet = nd.netifaces.AF_INET
+    _mock_ifaces(
+        monkeypatch,
+        {
+            name: {inet: [{"addr": "172.17.0.1", "netmask": "255.255.0.0"}]},
+            "eth0": {inet: [{"addr": "192.168.1.2", "netmask": "255.255.255.0"}]},
+        },
+    )
+    assert nd.get_local_networks() == ["192.168.1.0/24"]
+
+
+def test_windows_guid_names_are_not_judged_by_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    inet = nd.netifaces.AF_INET
+    guid = "{7B2E1D40-0000-4C1A-9F00-AABBCCDDEEFF}"
+    _mock_ifaces(
+        monkeypatch,
+        {guid: {inet: [{"addr": "192.168.7.2", "netmask": "255.255.255.0"}]}},
+    )
+    assert nd.get_local_networks() == ["192.168.7.0/24"]

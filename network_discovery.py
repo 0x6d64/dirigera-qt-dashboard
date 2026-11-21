@@ -40,11 +40,39 @@ MAX_SCAN_HOSTS = 4096
 # ones are split into their /24 subnets.
 _MAX_UNSPLIT_ADDRESSES = 512
 
+# Interface name prefixes of virtual adapters (containers, VMs, VPN tunnels).
+# Only applied where names are readable; Windows reports GUIDs instead.
+VIRTUAL_INTERFACE_PREFIXES = (
+    "docker",
+    "veth",
+    "vbox",
+    "vmnet",
+    "tun",
+    "tap",
+    "wg",
+    "utun",
+)
+
+_LINK_LOCAL = ipaddress.IPv4Network("169.254.0.0/16")
+
+
+def _is_virtual_interface(name: str) -> bool:
+    """True for a readable interface name that looks like a virtual adapter."""
+    if name.startswith("{"):  # Windows GUID: the name says nothing
+        return False
+    return name.lower().startswith(VIRTUAL_INTERFACE_PREFIXES)
+
 
 def get_local_networks() -> List[str]:
-    """Get all local network ranges from all interfaces."""
+    """Get the local network ranges worth scanning.
+
+    Skips loopback, link-local (169.254.0.0/16), single-host (/32) networks
+    and, where the interface name is readable, virtual adapters.
+    """
     networks: List[str] = []
     for interface in netifaces.interfaces():
+        if _is_virtual_interface(interface):
+            continue
         # netifaces2 ships type hints that do not match its runtime API, so cast
         # to the plain dict shape both netifaces and netifaces2 return.
         addrs = cast(Dict[int, List[Dict[str, str]]], netifaces.ifaddresses(interface))
@@ -58,6 +86,8 @@ def get_local_networks() -> List[str]:
                         network = ipaddress.IPv4Network(
                             f"{ip_addr}/{netmask}", strict=False
                         )
+                        if network.prefixlen == 32 or network.subnet_of(_LINK_LOCAL):
+                            continue
                         if str(network) not in networks:
                             networks.append(str(network))
                     except (ValueError, ipaddress.AddressValueError):
