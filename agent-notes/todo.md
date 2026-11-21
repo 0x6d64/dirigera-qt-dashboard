@@ -125,7 +125,7 @@ Stated by the user; recorded, not yet planned.
 
 - [x] **t-91 [C·S]** Air purifier filter footer says how overdue the filter is (owner feedback 2026-11-21): past its lifetime, "Filter overdue by 65 days · change now" instead of "Filter used up · change now" (kept for under one day overdue). *(done on `fix/filter-overdue`)*
 
-- [ ] **t-92 [B·M]** Module refactor before the energy work (owner request 2026-11-21, after a structure review): `settings.py`, `rooms.py`, `workers.py`, shared `widgets/cardbase.py` for device and energy cards, shared power row and callback wiring in `widgets/card.py`. No behaviour change. Plan in `agent-notes/implementation-plan.md`.
+- [x] **t-92 [B·M]** Module refactor before the energy work (owner request 2026-11-21, after a structure review): `settings.py`, `rooms.py`, `workers.py`, shared `widgets/cardbase.py` for device and energy cards, shared power row and callback wiring in `widgets/card.py`. No behaviour change. Plan in `agent-notes/implementation-plan.md`.
 
 ## Design document implementation (v1.0)
 

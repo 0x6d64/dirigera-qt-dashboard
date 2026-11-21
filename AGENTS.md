@@ -13,9 +13,11 @@ it instead.
 
 PyQt6 desktop dashboard for IKEA DIRIGERA hubs, managed with `uv`; talks to the
 hub through the `dirigera` library. Versions are authoritative in
-`pyproject.toml` and `uv.lock`; the layout is `dashboard.py` (main window and
-workers), `widgets/` (components), `theme.py` (design tokens). Read the tree
-rather than trusting a description of it.
+`pyproject.toml` and `uv.lock`; the layout is `dashboard.py` (main window), `workers.py` (worker threads),
+`settings.py` (config parsing, UI settings), `rooms.py` (room grouping),
+`widgets/` (components; `widgets/cardbase.py` is the shared card base),
+`theme.py` (design tokens). Read the tree rather than trusting a description
+of it.
 
 Orientation docs: `README.md`, `doc/design-doc.md` (visual design), `doc/dirigera-api.md` (library facts),
 `doc/qt-gotchas.md`,
