@@ -330,7 +330,7 @@ class DirigeraDashboard(QMainWindow):
 
     def init_ui(self):
         self.setWindowTitle("Dirigera Dashboard")
-        self.setGeometry(100, 100, 1000, 700)
+        self.resize(1080, 700)
 
         # Create central widget and main layout
         central_widget = QWidget()
@@ -387,6 +387,7 @@ class DirigeraDashboard(QMainWindow):
         self.devices_scroll.setWidget(self.devices_content)
 
         devices_tab_layout = QVBoxLayout(self.devices_tab)
+        devices_tab_layout.setContentsMargins(0, 0, 0, 0)
         devices_tab_layout.addWidget(self.devices_scroll)
         self.tab_widget.addTab(self.devices_tab, "Devices")
 
@@ -406,6 +407,7 @@ class DirigeraDashboard(QMainWindow):
         self.scenes_scroll.setWidget(self.scenes_content)
 
         scenes_tab_layout = QVBoxLayout(self.scenes_tab)
+        scenes_tab_layout.setContentsMargins(0, 0, 0, 0)
         scenes_tab_layout.addWidget(self.scenes_scroll)
         self.tab_widget.addTab(self.scenes_tab, "Scenes")
 
