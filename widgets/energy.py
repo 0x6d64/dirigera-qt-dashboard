@@ -38,7 +38,7 @@ from widgets.text import format_amps, format_kwh, format_volts, type_label
 class EnergyCard(QFrame):
     """Card with the live power reading of one metered device."""
 
-    def __init__(self, device: Any, parent=None):
+    def __init__(self, device: Any, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.device = device
         attrs = getattr(device, "attributes", None)
@@ -203,8 +203,9 @@ class EnergyCard(QFrame):
 class EnergyView(QWidget):
     """Scrollable energy view: one card grid per room (§9.4)."""
 
-    def __init__(self, parent=None):
-        super().__init__(parent)
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
+        # PyQt6 stubs mis-type the first argument of QWidget.__init__ here.
+        super().__init__(parent)  # type: ignore[arg-type]
         self._shape: List[Tuple[str, List[Any]]] = []
 
         outer = QVBoxLayout(self)

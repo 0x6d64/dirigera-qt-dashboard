@@ -22,7 +22,7 @@ from PyQt6.QtCore import (
     pyqtProperty,
 )
 from PyQt6.QtGui import QColor, QPainter, QPaintEvent, QPen
-from PyQt6.QtWidgets import QAbstractButton
+from PyQt6.QtWidgets import QAbstractButton, QWidget
 
 import theme
 
@@ -30,7 +30,9 @@ import theme
 class ToggleSwitch(QAbstractButton):
     """An animated toggle switch with calm styling and accessibility support."""
 
-    def __init__(self, accessible_name: str = "Switch", parent=None):
+    def __init__(
+        self, accessible_name: str = "Switch", parent: Optional[QWidget] = None
+    ) -> None:
         super().__init__(parent)
         self.setCheckable(True)
         self.setChecked(False)

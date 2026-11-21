@@ -15,7 +15,13 @@ from typing import List, Optional, Sequence, override
 
 from PyQt6.QtCore import QEvent, QObject, Qt, pyqtSignal
 from PyQt6.QtGui import QKeyEvent
-from PyQt6.QtWidgets import QButtonGroup, QFrame, QHBoxLayout, QPushButton
+from PyQt6.QtWidgets import (
+    QButtonGroup,
+    QFrame,
+    QHBoxLayout,
+    QPushButton,
+    QWidget,
+)
 
 
 class SegmentedControl(QFrame):
@@ -23,7 +29,7 @@ class SegmentedControl(QFrame):
 
     current_changed = pyqtSignal(int)  # type: ignore[call-arg]
 
-    def __init__(self, labels: Sequence[str], parent=None):
+    def __init__(self, labels: Sequence[str], parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.setProperty("role", "segmented")
         self.setFrameShape(QFrame.Shape.NoFrame)

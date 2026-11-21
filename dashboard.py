@@ -139,6 +139,12 @@ def widget_name(widget: QWidget) -> str:
     return str(getattr(widget, "full_name", "") or "")
 
 
+def _scroll_value(area: QScrollArea) -> int:
+    """Return the vertical scroll position of `area` (0 without a bar)."""
+    bar = area.verticalScrollBar()
+    return bar.value() if bar is not None else 0
+
+
 def scan_scope_text(networks: List[str]) -> str:
     """Progress text naming what a scan covers."""
     if not networks:
@@ -170,7 +176,7 @@ class DiscoveryThread(QThread):
     def stop_requested(self) -> bool:
         return self._stop.is_set()
 
-    def run(self):
+    def run(self) -> None:
         """Run the discovery process."""
         try:
             hubs = discover_dirigera_hubs(
@@ -191,12 +197,14 @@ class ConnectWorker(QThread):
     connected = pyqtSignal(object, str)  # type: ignore[call-arg]
     failed = pyqtSignal(str)  # type: ignore[call-arg]
 
-    def __init__(self, token: str, ip_address: str, parent=None):
+    def __init__(
+        self, token: str, ip_address: str, parent: Optional[QWidget] = None
+    ) -> None:
         super().__init__(parent)
         self._token = token
         self._ip_address = ip_address
 
-    def run(self):
+    def run(self) -> None:
         """Probe the hub and emit either the verified hub or the error text."""
         try:
             hub = Hub(token=self._token, ip_address=self._ip_address)
@@ -216,11 +224,11 @@ class SceneTriggerWorker(QThread):
     triggered = pyqtSignal(object)  # type: ignore[call-arg]
     failed = pyqtSignal(object, str)  # type: ignore[call-arg]
 
-    def __init__(self, scene: Scene, parent=None):
+    def __init__(self, scene: Scene, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self._scene = scene
 
-    def run(self):
+    def run(self) -> None:
         """Trigger the scene and emit it back, or the scene plus the error."""
         try:
             self._scene.trigger()
@@ -252,7 +260,7 @@ class CommandWorker(QThread):
         self._command = command
         self._action = action
 
-    def run(self):
+    def run(self) -> None:
         """Send the command; on error reload the device and emit the message."""
         try:
             self._command()
@@ -274,11 +282,11 @@ class RefreshWorker(QThread):
     refreshed = pyqtSignal(list, list)  # type: ignore[call-arg]
     failed = pyqtSignal(str)  # type: ignore[call-arg]
 
-    def __init__(self, hub: Hub, parent=None):
+    def __init__(self, hub: Hub, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self._hub = hub
 
-    def run(self):
+    def run(self) -> None:
         """Fetch both collections and emit them together, or the error text."""
         try:
             devices = self._hub.get_all_devices()
@@ -293,12 +301,14 @@ class RefreshWorker(QThread):
 class HubSelectionDialog(QDialog):
     """Dialog for selecting a discovered hub or entering IP manually."""
 
-    def __init__(self, hubs: List[Tuple[str, str]], parent=None):
+    def __init__(
+        self, hubs: List[Tuple[str, str]], parent: Optional[QWidget] = None
+    ) -> None:
         super().__init__(parent)
         self.selected_ip: Optional[str] = None
         self.init_ui(hubs)
 
-    def init_ui(self, hubs: List[Tuple[str, str]]):
+    def init_ui(self, hubs: List[Tuple[str, str]]) -> None:
         self.setWindowTitle("Select Dirigera Hub")
         self.setModal(True)
         self.resize(400, 300)
@@ -344,7 +354,7 @@ class HubSelectionDialog(QDialog):
         button_layout.addWidget(cancel_button)
         layout.addLayout(button_layout)
 
-    def accept_selection(self):
+    def accept_selection(self) -> None:
         """Handle hub selection."""
         # Check if manual IP was entered
         manual_ip = self.manual_ip_input.text().strip()
@@ -365,7 +375,7 @@ class HubSelectionDialog(QDialog):
 
 
 class DirigeraDashboard(QMainWindow):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.hub: Optional[Hub] = None
         self.devices: List[Any] = []
@@ -439,7 +449,7 @@ class DirigeraDashboard(QMainWindow):
         if token and token != "YOUR_TOKEN_HERE":
             self.connection_block.token_input.setText(token)
 
-    def init_ui(self):
+    def init_ui(self) -> None:
         self.setWindowTitle("Dirigera Dashboard")
         self.resize(1080, 700)
         self.setMinimumSize(640, 480)
@@ -530,7 +540,9 @@ class DirigeraDashboard(QMainWindow):
 
         # The segmented switcher is the only navigation; a visible tab bar
         # would duplicate it (design-doc.md §4.2).
-        self.tab_widget.tabBar().hide()
+        tab_bar = self.tab_widget.tabBar()
+        if tab_bar is not None:
+            tab_bar.hide()
 
         # Views page: stale-data caption above the tabs, so a failed refresh
         # can say how old the visible data is (design-doc.md §3.1 row 4).
@@ -744,7 +756,7 @@ class DirigeraDashboard(QMainWindow):
             "warn" if stale else None,
         )
 
-    def discover_hubs(self):
+    def discover_hubs(self) -> None:
         """Start the hub discovery process in a background thread."""
         thread = getattr(self, "discovery_thread", None)
         if thread is not None and thread.isRunning():
@@ -781,7 +793,7 @@ class DirigeraDashboard(QMainWindow):
         self.progress_dialog.show()
         self.discovery_thread.start()
 
-    def on_discovery_canceled(self):
+    def on_discovery_canceled(self) -> None:
         """Handle cancellation of the discovery process."""
         thread = getattr(self, "discovery_thread", None)
         if thread is not None and thread.isRunning():
@@ -806,7 +818,7 @@ class DirigeraDashboard(QMainWindow):
         self.connection_block.set_message(f"Discovery failed: {message}", "danger")
         self.set_status_text("Discovery failed", "danger")
 
-    def on_discovery_finished(self, discovered_hubs: List[Tuple[str, str]]):
+    def on_discovery_finished(self, discovered_hubs: List[Tuple[str, str]]) -> None:
         """Handle completion of the discovery process."""
         self._end_discovery_ui()
 
@@ -837,7 +849,7 @@ class DirigeraDashboard(QMainWindow):
             if dialog.exec() == QDialog.DialogCode.Accepted and dialog.selected_ip:
                 self.connection_block.ip_input.setText(dialog.selected_ip)
 
-    def connect_to_hub(self):
+    def connect_to_hub(self) -> None:
         """Verify the entered credentials in a background thread (t-17)."""
         if self._connect_worker is not None:
             return  # a probe is already in flight
@@ -927,7 +939,7 @@ class DirigeraDashboard(QMainWindow):
     def _on_connect_worker_done(self) -> None:
         self._connect_worker = None
 
-    def refresh_devices(self):
+    def refresh_devices(self) -> None:
         """Start a refresh the user asked for (t-17)."""
         self._start_refresh()
 
@@ -1040,7 +1052,7 @@ class DirigeraDashboard(QMainWindow):
 
         focus = QApplication.focusWidget()
         areas = (self.devices_scroll, self.scenes_scroll)
-        scroll_values = [area.verticalScrollBar().value() for area in areas]
+        scroll_values = [_scroll_value(area) for area in areas]
 
         devices_by_room = self._update_rooms(devices)
         self._update_scenes(scenes)
@@ -1069,7 +1081,7 @@ class DirigeraDashboard(QMainWindow):
         # Restore the view state when the widgets survived.
         for area, value in zip(areas, scroll_values):
             bar = area.verticalScrollBar()
-            if bar.value() != value:
+            if bar is not None and bar.value() != value:
                 bar.setValue(value)
         if (
             focus is not None

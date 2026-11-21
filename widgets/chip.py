@@ -9,10 +9,10 @@ Follows design-doc.md §8.2:
 - Variants: 'ok', 'warn', 'danger', 'neutral'
 """
 
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QLabel
+from PyQt6.QtWidgets import QLabel, QWidget
 
 import theme
 
@@ -28,7 +28,9 @@ _VARIANT_COLORS: Dict[str, Tuple[str, str]] = {
 class StatusChip(QLabel):
     """A compact, fully rounded status chip displaying a state word."""
 
-    def __init__(self, text: str = "", variant: str = "neutral", parent=None):
+    def __init__(
+        self, text: str = "", variant: str = "neutral", parent: Optional[QWidget] = None
+    ) -> None:
         super().__init__(text, parent)
         self._variant = variant if variant in _VARIANT_COLORS else "neutral"
 
