@@ -225,6 +225,12 @@ set a short interval. Gates as above.
 
 ### Plan: config file location and errors (t-28, t-27)
 
+> **Executed 2026-11-21** on branch `fix/config-file`: commit 1 "load
+> config.ini from the app folder" (`d49dbe3`), commit 2 "report unreadable
+> config.ini" (`a6f7459`), docs and checkboxes in "record config file fixes".
+> Deviation: the file is read as `utf-8-sig` so a BOM from Windows editors is
+> not reported as a missing section header.
+
 Goal: saved credentials load no matter which directory the app is started
 from, and a broken `config.ini` is reported instead of silently ignored
 (`req-8`). The token stays in plain `config.ini` by user decision (req-7

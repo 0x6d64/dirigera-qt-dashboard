@@ -55,6 +55,12 @@ uv run python generate_token.py 192.168.1.100
 
 When prompted, press the pairing button on your Dirigera hub and then press ENTER in the terminal. The script will display your token, which you should save securely.
 
+## Saved Credentials (optional)
+
+Copy `config.ini.example` to `config.ini` in the same folder as `dashboard.py`
+and fill in the hub IP and token. The dashboard reads it from there regardless
+of the directory you start it from, and pre-fills the connection fields.
+
 ## Usage
 
 Run the dashboard:

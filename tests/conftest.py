@@ -170,8 +170,10 @@ def window(
     tmp_path: Path,
 ) -> Iterator[Any]:
     """A dashboard that never reads the developer's real config.ini."""
-    monkeypatch.chdir(tmp_path)
+    import dashboard
     from dashboard import DirigeraDashboard
+
+    monkeypatch.setattr(dashboard, "CONFIG_PATH", tmp_path / "config.ini")
 
     win = DirigeraDashboard()
     yield win

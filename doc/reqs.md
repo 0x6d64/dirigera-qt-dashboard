@@ -41,7 +41,7 @@ during implementation. Each entry cites its origin.
   `config.ini` is accepted for this single-user desktop tool. *(t-29, obsolete)*
 - **req-8** — Saved credentials must resolve relative to the script/home
   directory, not the current working directory, so launching from elsewhere
-  does not silently lose them. *(t-28, open)*
+  does not silently lose them. *(t-28, implemented)*
 - **req-9** — Verification must be possible without a real hub: offscreen
   smoke tests (`QT_QPA_PLATFORM=offscreen`, stub client subclassing
   `AbstractSmartHomeHub`). *(established during t-1…t-10 execution)*

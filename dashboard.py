@@ -1,6 +1,6 @@
 import configparser
-import os
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, override
 
 from dirigera import Hub
@@ -40,6 +40,8 @@ from widgets.segments import SegmentedControl
 
 # Seconds between automatic background refreshes (req-13, t-56).
 POLL_INTERVAL_S = 30
+# Saved credentials live next to this file, whatever the working directory.
+CONFIG_PATH = Path(__file__).resolve().parent / "config.ini"
 
 # Section label for devices that are not assigned to a room.
 UNKNOWN_ROOM = "Unknown room"
@@ -272,24 +274,28 @@ class DirigeraDashboard(QMainWindow):
         self.init_ui()
         self.load_config()
 
-    def load_config(self):
-        """Load configuration from config.ini if it exists"""
-        config_path = "config.ini"
-        if os.path.exists(config_path):
-            try:
-                config = configparser.ConfigParser()
-                config.read(config_path)
-                if "hub" in config:
-                    if "ip_address" in config["hub"]:
-                        self.connection_block.ip_input.setText(
-                            config["hub"]["ip_address"]
-                        )
-                    if "token" in config["hub"]:
-                        token = config["hub"]["token"]
-                        if token and token != "YOUR_TOKEN_HERE":
-                            self.connection_block.token_input.setText(token)
-            except Exception:
-                pass  # Silently ignore config errors
+    def load_config(self) -> None:
+        """Load saved credentials from config.ini next to dashboard.py.
+
+        A missing file is normal. An unreadable or malformed one is reported
+        in the status caption and leaves the fields empty.
+        """
+        if not CONFIG_PATH.exists():
+            return
+        config = configparser.ConfigParser()
+        try:
+            config.read(CONFIG_PATH, encoding="utf-8-sig")
+        except (configparser.Error, OSError, UnicodeDecodeError) as error:
+            self.set_status_text(f"Could not read config.ini: {error}", "danger")
+            return
+        if "hub" not in config:
+            return
+        hub = config["hub"]
+        if "ip_address" in hub:
+            self.connection_block.ip_input.setText(hub["ip_address"])
+        token = hub.get("token", "")
+        if token and token != "YOUR_TOKEN_HERE":
+            self.connection_block.token_input.setText(token)
 
     def init_ui(self):
         self.setWindowTitle("Dirigera Dashboard")
