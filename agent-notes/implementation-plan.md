@@ -234,6 +234,8 @@ Affected files: `dashboard.py`, `tests/test_refresh.py`, `doc/design-doc.md`
 
 #### Commit 1 — "refresh after a scene activation" (t-79)
 
+> **Executed 2026-11-21** on branch `fix/scene-refresh`: commit `69645e0`.
+
 1. `dashboard.py`: module constant `SCENE_REFRESH_DELAY_MS = 1500` (the hub
    applies a scene asynchronously, so an immediate fetch can miss it). In
    `__init__` add a single-shot `QTimer` `self._scene_refresh_timer`, timeout

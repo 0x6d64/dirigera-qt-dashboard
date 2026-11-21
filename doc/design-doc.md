@@ -438,6 +438,7 @@ Whether totals are shown per home or per room is undecided (section 14, item 5).
 7. A failed background poll shows no modal dialog: the hub chip turns amber and the
    stale caption appears (3.2). A failed manual refresh still reports in a dialog until
    `t-66` replaces it. `[verified]` (test)
+8. A scene activation triggers a background refresh after a short delay (1.5 s). `[verified]` (test)
 
 ### 10.3 Live updates
 
