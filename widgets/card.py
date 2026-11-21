@@ -16,6 +16,7 @@ Follows design-doc.md §8.1:
   lights -> outlets -> blinds -> air/environment -> sensors -> remotes.
 """
 
+from datetime import datetime
 from typing import Any, Callable, Optional, Tuple, override
 
 from PyQt6.QtCore import Qt, QTimer
@@ -35,20 +36,25 @@ from widgets.chip import StatusChip
 from widgets.metric import MetricWidget
 from widgets.slider import LabeledSlider
 from widgets.switch import ToggleSwitch
+from widgets.text import relative_time, type_label
 
 # Device category sorting weight per design-doc.md §8.1 rule 3
+# (keys are the library's camelCase `device_type` values; every controller
+# type ends in "Controller").
 _TYPE_SORT_WEIGHT = {
     "light": 10,
     "outlet": 20,
     "blinds": 30,
-    "air_purifier": 40,
-    "environment_sensor": 50,
-    "electrical_sensor": 60,
-    "sensor": 70,
-    "open_close_sensor": 80,
-    "motion_sensor": 90,
-    "controller": 100,
+    "airPurifier": 40,
+    "environmentSensor": 50,
+    "electricalSensor": 60,
+    "lightSensor": 70,
+    "waterSensor": 71,
+    "openCloseSensor": 80,
+    "occupancySensor": 85,
+    "motionSensor": 90,
 }
+_CONTROLLER_WEIGHT = 100
 
 # Battery level at or below which the chip warns (design-doc.md §14 item 4).
 LOW_BATTERY_PERCENT = 20
@@ -61,6 +67,8 @@ def device_sort_key(device: Any) -> Tuple[int, str]:
     """Sort key for devices within a room: category weight then device name."""
     dtype = getattr(device, "device_type", "unknown")
     weight = _TYPE_SORT_WEIGHT.get(dtype, 999)
+    if dtype.endswith("Controller"):
+        weight = _CONTROLLER_WEIGHT
     raw_name = getattr(device.attributes, "custom_name", None) or getattr(
         device, "id", ""
     )
@@ -137,8 +145,7 @@ class DeviceCard(QFrame):
         )
         titles_vbox.addWidget(self.name_label)
 
-        raw_type = getattr(device, "device_type", "device").replace("_", " ")
-        self.type_label = QLabel(raw_type.capitalize())
+        self.type_label = QLabel(type_label(getattr(device, "device_type", "device")))
         self.type_label.setStyleSheet(f"""
             QLabel {{
                 color: {theme.TEXT2};
@@ -322,7 +329,7 @@ class DeviceCard(QFrame):
                     self._controls.append(btn)
                 self.control_zone.addLayout(btn_row)
 
-        elif dtype == "electrical_sensor":
+        elif dtype == "electricalSensor":
             # Power metric display (closes t-13)
             attrs = getattr(self.device, "attributes", None)
             power = getattr(attrs, "current_active_power", None)
@@ -357,7 +364,7 @@ class DeviceCard(QFrame):
             elif lvl == 0:
                 self.status_chip.set_status("Closed", "neutral")
             elif lvl is not None:
-                self.status_chip.set_status(f"{lvl}%", "neutral")
+                self.status_chip.set_status("Partly open", "neutral")
             else:
                 self.status_chip.set_status("Ready", "neutral")
         else:
@@ -396,7 +403,7 @@ class DeviceCard(QFrame):
         if self._pending:
             return
         if self._is_offline:
-            self._set_footer("Device unreachable")
+            self._set_footer(self._offline_text())
         else:
             self._update_footer()
 
@@ -405,9 +412,16 @@ class DeviceCard(QFrame):
         if self._pending:
             return
         if self._is_offline:
-            self._set_footer("Device unreachable")
+            self._set_footer(self._offline_text())
         else:
             self._update_footer()
+
+    def _offline_text(self) -> str:
+        """Footer of an offline card: when it was last seen, if known."""
+        seen = getattr(self.device, "last_seen", None)
+        if not isinstance(seen, datetime):
+            return "Device unreachable"
+        return f"Last seen {relative_time(seen, datetime.now(seen.tzinfo))}"
 
     def _update_footer(self) -> None:
         if self._pending:
@@ -423,7 +437,7 @@ class DeviceCard(QFrame):
             return
 
         # Electrical sensor secondary metrics
-        if dtype == "electrical_sensor":
+        if dtype == "electricalSensor":
             v = getattr(attrs, "current_voltage", None)
             a = getattr(attrs, "current_amps", None)
             kwh = getattr(attrs, "total_energy_consumed", None)
@@ -449,7 +463,7 @@ class DeviceCard(QFrame):
         if offline:
             self.status_chip.set_status("Offline", "neutral")
             if not self._pending:
-                self._set_footer("Device unreachable")
+                self._set_footer(self._offline_text())
         else:
             self._update_status_chip()
             self._update_footer()
@@ -511,3 +525,4 @@ class DeviceCard(QFrame):
         if isinstance(metric, MetricWidget):
             metric.set_value(getattr(attrs, "current_active_power", None))
         self.set_offline(not getattr(self.device, "is_reachable", True))
+        self._elide_name()  # the chip text may have changed width

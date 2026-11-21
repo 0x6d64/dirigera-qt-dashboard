@@ -1261,7 +1261,7 @@ class DirigeraDashboard(QMainWindow):
     @staticmethod
     def is_energy_device(device: Any) -> bool:
         """Return True for devices that can report energy data (§9.4)."""
-        return getattr(device, "device_type", "") in ("outlet", "electrical_sensor")
+        return getattr(device, "device_type", "") in ("outlet", "electricalSensor")
 
     @staticmethod
     def get_room(device: Any) -> Tuple[str, str]:

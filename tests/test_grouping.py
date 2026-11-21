@@ -35,12 +35,12 @@ def test_format_room_label_only_capitalises_first_letter() -> None:
 
 def test_energy_devices() -> None:
     assert D.is_energy_device(SimpleNamespace(device_type="outlet"))
-    assert D.is_energy_device(SimpleNamespace(device_type="electrical_sensor"))
+    assert D.is_energy_device(SimpleNamespace(device_type="electricalSensor"))
     assert not D.is_energy_device(SimpleNamespace(device_type="light"))
 
 
 def test_device_sort_puts_lights_before_sensors_then_by_name() -> None:
-    sensor = make_device("environment_sensor", "s", name="Air")
+    sensor = make_device("environmentSensor", "s", name="Air")
     lamp_b = make_device("light", "b", name="b lamp")
     lamp_a = make_device("light", "a", name="A lamp")
     ordered = sorted([sensor, lamp_b, lamp_a], key=device_sort_key)

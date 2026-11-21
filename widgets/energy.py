@@ -32,6 +32,7 @@ import theme
 from widgets.chip import StatusChip
 from widgets.grid import CARD_MIN_WIDTH, CardGrid
 from widgets.metric import MetricWidget
+from widgets.text import type_label
 
 
 class EnergyCard(QFrame):
@@ -75,7 +76,7 @@ class EnergyCard(QFrame):
             """)
         titles.addWidget(self.name_label)
 
-        self.type_label = QLabel(dtype.replace("_", " ").capitalize())
+        self.type_label = QLabel(type_label(dtype))
         self.type_label.setStyleSheet(f"""
             QLabel {{
                 color: {theme.TEXT2};
