@@ -98,6 +98,25 @@ def test_scan_without_hubs_hints_at_manual_entry_inline(
     assert "manually" in window.connection_block.message_label.text()
 
 
+def test_failing_scan_says_so_instead_of_no_hubs(
+    window: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    dialogs: list[tuple[str, str]],
+    wait_until: Callable[..., None],
+) -> None:
+    def boom(**kwargs: Any) -> list[Any]:
+        raise RuntimeError("no network adapter")
+
+    monkeypatch.setattr(dashboard, "discover_dirigera_hubs", boom)
+    window.discover_hubs()
+    wait_until(lambda: window.connection_block.discover_button.isEnabled())
+    text = window.connection_block.message_label.text()
+    assert text.startswith("Discovery failed:")
+    assert "no network adapter" in text
+    assert "No hubs found" not in text
+    assert dialogs == []
+
+
 def test_close_stops_a_running_scan_and_still_closes(
     window: Any, stub_scan: dict[str, Any], wait_until: Callable[..., None]
 ) -> None:
