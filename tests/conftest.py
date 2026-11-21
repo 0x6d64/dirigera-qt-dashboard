@@ -161,6 +161,11 @@ class StubLight:
         self.attributes.color_hue = hue
         self.attributes.color_saturation = saturation
 
+    def activate_adaptive_profile(self, profile_id: str) -> None:
+        self._command()
+        self.sent.append(("profile", profile_id))
+        self.adaptive_profile = SimpleNamespace(id=profile_id, active=True)
+
     def reload(self) -> "StubLight":
         return self
 

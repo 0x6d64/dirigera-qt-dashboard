@@ -353,3 +353,138 @@ def test_dashboard_card_gets_profiles_and_search_still_matches(
     assert card.isHidden() is False
     connected.search_input.setText("zzz")
     assert card.isHidden() is True
+
+
+# --- activating a profile and the delayed refresh ------------------------------
+
+
+def _stub_lamp(adaptive: tuple[str, bool] | None = None, fail: bool = False) -> Any:
+    from conftest import StubLight
+
+    lamp = StubLight(fail=fail)
+    lamp.attributes.is_on = True
+    lamp.adaptive_profile = (
+        SimpleNamespace(id=adaptive[0], active=adaptive[1])
+        if adaptive
+        else SimpleNamespace(id=None, active=None)
+    )
+    return lamp
+
+
+def _card_of(win: Any) -> Any:
+    return win._room_sections[0][1].cards()[0]
+
+
+def _pick(card: Any, index: int) -> None:
+    card.profile_box.setCurrentIndex(index)
+    card.profile_box.activated.emit(index)
+
+
+@pytest.fixture
+def fast(monkeypatch: pytest.MonkeyPatch) -> None:
+    import dashboard
+    import widgets.card as card_module
+
+    monkeypatch.setattr(dashboard, "ADAPTIVE_REFRESH_DELAY_MS", 10)
+    monkeypatch.setattr(card_module, "PROFILE_COMMIT_MS", 0)
+
+
+def test_choosing_a_profile_activates_it_then_refreshes_from_the_hub(
+    connected: Any,
+    hub: StubHub,
+    wait_until: Wait,
+    fast: None,
+    dialogs: list[tuple[str, str]],
+) -> None:
+    import threading
+
+    lamp = _stub_lamp()
+    gate = threading.Event()
+    activate = lamp.activate_adaptive_profile
+
+    def slow(profile_id: str) -> None:
+        gate.wait(5)  # hold the command so "Sending…" can be observed
+        activate(profile_id)
+
+    lamp.activate_adaptive_profile = slow
+    hub.devices = [lamp]
+    _refresh(connected, wait_until)
+    card = _card_of(connected)
+    fetches = len(hub.calls)
+
+    _pick(card, 1)
+    wait_until(lambda: card.footer_label.text() == "Sending…")
+    assert card.footer_label.text() == "Sending…"
+    gate.set()
+    wait_until(lambda: card.footer_label.text() != "Sending…")
+    assert lamp.sent == [("profile", "p1")]
+    assert lamp.threads[0] is not threading.main_thread()
+    assert card.profile_box.currentText() == "Day"
+
+    # What the hub really did, a few seconds later: level and warmth followed.
+    hub.devices = [
+        make_device(
+            "light", "l1", "Lamp", is_on=True, light_level=70, adaptive=("p1", True)
+        )
+    ]
+    wait_until(lambda: len(hub.calls) == fetches + 1)
+    wait_until(lambda: connected._refresh_worker is None)
+    card = _card_of(connected)
+    assert card.profile_box.currentText() == "Day"
+    assert card.brightness_slider.value() == 70
+    assert len(hub.calls) == fetches + 1  # exactly one follow-up refresh
+    assert dialogs == []
+
+
+def test_failed_activation_shows_the_error_and_schedules_nothing(
+    connected: Any, hub: StubHub, wait_until: Wait, fast: None
+) -> None:
+    lamp = _stub_lamp(fail=True)
+    hub.devices = [lamp]
+    _refresh(connected, wait_until)
+    card = _card_of(connected)
+    fetches = len(hub.calls)
+    _pick(card, 2)
+    wait_until(lambda: "hub said no" in card.footer_label.text())
+    assert card.footer_label.text().startswith("Couldn't set adaptive profile")
+    assert card.profile_box.currentText() == "Off"
+    assert connected._adaptive_refresh_timer.isActive() is False
+    assert len(hub.calls) == fetches
+
+
+def test_off_is_not_sent(connected: Any, hub: StubHub, wait_until: Wait) -> None:
+    lamp = _stub_lamp()
+    hub.devices = [lamp]
+    _refresh(connected, wait_until)
+    connected.set_adaptive_profile(_card_of(connected), None)
+    assert lamp.sent == []
+    assert connected._command_workers == []
+
+
+def test_level_change_on_an_adaptive_light_schedules_one_refresh(
+    connected: Any, hub: StubHub, wait_until: Wait, fast: None
+) -> None:
+    lamp = _stub_lamp(adaptive=("p1", True))
+    hub.devices = [lamp]
+    _refresh(connected, wait_until)
+    fetches = len(hub.calls)
+    connected.set_light_brightness(_card_of(connected), 30)
+    wait_until(lambda: len(hub.calls) == fetches + 1)
+    wait_until(lambda: connected._refresh_worker is None)
+    assert lamp.sent == [("level", 30)]
+    assert len(hub.calls) == fetches + 1
+
+
+def test_level_change_on_a_plain_light_schedules_none(
+    connected: Any, hub: StubHub, wait_until: Wait, fast: None, pump: Any
+) -> None:
+    lamp = _stub_lamp()
+    hub.devices = [lamp]
+    _refresh(connected, wait_until)
+    fetches = len(hub.calls)
+    connected.set_light_brightness(_card_of(connected), 30)
+    wait_until(lambda: lamp.sent == [("level", 30)])
+    wait_until(lambda: not any(w.isRunning() for w in connected._command_workers))
+    pump(60)
+    assert connected._adaptive_refresh_timer.isActive() is False
+    assert len(hub.calls) == fetches

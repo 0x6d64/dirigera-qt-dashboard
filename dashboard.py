@@ -33,7 +33,7 @@ from PyQt6.QtWidgets import (
 )
 
 import theme
-from adaptive import profile_options
+from adaptive import active_profile_id, profile_options
 from network_discovery import (
     get_local_networks,
     hosts_to_scan,
@@ -83,6 +83,9 @@ EVENT_COALESCE_MS = 1000
 # Delay before the refresh that follows a scene activation: the hub applies a
 # scene asynchronously, so an immediate fetch can miss the change.
 SCENE_REFRESH_DELAY_MS = 1500
+# The hub applies an adaptive profile a few seconds after the command; the
+# card then learns what it really did (t-15, doc/dirigera-api.md §5 item 7).
+ADAPTIVE_REFRESH_DELAY_MS = 5000
 # First-load placeholders: how many, and how tall (about one device card).
 SKELETON_CARDS = 3
 SKELETON_HEIGHT = theme.SP24 * 5
@@ -289,6 +292,9 @@ class DirigeraDashboard(QMainWindow):
         self._scene_refresh_timer = QTimer(self)
         self._scene_refresh_timer.setSingleShot(True)
         self._scene_refresh_timer.timeout.connect(self._request_background_refresh)
+        self._adaptive_refresh_timer = QTimer(self)
+        self._adaptive_refresh_timer.setSingleShot(True)
+        self._adaptive_refresh_timer.timeout.connect(self._request_background_refresh)
         # Set when a scene refresh came due while a fetch was already running.
         self._refresh_pending = False
         # Single-shot: the first event of a burst starts it (t-16).
@@ -1306,6 +1312,7 @@ class DirigeraDashboard(QMainWindow):
             on_blind_state=self.set_blind_state,
             on_colour=self.set_light_colour,
             on_fan_speed=self.set_fan_speed,
+            on_profile=self.set_adaptive_profile,
             profiles=profile_options(self.adaptive_profiles),
         )
 
@@ -1392,21 +1399,57 @@ class DirigeraDashboard(QMainWindow):
                 device.set_light(lamp_on=True)
             device.set_light_level(brightness)
 
-        self.run_device_command(card, command, "set brightness")
+        self._run_light_command(card, command, "set brightness")
 
     def set_light_temperature(self, card: DeviceCard, kelvin: int) -> None:
         """Set a light's colour temperature in Kelvin."""
         device = card.device
-        self.run_device_command(
+        self._run_light_command(
             card, lambda: device.set_color_temperature(kelvin), "set colour temperature"
         )
 
     def set_light_colour(self, card: DeviceCard, hue: float, saturation: float) -> None:
         """Set a light's hue (0 to 360) and saturation (0.0 to 1.0)."""
         device = card.device
-        self.run_device_command(
+        self._run_light_command(
             card, lambda: device.set_light_color(hue, saturation), "set colour"
         )
+
+    def set_adaptive_profile(self, card: DeviceCard, profile_id: Optional[str]) -> None:
+        """Let a light follow an adaptive profile (t-15).
+
+        "Off" (`None`) sends nothing: the library has no call to leave
+        adaptive mode (doc/dirigera-api.md §5 item 7). The card shows the
+        state the library stored, then the hub's own after a delay.
+        """
+        if profile_id is None:
+            return
+        device = card.device
+        worker = self.run_device_command(
+            card,
+            lambda: device.activate_adaptive_profile(profile_id),
+            "set adaptive profile",
+        )
+        worker.succeeded.connect(self._schedule_adaptive_refresh)
+
+    def _run_light_command(
+        self, card: DeviceCard, command: Callable[[], None], action: str
+    ) -> CommandWorker:
+        """Run a manual light change; on a light that follows a profile, refresh.
+
+        The hub decides whether the change ended the profile, so the card
+        asks it after a delay instead of guessing. Whether the light follows
+        a profile is read before the command starts.
+        """
+        following = active_profile_id(card.device) is not None
+        worker = self.run_device_command(card, command, action)
+        if following:
+            worker.succeeded.connect(self._schedule_adaptive_refresh)
+        return worker
+
+    def _schedule_adaptive_refresh(self, _card: object = None) -> None:
+        """(Re)start the delayed refresh that shows what the hub applied."""
+        self._adaptive_refresh_timer.start(ADAPTIVE_REFRESH_DELAY_MS)
 
     def set_fan_speed(self, card: DeviceCard, motor_state: int) -> None:
         """Set an air purifier's fan: 0 off, 1 auto, 10 to 50 speeds 1 to 5.
@@ -1511,6 +1554,7 @@ class DirigeraDashboard(QMainWindow):
         """
         self.refresh_timer.stop()
         self._scene_refresh_timer.stop()
+        self._adaptive_refresh_timer.stop()
         self._stop_events()
         discovery = getattr(self, "discovery_thread", None)
         if discovery is not None and discovery.isRunning():
