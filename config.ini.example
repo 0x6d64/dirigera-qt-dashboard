@@ -10,3 +10,13 @@ ip_address = 192.168.1.100
 # Your authentication token (keep this secret!)
 # Generate using: uv run python generate_token.py <hub_ip>
 token = YOUR_TOKEN_HERE
+
+# Optional: limit or tune the "Discover" network scan. Every key is optional.
+[discovery]
+# Comma-separated networks (CIDR) to scan instead of the automatically detected
+# local ones. Scans stop at 4096 addresses in total.
+# networks = 192.168.1.0/24
+# Number of addresses probed in parallel (1-500, default 50)
+# max_workers = 50
+# Seconds to wait for each address (0.1-30, default 1.0)
+# timeout = 1.0

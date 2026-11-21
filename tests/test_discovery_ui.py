@@ -20,8 +20,14 @@ def stub_scan(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         max_workers: int = 50,
         timeout_per_ip: float = 1.0,
         should_stop: Callable[[], bool] | None = None,
+        networks: list[str] | None = None,
     ) -> list[Any]:
         state["calls"] += 1
+        state["kwargs"] = {
+            "max_workers": max_workers,
+            "timeout_per_ip": timeout_per_ip,
+            "networks": networks,
+        }
         assert should_stop is not None
         # Bounded wait: never hang the suite.
         for _ in range(500):
@@ -127,3 +133,41 @@ def test_close_stops_a_running_scan_and_still_closes(
     assert window._close_pending and window.isHidden()
     wait_until(lambda: not thread.isRunning())
     wait_until(lambda: not window._running_workers())
+
+
+def test_progress_text_names_the_scope(
+    window: Any,
+    stub_scan: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    wait_until: Callable[..., None],
+) -> None:
+    monkeypatch.setattr(dashboard, "get_local_networks", lambda: ["192.168.1.0/24"])
+    window.discover_hubs()
+    text = window.progress_dialog.labelText()
+    assert "254 addresses" in text
+    assert "192.168.1.0/24" in text
+    window.on_discovery_canceled()
+    wait_until(lambda: not window.discovery_thread.isRunning())
+
+
+def test_configured_scope_is_used_instead_of_detection(
+    window: Any,
+    stub_scan: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    wait_until: Callable[..., None],
+) -> None:
+    def detect() -> list[str]:
+        raise AssertionError("auto-detection must not run")
+
+    monkeypatch.setattr(dashboard, "get_local_networks", detect)
+    window.discovery_settings = dashboard.DiscoverySettings(
+        networks=["10.5.0.0/30"], max_workers=7, timeout=0.5
+    )
+    window.discover_hubs()
+    assert "2 addresses on 10.5.0.0/30" in window.progress_dialog.labelText()
+    wait_until(lambda: stub_scan["calls"] == 1)
+    assert stub_scan["kwargs"]["networks"] == ["10.5.0.0/30"]
+    assert stub_scan["kwargs"]["max_workers"] == 7
+    assert stub_scan["kwargs"]["timeout_per_ip"] == 0.5
+    window.on_discovery_canceled()
+    wait_until(lambda: not window.discovery_thread.isRunning())

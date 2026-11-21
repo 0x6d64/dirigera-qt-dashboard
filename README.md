@@ -61,6 +61,21 @@ Copy `config.ini.example` to `config.ini` in the same folder as `dashboard.py`
 and fill in the hub IP and token. The dashboard reads it from there regardless
 of the directory you start it from, and pre-fills the connection fields.
 
+### Limiting the scan (optional)
+
+Add a `[discovery]` section to `config.ini` to scan specific networks instead
+of the detected ones, or to tune the scan (see `config.ini.example`):
+
+```ini
+[discovery]
+networks = 192.168.1.0/24, 10.0.0.0/24
+max_workers = 50
+timeout = 1.0
+```
+
+Invalid values are ignored with a message in the status line and the defaults
+are used.
+
 ## Usage
 
 Run the dashboard:
@@ -74,7 +89,11 @@ The dashboard offers two ways to find your hub:
 
 1. **Automatic Discovery** (Recommended):
    - Click the "Discover" button
-   - The app will scan your local network for Dirigera hubs
+   - The app will scan your local network for Dirigera hubs; the progress
+     text names the addresses and networks being scanned
+   - Link-local (169.254.x.x) and single-host networks are skipped, and so are
+     virtual adapters (docker, veth, vbox, vmnet, tun, tap, wg, utun) where
+     the operating system reports readable interface names (Windows does not)
    - If one hub is found, its IP will be filled in automatically
    - If multiple hubs are found, you can select which one to use
    - If no hubs are found, you can enter the IP manually

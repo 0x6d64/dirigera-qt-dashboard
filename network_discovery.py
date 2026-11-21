@@ -140,19 +140,19 @@ def looks_like_dirigera_api(ip: str, timeout: float = 1.0) -> bool:
     )
 
 
-def scan_ip(ip: str) -> Optional[Tuple[str, Optional[str]]]:
+def scan_ip(ip: str, timeout: float = 1.0) -> Optional[Tuple[str, Optional[str]]]:
     """
     Scan a single IP address for Dirigera hub.
     Returns (ip, mac) tuple if found, None otherwise. The MAC may be None
     when the hub was identified via its API but no MAC could be resolved.
     """
     # Fast check first: the hub's API port.
-    if not check_dirigera_port(ip):
+    if not check_dirigera_port(ip, timeout):
         return None
 
     # Preferred identification: unauthenticated API probe. Works even when
     # the MAC is masked (routed segments, Wi-Fi bridges, virtualization).
-    if looks_like_dirigera_api(ip):
+    if looks_like_dirigera_api(ip, timeout):
         return (ip, get_mac_address(ip=ip))
 
     # Fallback when HTTPS probing is impossible: MAC OUI check.
@@ -198,9 +198,13 @@ def discover_dirigera_hubs(
     max_workers: int = 50,
     timeout_per_ip: float = 1.0,
     should_stop: Optional[Callable[[], bool]] = None,
+    networks: Optional[List[str]] = None,
 ) -> List[Tuple[str, Optional[str]]]:
     """
     Discover Dirigera hubs on the local network.
+
+    ``networks`` (CIDR strings) overrides the auto-detected local networks.
+    ``timeout_per_ip`` is the connect/request timeout of each probe.
 
     ``should_stop`` is polled while results are collected; once it returns
     True the pending probes are cancelled and the hubs found so far are
@@ -212,7 +216,7 @@ def discover_dirigera_hubs(
         is None when the hub was identified via its API but no MAC could be
         resolved.
     """
-    ips_to_scan = hosts_to_scan(get_local_networks())
+    ips_to_scan = hosts_to_scan(get_local_networks() if networks is None else networks)
     if not ips_to_scan:
         return []
 
@@ -221,7 +225,7 @@ def discover_dirigera_hubs(
     # No `with` block: its exit would wait for every queued probe.
     executor = ThreadPoolExecutor(max_workers=max_workers)
     try:
-        pending = {executor.submit(scan_ip, ip) for ip in ips_to_scan}
+        pending = {executor.submit(scan_ip, ip, timeout_per_ip) for ip in ips_to_scan}
         while pending:
             if should_stop is not None and should_stop():
                 break
