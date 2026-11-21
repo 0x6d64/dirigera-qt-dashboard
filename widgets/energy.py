@@ -78,6 +78,7 @@ class EnergyCard(CardBase):
         self.price_per_kwh = price_per_kwh
         self.currency = currency
         self._on_reset = on_reset
+        self._command_running = False
         attrs = getattr(device, "attributes", None)
 
         # Metric zone: live power, then the A / V caption line.
@@ -211,7 +212,23 @@ class EnergyCard(CardBase):
     @override
     def sync_from_device(self) -> None:
         """Redraw the card from `self.device`, e.g. after a command."""
+        self._command_running = False
         self._redraw()
+
+    @override
+    def set_pending(self, pending: bool) -> None:
+        """Also block the reset while a command runs, so it is sent once."""
+        self._command_running = pending
+        self._update_reset_enabled()
+        super().set_pending(pending)
+
+    def _update_reset_enabled(self) -> None:
+        """Reset buttons work only online and while no command is running."""
+        enabled = not self._is_offline and not self._command_running
+        for button in (self.reset_button, self.confirm_button, self.cancel_button):
+            button.setEnabled(enabled)
+        if not enabled:
+            self._cancel_reset()
 
     def _redraw(self) -> None:
         """Show the readings, footer and state of `self.device`."""
@@ -234,6 +251,7 @@ class EnergyCard(CardBase):
         """Card surface and chip: offline, or the outlet's on/off state."""
         offline = getattr(self.device, "is_reachable", True) is False
         self._is_offline = offline
+        self._update_reset_enabled()
         self._apply_card_style(is_offline=offline)
         if offline:
             self._set_chip("Offline", "neutral")

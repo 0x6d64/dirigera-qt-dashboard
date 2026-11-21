@@ -149,3 +149,24 @@ def test_failed_reset_shows_the_error_and_does_not_refresh(
     wait_until(lambda: card.footer_label.text() == "Couldn't reset energy: hub said no")
     assert refreshes == []
     assert dialogs == []
+
+
+def test_reset_is_blocked_while_a_command_runs(qapp: QApplication) -> None:
+    card = EnergyCard(_outlet(StubEnergyClient()))
+    card.reset_button.click()
+    card.set_pending(True)
+    assert not card.confirm_button.isEnabled()
+    assert card.confirm_button.isHidden()  # the open confirm step is withdrawn
+    assert not card.reset_button.isEnabled()
+    card.sync_from_device()
+    assert card.reset_button.isEnabled()
+
+
+def test_reset_is_blocked_while_offline(qapp: QApplication) -> None:
+    device = _outlet(StubEnergyClient())
+    device.is_reachable = False
+    card = EnergyCard(device)
+    assert not card.reset_button.isEnabled()
+    device.is_reachable = True
+    card.sync_from_device()
+    assert card.reset_button.isEnabled()

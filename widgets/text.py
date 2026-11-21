@@ -91,7 +91,8 @@ def usage_kwh(attrs: Any) -> Optional[float]:
     if total is None:
         return None
     at_reset = _number(attrs, "energy_consumed_at_last_reset")
-    return total if at_reset is None else total - at_reset
+    # Never negative, even if the hub's two counters disagree.
+    return total if at_reset is None else max(0.0, total - at_reset)
 
 
 def format_cost(kwh: float, price_per_kwh: float, currency: str) -> str:

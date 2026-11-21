@@ -145,6 +145,11 @@ def test_usage_without_a_reset_value_is_the_total() -> None:
     assert usage_kwh(attrs) == 18.4
 
 
+def test_usage_is_never_negative() -> None:
+    attrs = _attrs(total_energy_consumed=17.0, energy_consumed_at_last_reset=17.1)
+    assert usage_kwh(attrs) == 0.0
+
+
 def test_usage_is_none_without_a_total() -> None:
     assert usage_kwh(_attrs(energy_consumed_at_last_reset=1.0)) is None
 
