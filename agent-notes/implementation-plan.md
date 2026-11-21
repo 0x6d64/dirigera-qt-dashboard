@@ -51,6 +51,10 @@ by Haiku subagents in this order, one branch per plan, each merged into
 - Files are UTF-8 with LF line endings.
 
 1. `feat/purifier-controls` — filter health, fan speed (t-85, t-80)
+   - `fix/filter-overdue` — "Filter overdue by N days" (t-91, owner feedback;
+     no plan entry)
+   - `chore/card-base-and-settings` — module refactor before plan 2 (t-92),
+     added on the owner's request after a structure review
 2. `feat/energy-reset-cost` — reset, cost, totals (t-83, t-84, t-87)
 3. `feat/display-rules` — PM2.5 bands, hidden devices, automatic scenes
    toggle (t-88, t-89, t-90)
@@ -146,6 +150,112 @@ filter footer reads "Filter used up · change now", chip "Change filter").
 > "show air purifier filter health" (`db98edc`), commit 2 "add air purifier
 > fan speed control" (`e8eaf13`), commit 3 "record purifier controls" (the
 > commit that adds this note; not merged).
+
+---
+
+### Plan: module refactor before the energy work (t-92)
+
+Status: open
+
+Goal: give the batch 3 work a home before it lands, so `dashboard.py` stops
+growing and the energy card does not copy the device card's machinery a
+second time. Pure moves and shared code; **no behaviour change** apart from
+the energy card gaining the device card's pending/error API and name eliding.
+From a structure review on 2026-11-21 (proposals 1–5; proposal 6, moving the
+refresh reconciliation out of the window, is skipped: it works, is covered,
+and plan 3 edits it).
+
+Rules: the batch 3 rules apply. Existing tests keep their assertions; only
+imports and `monkeypatch` targets may change (e.g. `dashboard.Hub` →
+`workers.Hub`, `dashboard.discover_dirigera_hubs` → `workers....`). Keep the
+public attribute names tests use (`footer_label`, `status_chip`,
+`name_label`, `type_label`, `full_name`, `switch`, the slider attributes,
+`fan_speed`). New modules are top-level (flat layout, `AGENTS.md`); no new
+packages. Each commit leaves every gate green.
+
+Affected files: `settings.py` (new), `rooms.py` (new), `workers.py` (new),
+`widgets/cardbase.py` (new), `dashboard.py`, `widgets/card.py`,
+`widgets/energy.py`, `tests/*` (imports and patch targets only, plus the new
+tests named below), `pyproject.toml` (`py-modules`), `AGENTS.md` (Project
+layout line), `agent-notes/implementation-plan.md`, `agent-notes/todo.md`
+
+#### Commit 1 — "move config settings to settings.py" (t-92)
+
+1. `settings.py`: `DEFAULT_DISCOVERY_WORKERS`, `DEFAULT_DISCOVERY_TIMEOUT`,
+   `DiscoverySettings`, `parse_discovery_settings`, and `ui_settings() ->
+   QSettings` (IniFormat, UserScope, organisation `"dirigera-qt-dashboard"`,
+   application `"dashboard"`; only `QtCore` imports, no widgets). Plan 3
+   (t-90) and plan 4 (t-86) use `ui_settings()`; plan 2 adds
+   `EnergySettings`/`parse_energy_settings` here.
+2. `tests/conftest.py`: autouse fixture that calls `QSettings.setPath(IniFormat,
+   UserScope, tmp_path)` so no test touches the real settings. A small test
+   that `ui_settings()` writes into that temp dir.
+3. `dashboard.py` imports from `settings`; `CONFIG_PATH` and `load_config`
+   stay in `dashboard.py` (tests patch `dashboard.CONFIG_PATH`).
+
+#### Commit 2 — "move room helpers to rooms.py" (t-92)
+
+`rooms.py` (pure, no Qt): `UNKNOWN_ROOM`, `format_room_label`, `get_room`,
+`group_by_room`, `is_energy_device` as module functions. Remove the static
+methods from `DirigeraDashboard` and call the functions; `tests/test_grouping.py`
+imports from `rooms`. Plan 2 (room totals) and plan 4 (room colours, e.g. a
+`room_colour_name(device)` helper) extend this module.
+
+#### Commit 3 — "move worker threads to workers.py" (t-92)
+
+Move `DiscoveryThread`, `ConnectWorker`, `SceneTriggerWorker`,
+`CommandWorker`, `RefreshWorker` unchanged into `workers.py` (with the
+imports they use, e.g. `Hub`, `discover_dirigera_hubs`). Add a
+`CommandTarget` `Protocol` there: `device`, `set_pending(bool)`,
+`sync_from_device()`, `show_error(str)`; type `CommandWorker` and
+`DirigeraDashboard.run_device_command` with it instead of `DeviceCard`.
+Update `monkeypatch` targets in the tests.
+
+#### Commit 4 — "share card header, footer and error handling" (t-92)
+
+1. `widgets/cardbase.py`: `CardBase(QFrame)` with what `DeviceCard` and
+   `EnergyCard` both build today: the header (name label elided to the
+   available width, type label, status chip, `_set_chip`), the footer label,
+   the offline card style (`SURFACE`/`SUNKEN`, border, radius), and the
+   footer state machine moved from `DeviceCard`: `set_pending`, `show_error`
+   with `CARD_ERROR_MS` and its single-shot timer, `_set_footer`,
+   `_clear_error`. Subclasses provide the normal footer text through one hook
+   (e.g. `_update_footer()`), and `sync_from_device()`.
+2. Shared label style helpers instead of the repeated inline QSS blocks (a
+   small function returning the QSS for a label of a given colour, size and
+   weight, in `cardbase.py` or `theme.py`), using only `theme.py` tokens.
+3. `DeviceCard` and `EnergyCard` subclass `CardBase`; `EnergyCard` thereby
+   gets `set_pending`/`show_error`/`sync_from_device` (plan 2 commit 3 needs
+   them) and name eliding. `widgets.card.CARD_ERROR_MS` may move; update the
+   test that patches it.
+4. New tests: an `EnergyCard` shows "Sending…" while pending, shows an error
+   in the footer and restores the normal footer after the (patched, short)
+   error time; a long energy-card name is elided with the full name in the
+   tooltip.
+
+#### Commit 5 — "share power row and callback wiring in card.py" (t-92)
+
+In `DeviceCard`: one `_power_row()` helper used by the light and outlet
+branches (they repeat it today), and one helper that connects a control's
+signal to an optional callback with the card as first argument (replacing the
+repeated `if cb is not None: ...connect(lambda ..., callback=cb: ...)`
+blocks). Keep the per-type `if/elif` structure; a registry is not worth it
+now.
+
+#### Commit 6 — "record module refactor"
+
+Bookkeeping: check off t-92; `AGENTS.md` Project line names `settings.py`,
+`rooms.py`, `workers.py` and `widgets/cardbase.py` in the layout; `pyproject.toml`
+`py-modules` lists the new top-level modules; in this file, update plans 2–4
+where they name old homes (plan 2: `EnergySettings` and its parser go to
+`settings.py`, commit 3 step 2 is already done by this plan; plan 3:
+`ui_settings()` and the QSettings test fixture already exist, `is_user_scene`
+may live in `dashboard.py`; plan 4: room helpers in `rooms.py`); set this
+plan's `Status:` and add the Executed note.
+
+Verification: gates; `uv run python main.py` starts (offscreen smoke via the
+tests is enough); `git grep -n "DirigeraDashboard.group_by_room\|dashboard.Hub"`
+finds nothing.
 
 ---
 
