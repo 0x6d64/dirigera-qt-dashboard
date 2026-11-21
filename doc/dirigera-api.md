@@ -205,14 +205,28 @@ remotes. Answers to section 4 where the data settles them:
    separate `electricalSensor`; question 3). Attributes: `currentActivePower` W,
    `currentVoltage` V, `currentAmps` A, `totalEnergyConsumed` kWh (with
    `totalEnergyConsumedLastUpdated`), `energyConsumedAtLastReset` kWh,
-   `timeOfLastEnergyReset`. `canReceive` contains `energyConsumedAtLastReset`,
-   so the reset is a `PATCH` of that attribute; the value to send (presumably
-   0) is unverified, and it was not tried because it would erase the user's
-   counter. Usage since the last reset is
-   `totalEnergyConsumed - energyConsumedAtLastReset`.
-3. **Air purifier (STARKVIND E2007)**: `fanMode` `low` with
-   `fanModeSequence` `lowMediumHighAuto` and `motorState` 20, so modes map to
-   motor-state steps of 10. `currentPM25` is a plain integer. Filter:
+   `timeOfLastEnergyReset`. Usage since the last reset is
+   `totalEnergyConsumed - energyConsumedAtLastReset`. **Reset (tried with the
+   owner's permission):** `PATCH /devices/{id}` with
+   `[{"attributes": {"energyConsumedAtLastReset": 0}}]` succeeds; the hub then
+   stores the current `totalEnergyConsumed` in `energyConsumedAtLastReset` and
+   sets `timeOfLastEnergyReset` to now. `totalEnergyConsumed` itself never
+   resets, so "since reset" starts again at 0.
+3. **Air purifier (STARKVIND E2007)**: `fanModeSequence` is
+   `lowMediumHighAuto`; `currentPM25` is a plain integer. **Speed control
+   (tried with the owner's permission):** `PATCH` of `motorState` sets the
+   speed, and the hub derives `fanMode` from it:
+
+   | Sent `motorState` | Read back | `fanMode` |
+   | --- | --- | --- |
+   | 0 | 0 | `off` |
+   | 1 | 30 at that moment (the purifier picks its own speed) | `auto` |
+   | 10, 20 | same | `low` (levels 1, 2) |
+   | 30, 40 | same | `medium` (levels 3, 4) |
+   | 50 | 50 | `high` (level 5) |
+
+   So the IKEA app's five speeds are `motorState` 10 to 50 in steps of 10, 0 is
+   off and 1 is auto. `currentPM25` read 0 while the fan was off. Filter:
    `filterLifetime` 259200 and `filterElapsedTime` 353271 are minutes (259200
    min = 180 days, STARKVIND's six-month filter), `filterAlarmStatus` true once
    elapsed passes lifetime (question 2, filter times). `motorRuntime` is also a
