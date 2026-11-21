@@ -195,7 +195,8 @@ card surfaces in `tests/test_room_colours.py`. `[decided]`
 2. Other platforms: system UI sans-serif. `[proposed]`
 3. Numeric values should use tabular figures where available so changing values do not
    shift layout. Whether Qt applies this on Windows is unchecked (section 14, item 11); if not, give numeric
-   labels a fixed minimum width.
+   labels a fixed minimum width, except metric values, where the gap before the unit
+   reads worse than a small shift (§8.5).
 
 ### 6.2 Scale
 
@@ -329,8 +330,10 @@ Variants:
 
 ### 8.5 Metric
 
-1. Value at metric size (28 px, semibold); unit beside it at caption size, `text-2`,
-   baseline aligned. `[verified]`
+1. Value at metric size (28 px, semibold); unit (and an optional note such as a PM2.5
+   band word) directly after it at caption size, `text-2`, on the value's baseline.
+   The value reserves no minimum width, so no gap opens between number and unit.
+   `[verified]`
 2. Caption beneath the value naming the reading ("Temperature", "Humidity"). `[verified]`
 3. A metric group places 2 to 3 metrics side by side with 20 px gaps. `[verified]`
 4. Use metrics only for numbers. Words such as "Closed" are a title or a chip, not a
