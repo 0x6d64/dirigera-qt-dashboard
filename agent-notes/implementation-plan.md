@@ -806,6 +806,12 @@ Affected files: `pyproject.toml`, `dashboard.py`, `widgets/*.py`,
 
 Check off t-34 and t-55, Executed markers.
 
+> **Executed 2026-11-21** on branch `test/typing-and-smoke`: commit 1
+> `cd1c452` "check untyped function bodies", commit 2 `df011c8` "energy view
+> smoke tests", commit 3 "record typing and smoke tests". Header tests were
+> already added by the responsive-header plan (`tests/test_header.py`), so
+> nothing was added for them here.
+
 ---
 
 ### Plan: README, entry point and metadata (t-36, t-37, t-38, t-39, t-76)
