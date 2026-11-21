@@ -56,6 +56,25 @@ def test_empty_hub_section_is_not_an_error(window: Any, tmp_path: Path) -> None:
     assert window.status_label.property("tone") != "danger"
 
 
+def test_malformed_file_is_reported_inline(
+    window: Any, tmp_path: Path, dialogs: list[tuple[str, str]]
+) -> None:
+    write_config(tmp_path / "config.ini", "ip_address = 10.0.0.5\n[hub]\n")
+    window.load_config()
+    assert fields(window) == ("", "")
+    assert window.status_label.text().startswith("Could not read config.ini")
+    assert window.status_label.property("tone") == "danger"
+    assert dialogs == []
+
+
+def test_undecodable_file_is_reported_inline(window: Any, tmp_path: Path) -> None:
+    (tmp_path / "config.ini").write_bytes(b"[hub]\ntoken = \xff\xfe\x80\n")
+    window.load_config()
+    assert fields(window) == ("", "")
+    assert window.status_label.text().startswith("Could not read config.ini")
+    assert window.status_label.property("tone") == "danger"
+
+
 def test_found_regardless_of_working_directory(
     window: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
