@@ -156,7 +156,7 @@ disable controls. Never show the raw `device_type` string; humanize it.
 | 1 | `light` | Switch; brightness 1 to 100; colour temperature (gradient slider); hue and saturation | 0 is rejected by the library, "off" goes through the switch. Colour controls belong in a secondary section. `QColor.hueF()` returns 0 to 1 and -1 for greys; convert to 0 to 360 |
 | 2 | `outlet`, `electricalSensor` | Switch (outlets); power W, voltage V, current A, total kWh, only non-None values | Merge a sensor into the outlet with the same `relation_id`; standalone read-only tile only if no outlet matches |
 | 3 | `blinds` | Position slider (0 to 100); Up, Stop, Down buttons; moving state as text | Do not label the ends "open" or "closed" until checked on a real blind |
-| 4 | `airPurifier` | Fan mode as segments; PM2.5; filter progress; alarm badge; child lock, status light | Not implemented. `motor_state` semantics and units are `[unverified]`; hide until checked |
+| 4 | `airPurifier` | Fan speed (Off, Auto, 1–5 via `motorState`, §5 item 3); PM2.5; filter life and alarm | Child lock is deliberately not shown (owner decision 2026-11-21, `req-21`); status light is not planned. Fan control is t-80, filter health t-85 |
 | 5 | `*Controller` | Name, type, battery, reachability | No press state exists; a live "pressed" flash needs the event shape (section 2.6 item 4) |
 | 6 | `environmentSensor` | Temperature, humidity, PM2.5, VOC index, CO2: non-None only | Min/max PM2.5 in a tooltip. No air-quality colour bands until a standard is chosen |
 | 7 | `motionSensor`, `occupancySensor` | State word ("Motion" / "Clear"); light level on motion sensors | |
@@ -192,3 +192,51 @@ for d in hub.get("/devices"):
 | 5 | Values of `color_mode`, `room.icon`, `room.color` | Read from the dump |
 | 6 | Does `light_level` stay populated while a light is off? | Read from the dump with a light off |
 | 7 | Event shapes for button presses, add/remove, reachability | Log raw events from a listener while pressing a remote |
+
+## 5. Observed on a real hub (2026-11-21)
+
+Read with `tools/hub_get.py` (GET only) on one home: 2 lights, 2 plugs (one
+INSPELNING with metering), a STARKVIND air purifier, 2 VINDSTYRKA sensors, 3
+remotes. Answers to section 4 where the data settles them:
+
+1. **Raw `/devices` also lists the hub itself** (`deviceType` `gateway`).
+   `get_all_devices()` filters it out, so the app never sees it.
+2. **Metering plug (INSPELNING E2206)** carries energy on the outlet itself (no
+   separate `electricalSensor`; question 3). Attributes: `currentActivePower` W,
+   `currentVoltage` V, `currentAmps` A, `totalEnergyConsumed` kWh (with
+   `totalEnergyConsumedLastUpdated`), `energyConsumedAtLastReset` kWh,
+   `timeOfLastEnergyReset`. Usage since the last reset is
+   `totalEnergyConsumed - energyConsumedAtLastReset`. **Reset (tried with the
+   owner's permission):** `PATCH /devices/{id}` with
+   `[{"attributes": {"energyConsumedAtLastReset": 0}}]` succeeds; the hub then
+   stores the current `totalEnergyConsumed` in `energyConsumedAtLastReset` and
+   sets `timeOfLastEnergyReset` to now. `totalEnergyConsumed` itself never
+   resets, so "since reset" starts again at 0.
+3. **Air purifier (STARKVIND E2007)**: `fanModeSequence` is
+   `lowMediumHighAuto`; `currentPM25` is a plain integer. **Speed control
+   (tried with the owner's permission):** `PATCH` of `motorState` sets the
+   speed, and the hub derives `fanMode` from it:
+
+   | Sent `motorState` | Read back | `fanMode` |
+   | --- | --- | --- |
+   | 0 | 0 | `off` |
+   | 1 | 30 at that moment (the purifier picks its own speed) | `auto` |
+   | 10, 20 | same | `low` (levels 1, 2) |
+   | 30, 40 | same | `medium` (levels 3, 4) |
+   | 50 | 50 | `high` (level 5) |
+
+   So the IKEA app's five speeds are `motorState` 10 to 50 in steps of 10, 0 is
+   off and 1 is auto. `currentPM25` read 0 while the fan was off. Filter:
+   `filterLifetime` 259200 and `filterElapsedTime` 353271 are minutes (259200
+   min = 180 days, STARKVIND's six-month filter), `filterAlarmStatus` true once
+   elapsed passes lifetime (question 2, filter times). `motorRuntime` is also a
+   counter, unit presumably minutes.
+4. **Air quality sensor (VINDSTYRKA E2112)**: `currentTemperature`,
+   `currentRH`, `currentPM25`, `vocIndex`; `maxMeasuredPM25` 999 and
+   `minMeasuredPM25` 0 look like range bounds, not measured extremes.
+5. **No history found.** `/home` returns `user`, `hub`, `devices`, `users`,
+   `scenes`, `rooms`, `deviceSets`, `music`, `adaptiveProfiles`: no readings
+   over time. Guessed routes (`/history`, `/devices/{id}/history`,
+   `/devices/{id}/measurements`, `/statistics`, `/insights`, `/energy`,
+   `/events`, …) return 404, and no public documentation names one. The IKEA
+   app's graphs may come from IKEA's cloud or from a route not found yet.
