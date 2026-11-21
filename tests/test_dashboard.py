@@ -85,7 +85,8 @@ def test_failed_refresh_keeps_the_current_view(
     wait_until(lambda: window._refresh_worker is None)
     assert _card_names(window) == before
     assert window.refresh_button.isEnabled()
-    assert dialogs
+    assert dialogs == []
+    assert window.status_label.text().startswith("Refresh failed")
 
 
 def test_filter_hides_non_matching_cards_and_empty_sections(
@@ -130,9 +131,25 @@ def test_failed_command_resyncs_card_and_reports(
     lamp = StubLight(fail=True)
     card = _card(window, lamp)
     card.switch.setChecked(True)  # the user flips the switch; the hub refuses
-    wait_until(lambda: bool(dialogs))
+    wait_until(lambda: "hub said no" in card.footer_label.text())
     assert card.switch.isChecked() is False  # shows the real state
-    assert "hub said no" in dialogs[0][1]
+    assert card.footer_label.text().startswith("Couldn't")
+    assert dialogs == []
+
+
+def test_card_error_clears_after_its_timeout(
+    window: Any, monkeypatch: pytest.MonkeyPatch, wait_until: Wait
+) -> None:
+    from widgets import card as card_module
+
+    monkeypatch.setattr(card_module, "CARD_ERROR_MS", 30)
+    card = _card(window, StubLight())
+    card._error_timer.setInterval(30)
+    card.show_error("Couldn't toggle light: boom")
+    assert card.footer_label.text() == "Couldn't toggle light: boom"
+    card.sync_from_device()  # a resync keeps the error visible
+    assert card.footer_label.text() == "Couldn't toggle light: boom"
+    wait_until(lambda: "boom" not in card.footer_label.text())
 
 
 # --- scenes ------------------------------------------------------------------

@@ -18,7 +18,7 @@ Follows design-doc.md §8.1:
 
 from typing import Any, Callable, Optional, Tuple
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -50,6 +50,9 @@ _TYPE_SORT_WEIGHT = {
 
 # Battery level at or below which the chip warns (design-doc.md §14 item 4).
 LOW_BATTERY_PERCENT = 20
+
+# How long a command error stays in the footer before the normal text returns.
+CARD_ERROR_MS = 8000
 
 
 def device_sort_key(device: Any) -> Tuple[int, str]:
@@ -88,6 +91,11 @@ class DeviceCard(QFrame):
         self._controls: list[QWidget] = []
         self._is_offline = False
         self._pending = False
+        self._error: Optional[str] = None
+        self._error_timer = QTimer(self)
+        self._error_timer.setSingleShot(True)
+        self._error_timer.setInterval(CARD_ERROR_MS)
+        self._error_timer.timeout.connect(self._clear_error)
 
         self.setMinimumWidth(280)
         self.setFrameShape(QFrame.Shape.StyledPanel)
@@ -150,13 +158,8 @@ class DeviceCard(QFrame):
 
         # 3. Footer row
         self.footer_label = QLabel()
-        self.footer_label.setStyleSheet(f"""
-            QLabel {{
-                color: {theme.TEXT2};
-                font-size: {theme.FONT_CAPTION}px;
-                background-color: transparent;
-            }}
-            """)
+        self.footer_label.setWordWrap(True)
+        self._style_footer(danger=False)
         self._update_footer()
         card_layout.addWidget(self.footer_label)
 
@@ -333,9 +336,48 @@ class DeviceCard(QFrame):
         if isinstance(battery, (int, float)) and battery <= LOW_BATTERY_PERCENT:
             self.status_chip.set_status("Low battery", "warn")
 
+    def _style_footer(self, danger: bool) -> None:
+        color = theme.DANGER if danger else theme.TEXT2
+        self.footer_label.setStyleSheet(f"""
+            QLabel {{
+                color: {color};
+                font-size: {theme.FONT_CAPTION}px;
+                background-color: transparent;
+            }}
+            """)
+
+    def _set_footer(self, text: str) -> None:
+        """Show `text`, unless a command error is being shown (danger tone)."""
+        if self._error is not None and text != "Sending…":
+            self.footer_label.setText(self._error)
+            self._style_footer(danger=True)
+        else:
+            self.footer_label.setText(text)
+            self._style_footer(danger=False)
+
+    def show_error(self, message: str) -> None:
+        """Show `message` in the footer in danger tone for CARD_ERROR_MS."""
+        self._error = message
+        self._error_timer.start()
+        if self._pending:
+            return
+        if self._is_offline:
+            self._set_footer("Device unreachable")
+        else:
+            self._update_footer()
+
+    def _clear_error(self) -> None:
+        self._error = None
+        if self._pending:
+            return
+        if self._is_offline:
+            self._set_footer("Device unreachable")
+        else:
+            self._update_footer()
+
     def _update_footer(self) -> None:
         if self._pending:
-            self.footer_label.setText("Sending…")
+            self._set_footer("Sending…")
             return
         attrs = getattr(self.device, "attributes", None)
         dtype = getattr(self.device, "device_type", "unknown")
@@ -343,7 +385,7 @@ class DeviceCard(QFrame):
         # Battery level
         battery = getattr(attrs, "battery_percentage", None)
         if isinstance(battery, (int, float)):
-            self.footer_label.setText(f"Battery {int(battery)}%")
+            self._set_footer(f"Battery {int(battery)}%")
             return
 
         # Electrical sensor secondary metrics
@@ -359,10 +401,10 @@ class DeviceCard(QFrame):
             if isinstance(kwh, (int, float)):
                 parts.append(f"{kwh:.2f} kWh")
             if parts:
-                self.footer_label.setText(" · ".join(parts))
+                self._set_footer(" · ".join(parts))
                 return
 
-        self.footer_label.setText("")
+        self._set_footer("")
 
     def set_offline(self, offline: bool) -> None:
         """Mark card offline: sunken background, disabled controls, offline chip."""
@@ -373,7 +415,7 @@ class DeviceCard(QFrame):
         if offline:
             self.status_chip.set_status("Offline", "neutral")
             if not self._pending:
-                self.footer_label.setText("Device unreachable")
+                self._set_footer("Device unreachable")
         else:
             self._update_status_chip()
             self._update_footer()
@@ -381,7 +423,7 @@ class DeviceCard(QFrame):
     def set_pending(self, pending: bool) -> None:
         """Show pending command status in footer."""
         if pending:
-            self.footer_label.setText("Sending…")
+            self._set_footer("Sending…")
         else:
             self._update_footer()
 

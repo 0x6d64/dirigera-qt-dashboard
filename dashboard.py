@@ -281,7 +281,6 @@ class DirigeraDashboard(QMainWindow):
         self._summary_text = ""
         self._status_is_failure = False
         # True while the running fetch was started by the timer, not the user.
-        self._refresh_is_background = False
         self._poll_interval = POLL_INTERVAL_S
         self.refresh_timer = QTimer(self)
         self.refresh_timer.setInterval(self._poll_interval * 1000)
@@ -685,7 +684,7 @@ class DirigeraDashboard(QMainWindow):
         self._start_refresh(background=True)
 
     def _start_refresh(self, background: bool) -> None:
-        """Start the fetch worker; a background one never opens a dialog."""
+        """Start the fetch worker. Failures are reported inline, never in a dialog."""
         hub = self.hub
         if hub is None:
             return
@@ -700,7 +699,6 @@ class DirigeraDashboard(QMainWindow):
         worker.failed.connect(self._on_refresh_failed)
         worker.finished.connect(self._on_refresh_worker_done)
         self._refresh_worker = worker
-        self._refresh_is_background = background
         worker.start()
 
     def _request_background_refresh(self) -> None:
@@ -925,8 +923,6 @@ class DirigeraDashboard(QMainWindow):
             self.stale_label.setText(f"Showing data from {self._last_refresh:%H:%M}")
             self.stale_label.show()
         self._update_caption()
-        if not self._refresh_is_background:
-            QMessageBox.critical(self, "Error", f"Failed to refresh devices: {message}")
 
     def _on_refresh_worker_done(self) -> None:
         self._refresh_worker = None
@@ -994,7 +990,7 @@ class DirigeraDashboard(QMainWindow):
         """Report the failure and show the device's real state (req-3)."""
         if not sip.isdeleted(card):
             card.sync_from_device()
-        QMessageBox.warning(self, "Error", f"Failed to {action}: {message}")
+            card.show_error(f"Couldn't {action}: {message}")
 
     def toggle_device_power(self, card: DeviceCard, turn_on: bool) -> None:
         """Switch a light or outlet on or off."""

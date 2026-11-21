@@ -243,12 +243,14 @@ def test_failed_background_refresh_shows_no_dialog_but_marks_stale_data(
     assert list(_cards(connected)) == before
 
 
-def test_failed_manual_refresh_still_reports(
+def test_failed_manual_refresh_reports_inline(
     connected: Any, hub: StubHub, dialogs: list, wait_until: Wait
 ) -> None:
     hub.fail = True
     _refresh(connected, wait_until)
-    assert [kind for kind, _ in dialogs] == ["critical"]
+    assert dialogs == []
+    assert connected.status_label.text().startswith("Refresh failed")
+    assert not connected.stale_label.isHidden()
 
 
 def test_recovery_with_unchanged_data_clears_the_failure_caption(
