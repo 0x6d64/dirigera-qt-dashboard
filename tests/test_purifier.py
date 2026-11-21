@@ -27,6 +27,10 @@ LIFETIME = 259200  # 180 days, in minutes, as the hub reports it
         (LIFETIME, True, "Filter used up · change now"),
         (LIFETIME + 100, False, "Filter used up · change now"),
         (LIFETIME, False, "Filter used up · change now"),
+        (LIFETIME + 1440, True, "Filter overdue by 1 day · change now"),
+        (LIFETIME + 2 * 1440 - 1, True, "Filter overdue by 1 day · change now"),
+        # The real hub's purifier (2026-11-21): 353271 minutes elapsed.
+        (353271, True, "Filter overdue by 65 days · change now"),
     ],
 )
 def test_filter_text_states(elapsed: int, alarm: bool, expected: str) -> None:
@@ -80,13 +84,13 @@ def test_filter_alarm_shows_warning_chip_and_used_up_footer() -> None:
         make_device(
             "airPurifier",
             filter_lifetime=LIFETIME,
-            filter_elapsed_time=LIFETIME + 10,
+            filter_elapsed_time=LIFETIME + 3 * 1440,
             filter_alarm_status=True,
         )
     )
     assert card.status_chip.text() == "Change filter"
     assert not card.status_chip.isHidden()
-    assert card.footer_label.text() == "Filter used up · change now"
+    assert card.footer_label.text() == "Filter overdue by 3 days · change now"
 
 
 def test_filter_refresh_clears_the_alarm_chip() -> None:

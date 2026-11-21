@@ -100,13 +100,18 @@ def filter_text(lifetime: Any, elapsed: Any, alarm: Any) -> Optional[str]:
     """Air purifier filter health from the hub's minutes, None when unknown.
 
     `lifetime` and `elapsed` are minutes (259200 = 180 days). The text says
-    how much filter is left and when to change it; an alarm, or no time left,
-    says the filter is used up.
+    how much filter is left and when to change it. Past its lifetime it says
+    by how many whole days the filter is overdue; under a day overdue, or an
+    alarm with time left, says the filter is used up.
     """
     total = _whole(lifetime)
     used = _whole(elapsed)
     if total is None or total <= 0 or used is None:
         return None
+    overdue_days = (used - total) // 1440
+    if overdue_days >= 1:
+        unit = "day" if overdue_days == 1 else "days"
+        return f"Filter overdue by {overdue_days} {unit} · change now"
     remaining = max(0, total - used)
     if alarm is True or remaining == 0:
         return "Filter used up · change now"

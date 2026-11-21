@@ -123,6 +123,8 @@ Stated by the user; recorded, not yet planned.
 - [ ] **t-89 [C·S]** Hide devices the hub flags `is_hidden` (`doc/dirigera-api.md` §2.2 row 6), like the IKEA app. None on the test hub are hidden today, so test it with stubs.
 - [ ] **t-90 [C·S]** Automatic scenes toggle (`design-doc.md` §8.10.5, §9.3, §14 item 3): hide scenes whose `type` is not `userScene` (the test hub has four `customScene` "Smart Notifications@…" entries, two with the same name) unless a "Show automatic scenes" toggle above the scene grid is on; off by default, choice remembered.
 
+- [x] **t-91 [C·S]** Air purifier filter footer says how overdue the filter is (owner feedback 2026-11-21): past its lifetime, "Filter overdue by 65 days · change now" instead of "Filter used up · change now" (kept for under one day overdue). *(done on `fix/filter-overdue`)*
+
 ## Design document implementation (v1.0)
 
 Design tasks build on each other. Recommended order: t-40 → t-43/t-44 → t-41/t-42 → t-45 → t-46/t-47/t-48 → t-49/t-51/t-52 → t-50/t-53. Run t-17 before t-49.
