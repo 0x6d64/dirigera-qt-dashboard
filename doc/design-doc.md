@@ -426,7 +426,18 @@ Whether totals are shown per home or per room is undecided (section 14, item 5).
 2. The current view is only rebuilt after all data has been fetched successfully
    (`req-2`). `[verified]` (test)
 3. On failure, the last good data stays and the hub chip turns amber (3.2). `[proposed]`
-4. Card order, scroll position and focus are preserved across refresh (`t-19`). `[proposed]`
+4. Card order, scroll position and focus are preserved across refresh (`t-19`). Cards
+   are updated in place, matched by device id; new ids add a card, vanished ids remove
+   it, and a slider being dragged or focused keeps its value. A fetch identical to the
+   last one changes nothing. `[verified]` (test)
+5. Polling (`req-13`, `t-56`): the dashboard refreshes by itself every 30 s while a hub
+   is connected. A poll is skipped, not queued, while a fetch is in flight and while the
+   window is minimised; restoring the window polls at once. `[verified]` (test)
+6. The status row shows `Updated HH:MM · every 30 s`; it turns warn when the last success
+   is older than two intervals. `[verified]` (test)
+7. A failed background poll shows no modal dialog: the hub chip turns amber and the
+   stale caption appears (3.2). A failed manual refresh still reports in a dialog until
+   `t-66` replaces it. `[verified]` (test)
 
 ### 10.3 Live updates
 

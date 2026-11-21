@@ -7,7 +7,7 @@ reused.
 
 - **req-13** — The dashboard must refresh device state automatically; a manual
   Refresh click must not be the only way displayed values update. *(user,
-  2026-11-15; t-56, open)*
+  2026-11-15; t-56, implemented)*
 
 ## Inferred
 
