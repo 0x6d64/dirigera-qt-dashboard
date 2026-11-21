@@ -48,7 +48,7 @@ _TYPE_SORT_WEIGHT = {
     "controller": 100,
 }
 
-# Battery level at or below which the chip warns (design-doc.md §15 item 4).
+# Battery level at or below which the chip warns (design-doc.md §14 item 4).
 LOW_BATTERY_PERCENT = 20
 
 

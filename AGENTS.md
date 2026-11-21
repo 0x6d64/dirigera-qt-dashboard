@@ -17,7 +17,8 @@ hub through the `dirigera` library. Versions are authoritative in
 workers), `widgets/` (components), `theme.py` (design tokens). Read the tree
 rather than trusting a description of it.
 
-Orientation docs: `README.md`, `doc/design-doc.md` (visual design),
+Orientation docs: `README.md`, `doc/design-doc.md` (visual design), `doc/dirigera-api.md` (library facts),
+`doc/qt-gotchas.md`,
 `doc/reqs.md` (requirements), `agent-notes/todo.md` (backlog),
 `agent-notes/implementation-plan.md` (plans and their status).
 
@@ -117,9 +118,8 @@ Orientation docs: `README.md`, `doc/design-doc.md` (visual design),
   doubt): state lives on `device.attributes` (e.g. `light.attributes.is_on`),
   `device.room` is a pydantic `Room` model (may be `None`), and token
   generation uses `dirigera.hub.auth` (`create_token` does not exist).
-- PyQt6 gotchas: prefer `toggled`/`valueChanged`-with-debounce over comparing
-  raw `stateChanged` ints to enums; enum/int comparisons are not equal in
-  PyQt6.
+- PyQt6 and QSS gotchas live in `doc/qt-gotchas.md`; read it before writing
+  widgets or stylesheets.
 - Blocking network I/O never belongs on the GUI thread; new hub calls must run
   in a worker thread.
 - Colours, spacing, and fonts come from `theme.py` tokens; do not hard-code

@@ -326,7 +326,7 @@ QSlider::sub-page:horizontal {{
 }}
 
 /* NOTE: Do NOT add QSlider:disabled::sub-page — it paints the whole
-   groove grey under the Fusion style (design-doc.md §13.2 pitfall 2). */
+   groove grey under the Fusion style (doc/qt-gotchas.md item 4). */
 
 QSlider::handle:horizontal {{
     width: 18px;
