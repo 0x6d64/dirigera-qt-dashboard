@@ -58,13 +58,28 @@ def test_failed_connect_is_not_reported_as_connected(
     window.connect_to_hub()
     wait_until(lambda: window._connect_worker is None)
     assert window.hub is None
-    assert any(kind == "critical" for kind, _ in dialogs)
+    assert dialogs == []
+    assert window.status_label.text().startswith("Connection failed")
+    assert "unreachable" in window.connection_block.message_label.text()
+    assert window.connection_block.ip_input.isEnabled()
 
 
 def test_missing_credentials_do_not_start_a_worker(window: Any, dialogs: list) -> None:
     window.connect_to_hub()
     assert window._connect_worker is None
-    assert dialogs
+    assert dialogs == []
+    assert not window.connection_block.message_label.isHidden()
+    assert "IP address" in window.connection_block.message_label.text()
+
+
+@pytest.mark.parametrize("bad", ["not-an-ip", "300.1.1.1", "192.168.1"])
+def test_invalid_ip_starts_no_worker(window: Any, dialogs: list, bad: str) -> None:
+    window.connection_block.ip_input.setText(bad)
+    window.connection_block.token_input.setText("tok")
+    window.connect_to_hub()
+    assert window._connect_worker is None
+    assert window.connection_block.message_label.text() == "Enter a valid IP address"
+    assert dialogs == []
 
 
 def test_refresh_builds_cards_and_scenes(
@@ -85,7 +100,8 @@ def test_failed_refresh_keeps_the_current_view(
     wait_until(lambda: window._refresh_worker is None)
     assert _card_names(window) == before
     assert window.refresh_button.isEnabled()
-    assert dialogs
+    assert dialogs == []
+    assert window.status_label.text().startswith("Refresh failed")
 
 
 def test_filter_hides_non_matching_cards_and_empty_sections(
@@ -130,9 +146,25 @@ def test_failed_command_resyncs_card_and_reports(
     lamp = StubLight(fail=True)
     card = _card(window, lamp)
     card.switch.setChecked(True)  # the user flips the switch; the hub refuses
-    wait_until(lambda: bool(dialogs))
+    wait_until(lambda: "hub said no" in card.footer_label.text())
     assert card.switch.isChecked() is False  # shows the real state
-    assert "hub said no" in dialogs[0][1]
+    assert card.footer_label.text().startswith("Couldn't")
+    assert dialogs == []
+
+
+def test_card_error_clears_after_its_timeout(
+    window: Any, monkeypatch: pytest.MonkeyPatch, wait_until: Wait
+) -> None:
+    from widgets import card as card_module
+
+    monkeypatch.setattr(card_module, "CARD_ERROR_MS", 30)
+    card = _card(window, StubLight())
+    card._error_timer.setInterval(30)
+    card.show_error("Couldn't toggle light: boom")
+    assert card.footer_label.text() == "Couldn't toggle light: boom"
+    card.sync_from_device()  # a resync keeps the error visible
+    assert card.footer_label.text() == "Couldn't toggle light: boom"
+    wait_until(lambda: "boom" not in card.footer_label.text())
 
 
 # --- scenes ------------------------------------------------------------------
@@ -186,3 +218,22 @@ def test_close_waits_for_running_worker(
     release.set()
     wait_until(lambda: bool(quits))
     assert not window._running_workers()
+
+
+def test_message_boxes_only_live_in_the_hub_chooser() -> None:
+    """§8.14: the hub chooser is the one modal; everything else is inline."""
+    import ast
+    from pathlib import Path
+
+    root = Path(dashboard.__file__).parent
+    for path in [root / "dashboard.py", *(root / "widgets").glob("*.py")]:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for cls in [n for n in tree.body if isinstance(n, ast.ClassDef)]:
+            uses = [
+                n
+                for n in ast.walk(cls)
+                if isinstance(n, ast.Attribute)
+                and isinstance(n.value, ast.Name)
+                and n.value.id == "QMessageBox"
+            ]
+            assert not uses or cls.name == "HubSelectionDialog", (path.name, cls.name)

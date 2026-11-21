@@ -66,6 +66,7 @@ def test_cancel_returns_at_once_and_drops_the_result(
 
     assert dialogs == []
     assert window.connection_block.ip_input.text() == ""
+    assert window.connection_block.message_label.isHidden()
 
 
 def test_finished_scan_fills_in_the_hub(
@@ -79,7 +80,22 @@ def test_finished_scan_fills_in_the_hub(
     window.discover_hubs()
     wait_until(lambda: window.connection_block.discover_button.isEnabled())
     assert window.connection_block.ip_input.text() == "192.168.1.9"
-    assert len(dialogs) == 1
+    assert dialogs == []
+    assert "192.168.1.9" in window.connection_block.message_label.text()
+
+
+def test_scan_without_hubs_hints_at_manual_entry_inline(
+    window: Any,
+    stub_scan: dict[str, Any],
+    dialogs: list[tuple[str, str]],
+    wait_until: Callable[..., None],
+) -> None:
+    stub_scan["hubs"] = []
+    stub_scan["release"].set()
+    window.discover_hubs()
+    wait_until(lambda: window.connection_block.discover_button.isEnabled())
+    assert dialogs == []
+    assert "manually" in window.connection_block.message_label.text()
 
 
 def test_close_stops_a_running_scan_and_still_closes(

@@ -384,7 +384,8 @@ Used only on first load: shapes at card size in `sunken`, no animation. `[propos
 
 Status messages appear inline, in the affected area, with text and an icon. Toast
 notifications and modal dialogs are not used for routine outcomes. Modal dialogs remain
-for destructive confirmations only. `[proposed]`
+for destructive confirmations and for choices the user must make. Today the only
+modal is the hub chooser (`HubSelectionDialog`). `[proposed]`
 
 ## 9. Screens
 

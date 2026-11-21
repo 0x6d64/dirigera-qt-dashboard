@@ -1,4 +1,5 @@
 import configparser
+import ipaddress
 import threading
 from datetime import datetime
 from pathlib import Path
@@ -281,7 +282,6 @@ class DirigeraDashboard(QMainWindow):
         self._summary_text = ""
         self._status_is_failure = False
         # True while the running fetch was started by the timer, not the user.
-        self._refresh_is_background = False
         self._poll_interval = POLL_INTERVAL_S
         self.refresh_timer = QTimer(self)
         self.refresh_timer.setInterval(self._poll_interval * 1000)
@@ -541,6 +541,7 @@ class DirigeraDashboard(QMainWindow):
         if thread is not None and thread.isRunning():
             return
         self.connection_block.discover_button.setEnabled(False)
+        self.connection_block.set_message("")
 
         # Create and configure the progress dialog
         self.progress_dialog = QProgressDialog(
@@ -582,14 +583,10 @@ class DirigeraDashboard(QMainWindow):
             return  # canceled (or closing): drop the partial result
 
         if not discovered_hubs:
-            QMessageBox.information(
-                self,
-                "Discovery Result",
-                "No Dirigera hubs found on the local network.\n\n"
-                "Please ensure:\n"
-                "1. Your Dirigera hub is powered on and connected to the network\n"
-                "2. Your computer is on the same network subnet as the hub\n"
-                "3. You can also enter the IP address manually if you know it",
+            self.connection_block.set_message(
+                "No hubs found on the local network. "
+                "If you know the hub's IP address, enter it manually.",
+                "warn",
             )
             self.set_status_text("No hubs discovered")
             return
@@ -600,12 +597,8 @@ class DirigeraDashboard(QMainWindow):
             self.connection_block.ip_input.setText(ip)
             mac_info = f" ({mac})" if mac else ""
             self.set_status_text(f"Discovered hub at {ip}{mac_info}")
-            QMessageBox.information(
-                self,
-                "Hub Discovered",
-                f"Found Dirigera hub at {ip}{mac_info}!\n\n"
-                "The IP address has been filled in. Please enter your "
-                "authentication token and click Connect.",
+            self.connection_block.set_message(
+                f"Found a hub at {ip}; enter your token and connect.", "ok"
             )
         else:
             # Multiple hubs found - let user choose
@@ -621,10 +614,16 @@ class DirigeraDashboard(QMainWindow):
         ip_address, token = self.connection_block.credentials()
 
         if not ip_address or not token:
-            QMessageBox.warning(
-                self, "Input Error", "Please enter both IP address and token."
+            self.connection_block.set_message(
+                "Enter both the IP address and the token.", "danger"
             )
             return
+        try:
+            ipaddress.ip_address(ip_address)
+        except ValueError:
+            self.connection_block.set_message("Enter a valid IP address", "danger")
+            return
+        self.connection_block.set_message("")
 
         # State 2 of design-doc.md §3.1: the form is disabled and the chip
         # reports progress while the credentials are verified.
@@ -657,8 +656,8 @@ class DirigeraDashboard(QMainWindow):
         self.show_connection_block()
         self.status_chip.set_status("Hub unreachable", "warn")
         self.set_status_text(f"Connection failed: {message}", "danger")
-        QMessageBox.critical(
-            self, "Connection Error", f"Failed to connect to hub: {message}"
+        self.connection_block.set_message(
+            f"Couldn't connect to the hub: {message}", "danger"
         )
 
     def _on_connect_worker_done(self) -> None:
@@ -685,7 +684,7 @@ class DirigeraDashboard(QMainWindow):
         self._start_refresh(background=True)
 
     def _start_refresh(self, background: bool) -> None:
-        """Start the fetch worker; a background one never opens a dialog."""
+        """Start the fetch worker. Failures are reported inline, never in a dialog."""
         hub = self.hub
         if hub is None:
             return
@@ -700,7 +699,6 @@ class DirigeraDashboard(QMainWindow):
         worker.failed.connect(self._on_refresh_failed)
         worker.finished.connect(self._on_refresh_worker_done)
         self._refresh_worker = worker
-        self._refresh_is_background = background
         worker.start()
 
     def _request_background_refresh(self) -> None:
@@ -925,8 +923,6 @@ class DirigeraDashboard(QMainWindow):
             self.stale_label.setText(f"Showing data from {self._last_refresh:%H:%M}")
             self.stale_label.show()
         self._update_caption()
-        if not self._refresh_is_background:
-            QMessageBox.critical(self, "Error", f"Failed to refresh devices: {message}")
 
     def _on_refresh_worker_done(self) -> None:
         self._refresh_worker = None
@@ -994,7 +990,7 @@ class DirigeraDashboard(QMainWindow):
         """Report the failure and show the device's real state (req-3)."""
         if not sip.isdeleted(card):
             card.sync_from_device()
-        QMessageBox.warning(self, "Error", f"Failed to {action}: {message}")
+            card.show_error(f"Couldn't {action}: {message}")
 
     def toggle_device_power(self, card: DeviceCard, turn_on: bool) -> None:
         """Switch a light or outlet on or off."""
