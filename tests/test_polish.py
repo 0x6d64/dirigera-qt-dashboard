@@ -10,7 +10,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QPushButton
 
-import dashboard
+import workers
 from widgets.grid import CardGrid
 from widgets.scene import SCENE_MIN_WIDTH
 
@@ -40,7 +40,7 @@ class GatedHub(StubHub):
 @pytest.fixture
 def gated(window: Any, monkeypatch: pytest.MonkeyPatch) -> Iterator[GatedHub]:
     hub = GatedHub()
-    monkeypatch.setattr(dashboard, "Hub", lambda token, ip_address: hub)
+    monkeypatch.setattr(workers, "Hub", lambda token, ip_address: hub)
     window.connection_block.ip_input.setText("10.0.0.2")
     window.connection_block.token_input.setText("tok")
     window.connect_to_hub()

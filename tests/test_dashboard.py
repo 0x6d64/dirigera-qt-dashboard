@@ -9,6 +9,7 @@ from conftest import StubHub, StubLight, StubScene, make_device
 from PyQt6.QtWidgets import QApplication
 
 import dashboard
+import workers
 from dashboard import widget_name
 
 Wait = Callable[..., None]
@@ -23,7 +24,7 @@ def hub(monkeypatch: pytest.MonkeyPatch) -> StubHub:
         ],
         scenes=[StubScene("s1", "Evening")],
     )
-    monkeypatch.setattr(dashboard, "Hub", lambda token, ip_address: stub)
+    monkeypatch.setattr(workers, "Hub", lambda token, ip_address: stub)
     return stub
 
 
@@ -171,7 +172,7 @@ def test_failing_reload_is_logged_and_the_failure_still_reported(
 def test_card_error_clears_after_its_timeout(
     window: Any, monkeypatch: pytest.MonkeyPatch, wait_until: Wait
 ) -> None:
-    from widgets import card as card_module
+    from widgets import cardbase as card_module
 
     monkeypatch.setattr(card_module, "CARD_ERROR_MS", 30)
     card = _card(window, StubLight())

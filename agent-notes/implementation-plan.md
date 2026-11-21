@@ -51,6 +51,10 @@ by Haiku subagents in this order, one branch per plan, each merged into
 - Files are UTF-8 with LF line endings.
 
 1. `feat/purifier-controls` — filter health, fan speed (t-85, t-80)
+   - `fix/filter-overdue` — "Filter overdue by N days" (t-91, owner feedback;
+     no plan entry)
+   - `chore/card-base-and-settings` — module refactor before plan 2 (t-92),
+     added on the owner's request after a structure review
 2. `feat/energy-reset-cost` — reset, cost, totals (t-83, t-84, t-87)
 3. `feat/display-rules` — PM2.5 bands, hidden devices, automatic scenes
    toggle (t-88, t-89, t-90)
@@ -149,6 +153,123 @@ filter footer reads "Filter used up · change now", chip "Change filter").
 
 ---
 
+### Plan: module refactor before the energy work (t-92)
+
+Status: done 2026-11-21
+
+Goal: give the batch 3 work a home before it lands, so `dashboard.py` stops
+growing and the energy card does not copy the device card's machinery a
+second time. Pure moves and shared code; **no behaviour change** apart from
+the energy card gaining the device card's pending/error API and name eliding.
+From a structure review on 2026-11-21 (proposals 1–5; proposal 6, moving the
+refresh reconciliation out of the window, is skipped: it works, is covered,
+and plan 3 edits it).
+
+Rules: the batch 3 rules apply. Existing tests keep their assertions; only
+imports and `monkeypatch` targets may change (e.g. `dashboard.Hub` →
+`workers.Hub`, `dashboard.discover_dirigera_hubs` → `workers....`). Keep the
+public attribute names tests use (`footer_label`, `status_chip`,
+`name_label`, `type_label`, `full_name`, `switch`, the slider attributes,
+`fan_speed`). New modules are top-level (flat layout, `AGENTS.md`); no new
+packages. Each commit leaves every gate green.
+
+Affected files: `settings.py` (new), `rooms.py` (new), `workers.py` (new),
+`widgets/cardbase.py` (new), `dashboard.py`, `widgets/card.py`,
+`widgets/energy.py`, `tests/*` (imports and patch targets only, plus the new
+tests named below), `pyproject.toml` (`py-modules`), `AGENTS.md` (Project
+layout line), `agent-notes/implementation-plan.md`, `agent-notes/todo.md`
+
+#### Commit 1 — "move config settings to settings.py" (t-92) ✓ executed 2026-11-21
+
+1. `settings.py`: `DEFAULT_DISCOVERY_WORKERS`, `DEFAULT_DISCOVERY_TIMEOUT`,
+   `DiscoverySettings`, `parse_discovery_settings`, and `ui_settings() ->
+   QSettings` (IniFormat, UserScope, organisation `"dirigera-qt-dashboard"`,
+   application `"dashboard"`; only `QtCore` imports, no widgets). Plan 3
+   (t-90) and plan 4 (t-86) use `ui_settings()`; plan 2 adds
+   `EnergySettings`/`parse_energy_settings` here.
+2. `tests/conftest.py`: autouse fixture that calls `QSettings.setPath(IniFormat,
+   UserScope, tmp_path)` so no test touches the real settings. A small test
+   that `ui_settings()` writes into that temp dir.
+3. `dashboard.py` imports from `settings`; `CONFIG_PATH` and `load_config`
+   stay in `dashboard.py` (tests patch `dashboard.CONFIG_PATH`).
+
+#### Commit 2 — "move room helpers to rooms.py" (t-92) ✓ executed 2026-11-21
+
+`rooms.py` (pure, no Qt): `UNKNOWN_ROOM`, `format_room_label`, `get_room`,
+`group_by_room`, `is_energy_device` as module functions. Remove the static
+methods from `DirigeraDashboard` and call the functions; `tests/test_grouping.py`
+imports from `rooms`. Plan 2 (room totals) and plan 4 (room colours, e.g. a
+`room_colour_name(device)` helper) extend this module.
+
+#### Commit 3 — "move worker threads to workers.py" (t-92) ✓ executed 2026-11-21
+
+Move `DiscoveryThread`, `ConnectWorker`, `SceneTriggerWorker`,
+`CommandWorker`, `RefreshWorker` unchanged into `workers.py` (with the
+imports they use, e.g. `Hub`, `discover_dirigera_hubs`). Add a
+`CommandTarget` `Protocol` there: `device`, `set_pending(bool)`,
+`sync_from_device()`, `show_error(str)`; type `CommandWorker` and
+`DirigeraDashboard.run_device_command` with it instead of `DeviceCard`.
+Update `monkeypatch` targets in the tests.
+
+#### Commit 4 — "share card header, footer and error handling" (t-92) ✓ executed 2026-11-21
+
+1. `widgets/cardbase.py`: `CardBase(QFrame)` with what `DeviceCard` and
+   `EnergyCard` both build today: the header (name label elided to the
+   available width, type label, status chip, `_set_chip`), the footer label,
+   the offline card style (`SURFACE`/`SUNKEN`, border, radius), and the
+   footer state machine moved from `DeviceCard`: `set_pending`, `show_error`
+   with `CARD_ERROR_MS` and its single-shot timer, `_set_footer`,
+   `_clear_error`. Subclasses provide the normal footer text through one hook
+   (e.g. `_update_footer()`), and `sync_from_device()`.
+2. Shared label style helpers instead of the repeated inline QSS blocks (a
+   small function returning the QSS for a label of a given colour, size and
+   weight, in `cardbase.py` or `theme.py`), using only `theme.py` tokens.
+3. `DeviceCard` and `EnergyCard` subclass `CardBase`; `EnergyCard` thereby
+   gets `set_pending`/`show_error`/`sync_from_device` (plan 2 commit 3 needs
+   them) and name eliding. `widgets.card.CARD_ERROR_MS` may move; update the
+   test that patches it.
+4. New tests: an `EnergyCard` shows "Sending…" while pending, shows an error
+   in the footer and restores the normal footer after the (patched, short)
+   error time; a long energy-card name is elided with the full name in the
+   tooltip.
+
+#### Commit 5 — "share power row and callback wiring in card.py" (t-92) ✓ executed 2026-11-21
+
+In `DeviceCard`: one `_power_row()` helper used by the light and outlet
+branches (they repeat it today), and one helper that connects a control's
+signal to an optional callback with the card as first argument (replacing the
+repeated `if cb is not None: ...connect(lambda ..., callback=cb: ...)`
+blocks). Keep the per-type `if/elif` structure; a registry is not worth it
+now.
+
+#### Commit 6 — "record module refactor" ✓ executed 2026-11-21
+
+Bookkeeping: check off t-92; `AGENTS.md` Project line names `settings.py`,
+`rooms.py`, `workers.py` and `widgets/cardbase.py` in the layout; `pyproject.toml`
+`py-modules` lists the new top-level modules; in this file, update plans 2–4
+where they name old homes (plan 2: `EnergySettings` and its parser go to
+`settings.py`, commit 3 step 2 is already done by this plan; plan 3:
+`ui_settings()` and the QSettings test fixture already exist, `is_user_scene`
+may live in `dashboard.py`; plan 4: room helpers in `rooms.py`); set this
+plan's `Status:` and add the Executed note.
+
+Verification: gates; `uv run python main.py` starts (offscreen smoke via the
+tests is enough); `git grep -n "DirigeraDashboard.group_by_room\|dashboard.Hub"`
+finds nothing.
+
+> **Executed 2026-11-21** on branch `chore/card-base-and-settings`: commit 1
+> "move config settings to settings.py" (`2d63b1b`), commit 2 "move room
+> helpers to rooms.py" (`368f13e`), commit 3 "move worker threads to
+> workers.py" (`d4de66e`), commit 4 "share card header, footer and error
+> handling" (`b19b2d9`), commit 5 "share power row and callback wiring in
+> card.py" (`74bd292`), commit 6 "record module refactor" (the commit that adds
+> this note; not merged). `py-modules` was extended in commits 1 to 3, one new
+> module each, instead of all at once in commit 6. `CardBase.set_pending`
+> keeps the old `DeviceCard` behaviour (it shows the footer text and does not
+> set `_pending`; the resync after a command replaces it).
+
+---
+
 ### Plan: energy reset, cost and totals (t-83, t-84, t-87)
 
 Status: open
@@ -172,27 +293,29 @@ Definitions used everywhere: **usage** of a device = `total -
 at_last_reset` when both are numbers, else `total`, else None. Cost = usage ×
 price.
 
-Affected files: `widgets/text.py`, `widgets/energy.py`, `dashboard.py`,
-`config.ini.example`, `README.md`, `tests/test_energy_view.py`,
+Affected files: `widgets/text.py`, `widgets/energy.py`, `settings.py`,
+`dashboard.py`, `config.ini.example`, `README.md`, `tests/test_energy_view.py`,
 `tests/test_energy_reset.py` (new), `tests/test_config.py`,
 `doc/design-doc.md` §8.11/§9.4, `doc/reqs.md`, `agent-notes/todo.md`
 
 #### Commit 1 — "add energy price settings" (t-84)
 
-1. `dashboard.py`: `EnergySettings` dataclass (`price_per_kwh: float = 1.54`,
-   `currency: str = "RON"`) and `parse_energy_settings(section)` returning
+1. `settings.py` (new home of the config parsers, t-92): `EnergySettings`
+   dataclass (`price_per_kwh: float = 1.54`, `currency: str = "RON"`) and
+   `parse_energy_settings(section)` returning
    `(settings, problems)`, the same pattern as `parse_discovery_settings`:
    price a float with `0 < price <= 100` (accept `,` as decimal separator),
    currency 1–8 non-blank characters; each bad value is reported and replaced
-   by its default. `load_config` reads `[energy]` and reports problems in the
-   status caption like `[discovery]`. Pass the settings to the energy view
+   by its default. `DirigeraDashboard.load_config` (still in `dashboard.py`) reads
+   `[energy]` and reports problems in the status caption like `[discovery]`. Pass the settings to the energy view
    (`EnergyView.set_price(price, currency)`).
 2. `config.ini.example`: commented `[energy]` section with the default and the
    source ("Romania, March 2026, residential incl. network costs and taxes").
    README: one short paragraph.
 3. Tests: parser cases (unset, valid, comma decimal, zero, negative,
    non-number, empty currency, too long), and that a bad `[energy]` value
-   shows the problem in the status text.
+   shows the problem in the status text (`tests/test_config.py`; the QSettings
+   fixture from t-92 keeps tests off the real settings).
 
 #### Commit 2 — "show energy usage and cost" (t-84)
 
@@ -215,11 +338,13 @@ Affected files: `widgets/text.py`, `widgets/energy.py`, `dashboard.py`,
    buttons in place of "Reset" plus a caption "Usage since the last reset
    will be lost"; Cancel or 5 s without a click (single-shot `QTimer`) returns
    to "Reset". No dialog. Accessible names `"<name> reset usage"` etc.
-2. Make `EnergyCard` usable by `run_device_command`: it needs `device`,
-   `set_pending(bool)` ("Sending…" in the footer), `sync_from_device()`
-   (redraw from `self.device`) and `show_error(message)` (danger-toned footer
-   for `CARD_ERROR_MS`, then normal). Type `run_device_command`'s card
-   parameter with a small `Protocol` (or `Any`) instead of `DeviceCard`.
+2. `EnergyCard` is already usable by `run_device_command` (t-92, commit 4): it
+   subclasses `widgets/cardbase.py`'s `CardBase` and has `device`,
+   `set_pending(bool)` ("Sending…" in the footer), `sync_from_device()` and
+   `show_error(message)` (danger-toned footer for `CARD_ERROR_MS`, then
+   normal), and `run_device_command` takes the `CommandTarget` protocol from
+   `workers.py`. Nothing to add here; the reset button only has to call the
+   callback.
 3. `EnergyView` gets an `on_reset: Callable[[EnergyCard], None]` callback
    (passed through to the cards, also to cards created on rebuild).
    `dashboard.py`: `reset_energy(card)` runs the PATCH through
@@ -233,7 +358,9 @@ Affected files: `widgets/text.py`, `widgets/energy.py`, `dashboard.py`,
 
 #### Commit 4 — "show room and home energy totals" (t-87)
 
-1. Each room section in the Energy view gets a caption under its label:
+1. Room grouping and labels come from `rooms.py` (`group_by_room`,
+   `format_room_label`, t-92). Each room section in the Energy view gets a
+   caption under its label:
    `"45 W now · 1.30 kWh · 2.00 RON"` (sum of live power of devices reporting
    it, sum of usage, cost); parts with no data are left out; no caption when
    nothing is reported. A home total line at the top of the view:
@@ -265,7 +392,7 @@ and automatic scenes are hidden behind a remembered toggle (§8.10.5, §9.3,
 §14 item 3).
 
 Affected files: `widgets/text.py`, `widgets/metric.py`, `widgets/card.py`,
-`dashboard.py`, `tests/conftest.py`, `tests/test_display_rules.py` (new),
+`dashboard.py`, `tests/test_display_rules.py` (new),
 `doc/design-doc.md`, `doc/dirigera-api.md`, `agent-notes/todo.md`
 
 #### Commit 1 — "band PM2.5 readings" (t-88)
@@ -291,12 +418,11 @@ Affected files: `widgets/text.py`, `widgets/metric.py`, `widgets/card.py`,
 
 #### Commit 3 — "hide automatic scenes behind a toggle" (t-90)
 
-1. `dashboard.py`: `ui_settings() -> QSettings` (IniFormat, UserScope,
-   organisation `"dirigera-qt-dashboard"`, application `"dashboard"`), the one
-   place UI preferences are kept (plan t-86 reuses it). `tests/conftest.py`:
-   an autouse fixture that points `QSettings.setPath(IniFormat, UserScope,
-   tmp_path)` at a temp dir, so tests never touch the real settings.
-2. `is_user_scene(scene) -> bool`: true when the scene's `type` value is
+1. `ui_settings() -> QSettings` and the autouse QSettings test fixture
+   already exist (`settings.py`, `tests/conftest.py`, t-92); import
+   `ui_settings` from `settings` and use it for the toggle (plan t-86 reuses
+   it).
+2. `is_user_scene(scene) -> bool` (may live in `dashboard.py`): true when the scene's `type` value is
    `"userScene"`, and when the type is missing (stubs, unknown data).
 3. Above the scene grid: a row with the label "Show automatic scenes" and a
    `ToggleSwitch` (accessible name the same text); off by default; state read
@@ -331,8 +457,8 @@ Facts: the hub reports room colours as names, e.g. `ikea_green_no_65`,
 `color`, so read it with `getattr(..., "color", None)`). The owner accepted
 best-guess RGB values; no exploration.
 
-Affected files: `theme.py`, `dashboard.py`, `widgets/card.py`,
-`widgets/energy.py`, `tests/test_room_colours.py` (new),
+Affected files: `theme.py`, `rooms.py`, `dashboard.py`, `widgets/card.py`,
+`widgets/energy.py`, `widgets/cardbase.py`, `tests/test_room_colours.py` (new),
 `tests/test_theme_contrast.py`, `doc/design-doc.md`, `doc/dirigera-api.md`,
 `doc/reqs.md`, `agent-notes/todo.md`
 
@@ -343,7 +469,8 @@ Affected files: `theme.py`, `dashboard.py`, `widgets/card.py`,
    mid tones that reach 3:1 against `theme.WINDOW` and `theme.SURFACE` (non-text
    contrast). `room_colour(name) -> Optional[str]`: split the name on `_`,
    return the colour of the first known hue word; None for None, empty or
-   unknown names.
+   unknown names. `rooms.py` (t-92) gets `room_colour_name(device) ->
+   Optional[str]` (`getattr(room, "color", None)`), next to `get_room`.
 2. Tests: names from the real hub map to green and blue; unknown and None
    give None; every `ROOM_COLOURS` value is ≥ 3:1 against `WINDOW` and `SURFACE`
    (reuse the contrast helper in `tests/test_theme_contrast.py`).
@@ -352,11 +479,12 @@ Affected files: `theme.py`, `dashboard.py`, `widgets/card.py`,
 
 1. Toggle row "Room colours" with a `ToggleSwitch` above the room sections in
    the Rooms view (same pattern as the automatic scenes toggle); off by
-   default; persisted with `ui_settings()` key `rooms/colours`.
+   default; persisted with `ui_settings()` (`settings.py`) key `rooms/colours`.
 2. When on: each room section label (Rooms and Energy views) gets a 10 px
    round colour dot before the name, and each device and energy card in that
    room a 3 px left border in the room colour (the other borders unchanged;
-   offline styling still applies). Rooms whose colour is None stay neutral.
+   offline styling still applies). Both card types share
+   `CardBase._apply_card_style`, so the edge is added there once. Rooms whose colour is None stay neutral.
    Text colours never change, and state colours stay as they are (§5.3).
 3. Toggling restyles existing widgets in place (no rebuild); refreshes keep
    the current mode.

@@ -9,6 +9,8 @@ from typing import Any
 import pytest
 
 import dashboard
+import workers
+from settings import DiscoverySettings
 
 
 @pytest.fixture
@@ -37,7 +39,7 @@ def stub_scan(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         hubs: list[Any] = state["hubs"]
         return hubs
 
-    monkeypatch.setattr(dashboard, "discover_dirigera_hubs", fake)
+    monkeypatch.setattr(workers, "discover_dirigera_hubs", fake)
     return state
 
 
@@ -113,7 +115,7 @@ def test_failing_scan_says_so_instead_of_no_hubs(
     def boom(**kwargs: Any) -> list[Any]:
         raise RuntimeError("no network adapter")
 
-    monkeypatch.setattr(dashboard, "discover_dirigera_hubs", boom)
+    monkeypatch.setattr(workers, "discover_dirigera_hubs", boom)
     window.discover_hubs()
     wait_until(lambda: window.connection_block.discover_button.isEnabled())
     text = window.connection_block.message_label.text()
@@ -160,7 +162,7 @@ def test_configured_scope_is_used_instead_of_detection(
         raise AssertionError("auto-detection must not run")
 
     monkeypatch.setattr(dashboard, "get_local_networks", detect)
-    window.discovery_settings = dashboard.DiscoverySettings(
+    window.discovery_settings = DiscoverySettings(
         networks=["10.5.0.0/30"], max_workers=7, timeout=0.5
     )
     window.discover_hubs()

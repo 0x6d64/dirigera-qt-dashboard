@@ -17,6 +17,7 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PyQt6.QtCore import QSettings  # noqa: E402
 from PyQt6.QtWidgets import QApplication, QMessageBox  # noqa: E402
 
 
@@ -25,6 +26,14 @@ def qapp() -> QApplication:
     app: Any = QApplication.instance() or QApplication([])
     assert isinstance(app, QApplication)
     return app
+
+
+@pytest.fixture(autouse=True)
+def isolated_ui_settings(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Point the UI settings at a temp dir so no test touches the real ones."""
+    path = tmp_path_factory.mktemp("ui-settings")
+    QSettings.setPath(QSettings.Format.IniFormat, QSettings.Scope.UserScope, str(path))
+    return path
 
 
 @pytest.fixture

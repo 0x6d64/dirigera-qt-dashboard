@@ -1,18 +1,16 @@
 import configparser
 import ipaddress
 import logging
-import threading
-from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple, override
+from typing import Any, Callable, Dict, List, Optional, Tuple, cast, override
 
 from dirigera import Hub
 from dirigera.devices.air_purifier import FanModeEnum
 from dirigera.devices.blinds import BlindsStateEnum
 from dirigera.devices.scene import Scene
 from PyQt6 import sip
-from PyQt6.QtCore import QEvent, QObject, Qt, QThread, QTimer, pyqtSignal
+from PyQt6.QtCore import QEvent, Qt, QThread, QTimer
 from PyQt6.QtGui import QCloseEvent, QResizeEvent
 from PyQt6.QtWidgets import (
     QApplication,
@@ -36,10 +34,11 @@ from PyQt6.QtWidgets import (
 
 import theme
 from network_discovery import (
-    discover_dirigera_hubs,
     get_local_networks,
     hosts_to_scan,
 )
+from rooms import format_room_label, get_room, group_by_room, is_energy_device
+from settings import DiscoverySettings, parse_discovery_settings
 from widgets.card import DeviceCard, device_sort_key
 from widgets.chip import StatusChip
 from widgets.connection import ConnectionBlock
@@ -47,6 +46,14 @@ from widgets.energy import EnergyView
 from widgets.grid import CardGrid
 from widgets.scene import SCENE_MIN_WIDTH, SceneTile
 from widgets.segments import SegmentedControl
+from workers import (
+    CommandTarget,
+    CommandWorker,
+    ConnectWorker,
+    DiscoveryThread,
+    RefreshWorker,
+    SceneTriggerWorker,
+)
 
 log = logging.getLogger(__name__)
 
@@ -70,70 +77,6 @@ QWIDGETSIZE_MAX = 16777215
 # Saved credentials live next to this file, whatever the working directory.
 CONFIG_PATH = Path(__file__).resolve().parent / "config.ini"
 
-DEFAULT_DISCOVERY_WORKERS = 50
-DEFAULT_DISCOVERY_TIMEOUT = 1.0
-
-
-@dataclass
-class DiscoverySettings:
-    """Scan scope from the optional [discovery] section of config.ini (t-22)."""
-
-    networks: Optional[List[str]] = None  # None: detect the local networks
-    max_workers: int = DEFAULT_DISCOVERY_WORKERS
-    timeout: float = DEFAULT_DISCOVERY_TIMEOUT
-
-
-def parse_discovery_settings(
-    section: Mapping[str, str],
-) -> Tuple[DiscoverySettings, List[str]]:
-    """Read a [discovery] section; return the settings and any problems.
-
-    Every bad value is reported and replaced by its default.
-    """
-    settings = DiscoverySettings()
-    problems: List[str] = []
-
-    raw = section.get("networks", "").strip()
-    if raw:
-        networks: List[str] = []
-        for part in raw.split(","):
-            part = part.strip()
-            if not part:
-                continue
-            try:
-                networks.append(str(ipaddress.IPv4Network(part, strict=False)))
-            except ValueError:
-                problems.append(f"networks: '{part}' is not an IPv4 network")
-                networks = []
-                break
-        settings.networks = networks or None
-
-    raw = section.get("max_workers", "").strip()
-    if raw:
-        try:
-            workers = int(raw)
-            if not 1 <= workers <= 500:
-                raise ValueError
-            settings.max_workers = workers
-        except ValueError:
-            problems.append("max_workers: use a whole number from 1 to 500")
-
-    raw = section.get("timeout", "").strip()
-    if raw:
-        try:
-            timeout = float(raw)
-            if not 0.1 <= timeout <= 30:
-                raise ValueError
-            settings.timeout = timeout
-        except ValueError:
-            problems.append("timeout: use seconds from 0.1 to 30")
-
-    return settings, problems
-
-
-# Section label for devices that are not assigned to a room.
-UNKNOWN_ROOM = "Unknown room"
-
 # The fan mode the hub reports for each fan motor state (req-15); used to
 # update a purifier's `fan_mode` right after a successful speed change.
 FAN_MODE_FOR_MOTOR_STATE = {
@@ -152,6 +95,11 @@ def widget_name(widget: QWidget) -> str:
     return str(getattr(widget, "full_name", "") or "")
 
 
+def _is_deleted(target: CommandTarget) -> bool:
+    """True once Qt has destroyed the widget behind `target`."""
+    return sip.isdeleted(cast(Any, target))
+
+
 def _scroll_value(area: QScrollArea) -> int:
     """Return the vertical scroll position of `area` (0 without a bar)."""
     bar = area.verticalScrollBar()
@@ -164,151 +112,6 @@ def scan_scope_text(networks: List[str]) -> str:
         return "No local networks to scan."
     count = len(hosts_to_scan(networks))
     return f"Scanning {count} addresses on {', '.join(networks)}…"
-
-
-class DiscoveryThread(QThread):
-    """Background thread for network discovery."""
-
-    # Named discovery_done to avoid shadowing the built-in QThread.finished.
-    discovery_done = pyqtSignal(list)  # type: ignore[call-arg]  # (ip, mac)
-    discovery_failed = pyqtSignal(str)  # type: ignore[call-arg]
-
-    def __init__(
-        self,
-        settings: Optional[DiscoverySettings] = None,
-        parent: Optional[QObject] = None,
-    ) -> None:
-        super().__init__(parent)
-        self._stop = threading.Event()
-        self._settings = settings or DiscoverySettings()
-
-    def request_stop(self) -> None:
-        """Ask the scan to stop; it ends cooperatively, never forcibly."""
-        self._stop.set()
-
-    def stop_requested(self) -> bool:
-        return self._stop.is_set()
-
-    def run(self) -> None:
-        """Run the discovery process."""
-        try:
-            hubs = discover_dirigera_hubs(
-                max_workers=self._settings.max_workers,
-                timeout_per_ip=self._settings.timeout,
-                should_stop=self._stop.is_set,
-                networks=self._settings.networks,
-            )
-            self.discovery_done.emit(hubs)
-        except Exception as e:  # thread boundary: an escape would be lost
-            log.exception("Hub discovery failed")
-            self.discovery_failed.emit(str(e))
-
-
-class ConnectWorker(QThread):
-    """Verify hub credentials off the GUI thread (req-1, req-4)."""
-
-    connected = pyqtSignal(object, str)  # type: ignore[call-arg]
-    failed = pyqtSignal(str)  # type: ignore[call-arg]
-
-    def __init__(
-        self, token: str, ip_address: str, parent: Optional[QWidget] = None
-    ) -> None:
-        super().__init__(parent)
-        self._token = token
-        self._ip_address = ip_address
-
-    def run(self) -> None:
-        """Probe the hub and emit either the verified hub or the error text."""
-        try:
-            hub = Hub(token=self._token, ip_address=self._ip_address)
-            # Hub() never contacts the hub, so verify the credentials with a
-            # lightweight authenticated probe before claiming success (req-1).
-            hub.get("/home")
-        except Exception as e:  # thread boundary: an escape would be lost
-            log.exception("Connecting to the hub at %s failed", self._ip_address)
-            self.failed.emit(str(e))
-            return
-        self.connected.emit(hub, self._ip_address)
-
-
-class SceneTriggerWorker(QThread):
-    """Trigger a scene off the GUI thread (req-4, t-51)."""
-
-    triggered = pyqtSignal(object)  # type: ignore[call-arg]
-    failed = pyqtSignal(object, str)  # type: ignore[call-arg]
-
-    def __init__(self, scene: Scene, parent: Optional[QWidget] = None) -> None:
-        super().__init__(parent)
-        self._scene = scene
-
-    def run(self) -> None:
-        """Trigger the scene and emit it back, or the scene plus the error."""
-        try:
-            self._scene.trigger()
-        except Exception as e:  # thread boundary: an escape would be lost
-            log.exception("Triggering a scene failed")
-            self.failed.emit(self._scene, str(e))
-            return
-        self.triggered.emit(self._scene)
-
-
-class CommandWorker(QThread):
-    """Send one device command off the GUI thread (req-4).
-
-    On failure the device is reloaded here as well, since that is a hub call
-    too; the GUI slot then only redraws the card from the real state (req-3).
-    The card travels through the signals untouched: only the GUI thread uses
-    it.
-    """
-
-    succeeded = pyqtSignal(object)  # type: ignore[call-arg]  # card
-    failed = pyqtSignal(object, str, str)  # type: ignore[call-arg]
-
-    def __init__(
-        self, card: Any, command: Callable[[], None], action: str, parent=None
-    ):
-        super().__init__(parent)
-        self._card = card
-        self._device = card.device
-        self._command = command
-        self._action = action
-
-    def run(self) -> None:
-        """Send the command; on error reload the device and emit the message."""
-        try:
-            self._command()
-        except Exception as e:  # thread boundary: an escape would be lost
-            log.exception("Command %r failed", self._action)
-            try:
-                self._device.reload()
-            except Exception as reload_error:  # thread boundary, as above
-                # The in-memory state is the best truth left.
-                log.warning("Reloading the device failed: %s", reload_error)
-            self.failed.emit(self._card, self._action, str(e))
-            return
-        self.succeeded.emit(self._card)
-
-
-class RefreshWorker(QThread):
-    """Fetch devices and scenes off the GUI thread (req-2, req-4)."""
-
-    refreshed = pyqtSignal(list, list)  # type: ignore[call-arg]
-    failed = pyqtSignal(str)  # type: ignore[call-arg]
-
-    def __init__(self, hub: Hub, parent: Optional[QWidget] = None) -> None:
-        super().__init__(parent)
-        self._hub = hub
-
-    def run(self) -> None:
-        """Fetch both collections and emit them together, or the error text."""
-        try:
-            devices = self._hub.get_all_devices()
-            scenes = self._hub.get_scenes()
-        except Exception as e:  # thread boundary: an escape would be lost
-            log.exception("Refreshing from the hub failed")
-            self.failed.emit(str(e))
-            return
-        self.refreshed.emit(devices, scenes)
 
 
 class HubSelectionDialog(QDialog):
@@ -1071,12 +874,12 @@ class DirigeraDashboard(QMainWindow):
         self._update_scenes(scenes)
 
         # Energy view: outlets and electrical sensors grouped by room (§9.4).
-        energy_by_room = self.group_by_room(
-            [device for device in self.devices if self.is_energy_device(device)]
+        energy_by_room = group_by_room(
+            [device for device in self.devices if is_energy_device(device)]
         )
         self.energy_view.update_rooms(
             [
-                (self.format_room_label(room), sorted(devs, key=device_sort_key))
+                (format_room_label(room), sorted(devs, key=device_sort_key))
                 for room, devs in energy_by_room
             ]
         )
@@ -1105,13 +908,13 @@ class DirigeraDashboard(QMainWindow):
 
     def _update_rooms(self, devices: List[Any]) -> List[Tuple[str, List[Any]]]:
         """Reconcile room sections and device cards with `devices`."""
-        groups = self.group_by_room(devices)
+        groups = group_by_room(devices)
         old_cards = self._device_cards
         new_cards: Dict[str, DeviceCard] = {}
         wanted: List[Tuple[str, str, List[QWidget]]] = []
 
         for room_name, room_devices in groups:
-            room_key = self.get_room(room_devices[0])[0]
+            room_key = get_room(room_devices[0])[0]
             cards: List[QWidget] = []
             for device in sorted(room_devices, key=device_sort_key):
                 device_id = str(getattr(device, "id", ""))
@@ -1142,7 +945,7 @@ class DirigeraDashboard(QMainWindow):
             if key not in self._sections:
                 self._sections[key] = self._new_room_section(room_name)
             _section, grid, label = self._sections[key]
-            label.setText(self.format_room_label(room_name))
+            label.setText(format_room_label(room_name))
             if grid.cards() != cards:
                 grid.set_cards(cards)
 
@@ -1234,7 +1037,7 @@ class DirigeraDashboard(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(theme.SP12)  # label-to-grid gap (design-doc.md §4.3)
 
-        label = QLabel(self.format_room_label(room_name))
+        label = QLabel(format_room_label(room_name))
         label.setProperty("role", "section")
         layout.addWidget(label)
 
@@ -1261,7 +1064,7 @@ class DirigeraDashboard(QMainWindow):
         return SceneTile(scene, on_activate=self.trigger_scene)
 
     def run_device_command(
-        self, card: DeviceCard, command: Callable[[], None], action: str
+        self, card: CommandTarget, command: Callable[[], None], action: str
     ) -> None:
         """Run a device command in a worker and resync the card afterwards.
 
@@ -1276,14 +1079,16 @@ class DirigeraDashboard(QMainWindow):
         self._command_workers.append(worker)
         worker.start()
 
-    def _on_command_done(self, card: DeviceCard) -> None:
+    def _on_command_done(self, card: CommandTarget) -> None:
         """Redraw the card from the value the library stored on success."""
-        if not sip.isdeleted(card):
+        if not _is_deleted(card):
             card.sync_from_device()
 
-    def _on_command_failed(self, card: DeviceCard, action: str, message: str) -> None:
+    def _on_command_failed(
+        self, card: CommandTarget, action: str, message: str
+    ) -> None:
         """Report the failure and show the device's real state (req-3)."""
-        if not sip.isdeleted(card):
+        if not _is_deleted(card):
             card.sync_from_device()
             card.show_error(f"Couldn't {action}: {message}")
 
@@ -1448,49 +1253,3 @@ class DirigeraDashboard(QMainWindow):
         self.close()
         # A hidden window closing does not trigger quit-on-last-window.
         QApplication.quit()
-
-    @staticmethod
-    def format_room_label(room_name: str) -> str:
-        """Sentence-case a room name for a section label (design-doc.md §8.9).
-
-        Only the first character is capitalised so acronyms and proper nouns a
-        user typed into the IKEA app keep their casing.
-        """
-        name = room_name.strip()
-        if not name:
-            return UNKNOWN_ROOM
-        return name[0].upper() + name[1:]
-
-    @staticmethod
-    def is_energy_device(device: Any) -> bool:
-        """Return True for devices that can report energy data (§9.4)."""
-        return getattr(device, "device_type", "") in ("outlet", "electricalSensor")
-
-    @staticmethod
-    def get_room(device: Any) -> Tuple[str, str]:
-        """Return (room id, room name) for a device.
-
-        `device.room` is a pydantic Room model (or None), not a dict. Devices
-        without a room share one group under an empty id.
-        """
-        room = getattr(device, "room", None)
-        if room is None:
-            return "", UNKNOWN_ROOM
-        return str(getattr(room, "id", "") or ""), room.name or UNKNOWN_ROOM
-
-    @classmethod
-    def group_by_room(cls, devices: List[Any]) -> List[Tuple[str, List[Any]]]:
-        """Group devices into (room name, devices) pairs in display order.
-
-        Groups are keyed by room id, so two rooms that share a name stay
-        separate. Sections sort by name case-insensitively (design-doc.md §14
-        item 2: alphabetical), with the id as a stable tie-breaker.
-        """
-        groups: Dict[str, Tuple[str, List[Any]]] = {}
-        for device in devices:
-            room_id, room_name = cls.get_room(device)
-            groups.setdefault(room_id, (room_name, []))[1].append(device)
-        ordered = sorted(
-            groups.items(), key=lambda item: (item[1][0].casefold(), item[0])
-        )
-        return [(name, members) for _, (name, members) in ordered]

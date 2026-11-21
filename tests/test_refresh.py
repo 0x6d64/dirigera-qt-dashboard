@@ -8,6 +8,7 @@ import pytest
 from conftest import StubHub, StubScene, make_device
 
 import dashboard
+import workers
 from dashboard import widget_name
 
 Wait = Callable[..., None]
@@ -31,7 +32,7 @@ def _devices(level: int = 40, lamp_on: bool = True) -> list[Any]:
 @pytest.fixture
 def hub(monkeypatch: pytest.MonkeyPatch) -> StubHub:
     stub = StubHub(devices=_devices(), scenes=[StubScene("s1", "Evening")])
-    monkeypatch.setattr(dashboard, "Hub", lambda token, ip_address: stub)
+    monkeypatch.setattr(workers, "Hub", lambda token, ip_address: stub)
     return stub
 
 
