@@ -67,3 +67,15 @@ def test_skeleton_cards_show_until_the_first_refresh(
     wait_until(lambda: window._refresh_worker is None)
     assert window.skeleton is None
     assert window._device_cards
+
+
+def test_energy_card_without_readable_state_has_no_chip(qapp) -> None:
+    from widgets.energy import EnergyCard
+
+    sensor = make_device("electricalSensor", "e1", "Meter", current_active_power=5.0)
+    assert EnergyCard(sensor).status_chip.isHidden()
+    outlet = make_device("outlet", "o1", "Heater", is_on=True)
+    card = EnergyCard(outlet)
+    assert card.status_chip.text() == "On" and not card.status_chip.isHidden()
+    card.update_from_device(make_device("outlet", "o1", "Heater", is_on=None))
+    assert card.status_chip.isHidden()
