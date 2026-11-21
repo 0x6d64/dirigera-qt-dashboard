@@ -381,20 +381,448 @@ check off t-21, t-24, t-25. Gates green.
 
 ---
 
-### Plan: responsive header under 640 px (t-54)
+### Execution order, batch 2 (2026-11-21)
+
+Everything still open that can be built and verified without a real hub or an
+owner decision, in this order, one branch per plan, each merged into `master`
+with `--no-ff` (branches kept). The batch-1 rules apply (tests in `tests/`,
+behaviour not layout, four gates green on every commit, bookkeeping on the
+branch).
+
+1. `fix/inline-errors` — inline status instead of dialogs, IP validation
+   (t-66, t-30)
+2. `chore/specific-exceptions` — narrow `except`, logging (t-26)
+3. `feat/responsive-header` — two-row header, window defaults (t-54, t-72)
+4. `fix/card-text` — name truncation, "Last seen", chip and type text, outlet
+   energy footer (t-67, t-68, t-70, t-75)
+5. `feat/sensor-cards` — real state for every device type (t-69)
+6. `fix/grid-refresh-a11y` — scene grid width, "Refreshing…", skeleton,
+   keyboard and accessible names (t-71, t-73, t-74)
+7. `feat/light-colour` — colour temperature and colour controls (t-14)
+8. `fix/discovery-scope` — configurable scan, skip virtual networks (t-22,
+   t-23)
+9. `test/typing-and-smoke` — `check_untyped_defs`, remaining smoke tests
+   (t-34, t-55)
+10. `docs/readme-packaging` — README, entry point, metadata, security note
+    (t-36, t-37, t-38, t-39), closes t-76
+
+Not planned, and why:
+
+- t-15 (adaptive profiles) and t-16 (websocket live updates): L effort, and
+  neither can be verified without a real hub; polling (t-56, t-79) already
+  meets `req-13`.
+- t-77 (automatic scenes) and §14 item 1 (app name): need an owner decision.
+- t-78 (blind direction): needs a real blind.
+- Reduced-motion setting (part of t-74): §14 item 7 is still open.
+
+### Plan: inline status instead of dialogs (t-66, t-30)
+
+Goal: routine outcomes never open a modal dialog (`design-doc.md` §8.14). The
+only remaining dialog is `HubSelectionDialog`, because it asks for a choice.
+
+Affected files: `dashboard.py`, `widgets/card.py`, `widgets/connection.py`,
+`tests/test_dashboard.py`, `tests/test_refresh.py`, `tests/test_discovery_ui.py`,
+`tests/test_config.py`, `tests/conftest.py`, `doc/design-doc.md`,
+`agent-notes/todo.md`
+
+#### Commit 1 — "show command and refresh failures inline" (t-66)
+
+1. `DeviceCard.show_error(message: str)`: footer shows
+   `Couldn't <action>: <message>` in danger tone (caption role with a danger
+   tone property, colours from `theme.py`). The next `sync_from_device()` or
+   `update_from_device()` that is not pending keeps the error for
+   `CARD_ERROR_MS = 8000` ms, then restores the normal footer (single-shot
+   `QTimer`). `_on_command_failed` resyncs the card as today, then calls
+   `show_error`; no `QMessageBox`.
+2. Manual refresh failure: drop the `QMessageBox.critical`; the chip, status
+   line and stale caption already report it. Manual and background failures
+   now behave the same; keep `_refresh_is_background` only if still needed.
+3. Update tests that asserted a dialog: they now assert the card footer text
+   or the status text, and that the `dialogs` fixture stays empty.
+
+#### Commit 2 — "show connection and discovery outcomes inline" (t-66, t-30)
+
+1. `ConnectionBlock.set_message(text: str, tone: Optional[str])`: one caption
+   line under the fields (empty by default, hidden when empty).
+2. Use it for: missing IP or token; connection failure (keep the chip and
+   status line too); discovery found nothing (one short sentence with the
+   hint to enter the IP manually); one hub found ("Found a hub at <ip>; enter
+   your token and connect."). `HubSelectionDialog.accept_selection` keeps its
+   warning, because it is inside a dialog the user opened.
+3. t-30: before starting `ConnectWorker`, validate the IP with
+   `ipaddress.ip_address()`; on `ValueError` show "Enter a valid IP address"
+   via `set_message` and start no worker.
+4. After this commit `QMessageBox` is used only inside `HubSelectionDialog`.
+   Assert that with a test: run the main flows (connect failure, refresh
+   failure, command failure, discovery nothing/one) and check the `dialogs`
+   fixture stays empty.
+
+#### Commit 3 — "record inline errors"
+
+Check off t-66 and t-30, note in `design-doc.md` §8.14 that the only modal is
+the hub chooser, Executed markers here.
+
+Verification: as listed per commit; all four gates green.
+
+---
+
+### Plan: specific exceptions and logging (t-26)
+
+Goal: no failure disappears silently. Errors are caught where they can be
+handled, logged, and reported; catch-alls remain only at thread boundaries,
+where an uncaught exception would be lost.
+
+Affected files: `dashboard.py`, `network_discovery.py`, `main.py`,
+`tests/test_discovery_ui.py`, `tests/test_dashboard.py`, `agent-notes/todo.md`
+
+#### Commit 1 — "log errors and narrow exception handling" (t-26)
+
+1. Module loggers (`log = logging.getLogger(__name__)`) in `dashboard.py` and
+   `network_discovery.py`. `main.py` calls
+   `logging.basicConfig(level=logging.INFO, format=...)` once.
+2. Worker `run()` methods (connect, refresh, command, scene, discovery) keep
+   one `except Exception` each, because they are thread boundaries, but log it
+   with `log.exception(...)` before emitting the failure signal. Add a short
+   comment saying why the catch-all is there.
+3. `CommandWorker`: the inner `except Exception: pass` around `reload()` logs
+   the error with `log.warning`.
+4. `DiscoveryThread`: add a `discovery_failed = pyqtSignal(str)`; on an
+   exception it emits that instead of an empty result. The dashboard shows
+   "Discovery failed: <message>" (via the inline message from the previous
+   plan), so a failure no longer reads as "no hubs found".
+5. `network_discovery.py`: `check_dirigera_port` catches `OSError` only
+   (`socket.timeout` is a subclass); `future.result()` in the scan loop is
+   wrapped so one failing probe is logged and skipped instead of aborting the
+   whole scan.
+6. Remove the unused `clear_layout` from `dashboard.py`.
+
+Verification: tests — a discovery function that raises leads to "Discovery
+failed: …" and no "no hubs" message; one probe raising inside
+`discover_dirigera_hubs` still returns the other hits (stub `scan_ip`); a
+`CommandWorker` whose `reload()` raises still emits `failed` (use `caplog` to
+check a warning is logged). `grep -n "except Exception" *.py` shows only the
+thread boundaries. Gates green.
+
+#### Commit 2 — "record exception cleanup"
+
+Check off t-26, Executed marker.
+
+---
+
+### Plan: card text and footers (t-67, t-68, t-70, t-75)
+
+Goal: card text follows `design-doc.md` §8.1 and §8.2: names never wrap or
+widen the card, offline cards say when they were last seen, chips hold one or
+two words, type captions are human words, and metering outlets show energy in
+the Rooms view.
+
+Affected files: `widgets/card.py`, `widgets/energy.py` (only to share a
+footer formatter), new pure helpers module `widgets/text.py`,
+`tests/test_card_text.py` (new), `agent-notes/todo.md`
+
+#### Commit 1 — "elide long device names" (t-67)
+
+1. The name label shows `QFontMetrics.elidedText(full_name, ElideRight,
+   available_width)`, recomputed in the card's `resizeEvent`; the full name is
+   the tooltip. The name label must not set a minimum width larger than the
+   card allows (no `sizeHint` driven growth: give it
+   `QSizePolicy.Ignored` horizontally).
+2. Test: a 200-character name at a card width of 300 px keeps the card at its
+   width, the label text ends with "…", the tooltip is the full name, and
+   `full_name` (used by search) is unchanged.
+
+#### Commit 2 — "humanise chips, types and offline footer" (t-68, t-70)
+
+1. `widgets/text.py` (pure, no Qt): `relative_time(then: datetime, now:
+   datetime) -> str` ("just now" under 1 min, "5 min ago", "3 h ago",
+   "yesterday", else the date as `%d %b`); `type_label(device_type: str) ->
+   str` from an explicit map of the library's `device_type` values to sentence
+   case words ("Light", "Plug", "Blind", "Air purifier", "Environment sensor",
+   "Motion sensor", "Occupancy sensor", "Door or window sensor", "Water leak
+   sensor", "Light sensor", "Remote", "Energy meter"), falling back to
+   splitting camelCase into a sentence-case phrase. Check the exact
+   `device_type` strings in the installed library
+   (`.venv/Lib/site-packages/dirigera/devices/`); they are camelCase
+   (`environmentSensor`), and the card's `_TYPE_SORT_WEIGHT` map currently
+   uses snake_case keys, which is wrong for multi-word types: fix the keys
+   too.
+2. Offline footer: `Last seen <relative_time(device.last_seen, now)>`;
+   "Device unreachable" only when `last_seen` is missing.
+3. Blind chip: "Open" at 100, "Closed" at 0, "Partly open" in between (no
+   percentage; the slider already shows it). Direction stays as today
+   (t-78 is open).
+4. Tests for `relative_time` and `type_label` (pure), and card tests for the
+   offline footer and the blind chip at 0 / 50 / 100.
+
+#### Commit 3 — "show energy on metering outlets" (t-75)
+
+1. An outlet whose attributes carry `current_active_power` (not None) shows
+   the same energy footer as electrical sensors do; share one formatter
+   function between card and energy view instead of duplicating it.
+2. Test: metering outlet shows the power footer; a plain outlet does not.
+
+#### Commit 4 — "record card text fixes"
+
+Check off t-67, t-68, t-70, t-75, Executed markers.
+
+---
+
+### Plan: real state for every device type (t-69)
+
+Goal: every device type shows its real readings instead of an empty card with
+an invented "Ready" chip (`design-doc.md` §1 principle 1, §8.5;
+`dirigera-api.md` §3 rows 4 to 10).
+
+Affected files: `widgets/card.py`, `widgets/metric.py` (if a metric needs a
+new unit), `tests/test_sensor_cards.py` (new), `agent-notes/todo.md`
+
+#### Commit 1 — "show sensor readings on cards" (t-69)
+
+1. Build the control zone per type, showing only non-None values (read-only):
+   - environment sensor: metrics temperature °C, humidity %, PM2.5, CO2 ppm,
+     VOC index (at most three side by side, §8.5.3; the rest wrap);
+   - motion and occupancy sensor: chip "Motion" (warn is wrong here; use
+     neutral or ok per §5.3 rule 2) or "Clear" from `is_detected`;
+   - open/close sensor: chip "Open" / "Closed" from `is_open`;
+   - water sensor: chip "Leak" in danger tone when `water_leak_detected`,
+     else "Dry";
+   - light sensor: metric illuminance (no unit, it is undocumented);
+   - air purifier: read-only metrics PM2.5 and fan mode as a word (controls
+     are out of scope; §dirigera-api 3 row 4);
+   - controller: no control zone; battery in the footer.
+2. A type with no readable state shows no chip rather than "Ready".
+3. Battery stays in the footer for every battery device; the low-battery chip
+   override (§8.1 state 4) keeps working.
+4. Sort map covers every type in the order of §8.1 rule 3 (lights, outlets,
+   blinds, air and environment, sensors, remotes).
+5. `update_from_device()` updates these readings in place (t-19).
+
+Verification: one test per type with a stub device: expected chip text,
+metric values, no "Ready" chip; a refresh with changed readings updates the
+metric on the same card object. Gates green.
+
+#### Commit 2 — "record sensor cards"
+
+Check off t-69, Executed marker.
+
+---
+
+### Plan: scene grid, refresh feedback, keyboard (t-71, t-73, t-74)
+
+Goal: the remaining small design gaps that need no decision.
+
+Affected files: `widgets/grid.py`, `dashboard.py`, `widgets/segments.py`,
+`widgets/metric.py`, `widgets/card.py`, `tests/test_polish.py` (new),
+`agent-notes/todo.md`
+
+#### Commit 1 — "narrower scene columns" (t-71)
+
+1. `CardGrid(min_width: int = CARD_MIN_WIDTH)`; `grid_columns_for_width`
+   takes the minimum as a parameter. The scenes grid uses
+   `SCENE_MIN_WIDTH = 240` from `widgets/scene.py`.
+2. Test: at a given width the scenes grid has more columns than a device grid.
+
+#### Commit 2 — "refreshing state and first-load skeleton" (t-73)
+
+1. While any refresh runs, the Refresh button reads "Refreshing…" and is
+   disabled; it returns to "Refresh" when the worker is done.
+2. Until the first successful refresh after connecting, the Rooms view shows
+   a few skeleton cards (plain `sunken` frames at card size, no animation,
+   §8.13); they are removed by the first `_on_refreshed`.
+3. Tests: button text during and after a refresh (stub hub with a gate event);
+   skeletons present before and gone after the first refresh.
+
+#### Commit 3 — "keyboard and accessible names" (t-74)
+
+1. Segmented control: Left/Right arrows move the selection (and emit the same
+   signal as a click) when it has focus.
+2. Metric values get a fixed minimum width from the font metrics of a
+   representative value (for example "8888"), so changing digits do not shift
+   the layout (§6.1.3).
+3. Accessible names: switch "<name> power", brightness slider
+   "<name> brightness", blind slider "<name> position", blind buttons
+   "<name> up/stop/down", scene Activate "Activate <scene>".
+4. Reduced motion stays out (§14 item 7 open).
+5. Tests: arrow key changes the view; accessible names on a light card, a
+   blind card and a scene tile.
+
+#### Commit 4 — "record grid, refresh and keyboard fixes"
+
+Check off t-71, t-73; t-74 stays open with a note that only the reduced-motion
+setting remains. Executed markers.
+
+---
+
+### Plan: light colour controls (t-14)
+
+Goal: lights that support it get colour temperature and colour controls
+(`dirigera-api.md` §2.3 row 1 and §3 row 1; `design-doc.md` §8.4 item 7).
+
+Affected files: `widgets/card.py`, `widgets/slider.py` (gradient track
+option), `theme.py` (two tokens for the warm and cool ends of the gradient),
+`dashboard.py` (handlers), `tests/test_light_colour.py` (new),
+`agent-notes/todo.md`
+
+#### Commit 1 — "colour temperature slider" (t-14)
+
+1. If `colorTemperature` is in `capabilities.can_receive`, add a labelled
+   slider "Warmth" in Kelvin. Bounds come from `color_temperature_min/max`
+   normalised like the library does (some bulbs report mireds: convert values
+   below 1000 with `1_000_000 / v`, then use `min()`/`max()` of the converted
+   bounds). The track is a warm-to-cool gradient between two new theme tokens
+   (`TEMP_WARM`, `TEMP_COOL`). Commit via `LabeledSlider.committed`, handler
+   `set_light_temperature(card, kelvin)` in `dashboard.py` calling
+   `device.set_color_temperature` through `run_device_command`.
+2. Tests: slider appears only with the capability; mireds bounds are converted
+   and ordered; a commit calls `set_color_temperature` off the GUI thread with
+   the slider value; a failure resyncs.
+
+#### Commit 2 — "hue and saturation controls" (t-14)
+
+1. If both `colorHue` and `colorSaturation` are in `can_receive`, add a
+   "Colour" disclosure button on the card; it shows two sliders, hue 0 to 360
+   and saturation 0 to 100 % (sent as 0.0 to 1.0), hidden by default so the
+   card stays calm. Commit sends `set_light_color(hue, saturation)` with both
+   current values.
+2. Tests: controls hidden by default and shown by the button; a commit sends
+   both values with the right scaling; no controls without the capabilities.
+
+#### Commit 3 — "record light colour controls"
+
+Check off t-14, close §14 item 8 in `design-doc.md` (gradient implemented),
+Executed markers.
+
+---
+
+### Plan: discovery scope (t-22, t-23)
+
+Goal: the user can see and limit what discovery scans; virtual and link-local
+networks are skipped by default.
+
+Affected files: `network_discovery.py`, `dashboard.py`, `config.ini.example`,
+`README.md`, `tests/test_network_discovery.py`, `tests/test_discovery_ui.py`,
+`agent-notes/todo.md`
+
+#### Commit 1 — "skip link-local and virtual networks" (t-23)
+
+1. `get_local_networks()` skips link-local (`169.254.0.0/16`), single-host
+   networks (`/32`) and, where the interface name is readable (not a Windows
+   GUID), names matching common virtual adapters (`docker`, `veth`, `vbox`,
+   `vmnet`, `tun`, `tap`, `wg`, `utun`). Keep the list as a module constant.
+2. Tests with mocked `netifaces` for each skip rule.
+
+#### Commit 2 — "configurable scan scope" (t-22)
+
+1. Optional `[discovery]` section in `config.ini`: `networks` (comma-separated
+   CIDRs, overrides auto-detection), `max_workers`, `timeout`. Read it with the
+   same error handling as `load_config` (bad values: inline message, defaults
+   used). Document it in `config.ini.example` and README.
+2. The discovery progress text names the scope: "Scanning <N> addresses on
+   <networks>…".
+3. Tests: configured networks override detection; invalid values fall back to
+   the defaults with a message; the progress text contains the scope.
+
+#### Commit 3 — "record discovery scope"
+
+Check off t-22, t-23, Executed markers.
+
+---
+
+### Plan: type checking and remaining smoke tests (t-34, t-55)
+
+Goal: mypy checks function bodies everywhere, and the remaining ad-hoc
+offscreen checks live in `tests/`.
+
+Affected files: `pyproject.toml`, `dashboard.py`, `widgets/*.py`,
+`generate_token.py`, `tests/test_energy_view.py` (new),
+`tests/test_header.py` (extend if it exists), `agent-notes/todo.md`
+
+#### Commit 1 — "check untyped function bodies" (t-34)
+
+1. `pyproject.toml`: `check_untyped_defs = true`. Fix every error with real
+   annotations; `# type: ignore[code]` only with the narrowest code and a
+   reason in a comment. Add return and parameter annotations to the GUI
+   methods that lack them (`__init__` methods, `init_ui`, slots).
+2. No behaviour change; the full test suite passes unchanged.
+
+#### Commit 2 — "energy view smoke tests" (t-55)
+
+1. `tests/test_energy_view.py`: rooms are grouped and sorted, a metering
+   device shows its power, a refresh with new power values updates the same
+   card, an empty energy view shows its empty state.
+2. Header tests are covered by the responsive-header plan; if that plan
+   already added them, note it and add nothing here.
+
+#### Commit 3 — "record typing and smoke tests"
+
+Check off t-34 and t-55, Executed markers.
+
+---
+
+### Plan: README, entry point and metadata (t-36, t-37, t-38, t-39, t-76)
+
+Goal: a new user can install and run the app from the README alone, and the
+project metadata is complete.
+
+Affected files: `README.md`, `pyproject.toml`, `uv.lock`, `main.py`,
+`doc/design-doc.md`, `agent-notes/todo.md`
+
+#### Commit 1 — "add launcher entry point and metadata" (t-37, t-38)
+
+1. `pyproject.toml`: `[project.scripts] dirigera-dashboard = "main:main"`, a
+   `[build-system]` if `uv` needs one to install the script (check with
+   `uv sync` then `uv run dirigera-dashboard --help` or by importing the entry
+   point; the flat layout may need
+   `[tool.setuptools] py-modules = [...]` and `packages = ["widgets"]`),
+   `license` expression matching `LICENSE`, `readme`, classifiers, keywords.
+   Commit `uv.lock` with it.
+2. Verify the entry point resolves (`uv run python -c "import main;
+   main.main"`), and that the gates and tests still pass.
+
+#### Commit 2 — "update readme" (t-36, t-39)
+
+1. README: requirements (Python version from `pyproject.toml`, `uv`,
+   `netifaces2`), setup and run (`uv sync`, `uv run dirigera-dashboard`),
+   token generation, where `config.ini` lives, discovery limits (scan cap,
+   virtual networks, Cancel behaviour), auto refresh, and a security section:
+   the hub uses a self-signed certificate, TLS verification is off, so treat
+   the token as a network secret and keep `config.ini` private. Keep the
+   "unofficial" notice (`design-doc.md` §2.2).
+2. Close t-76: the remaining "Dirigera as app title" point moves to
+   `design-doc.md` §14 item 1 (app name, open); window size was fixed by t-72;
+   polling was added by t-56.
+
+#### Commit 3 — "record readme and packaging"
+
+Check off t-36, t-37, t-38, t-39, t-76, Executed markers.
+
+---
+
+### Plan: responsive header and window defaults (t-54, t-72)
 
 Goal: remove the ~970 px minimum window width set by the fixed 56 px single-row
 header (design commit 6), so the window can actually reach t-46's 640 px
 single-column breakpoint by resizing (`design-doc.md` §11 row 3, minimum window
-640 × 480).
+640 × 480), and match the window defaults of §4.1 (t-72).
 
 Affected files: `dashboard.py` (`build_header`, `init_ui`, `resizeEvent`),
 `widgets/segments.py` (only if the control needs a compact variant),
-`doc/design-doc.md` §4.2/§11, `agent-notes/todo.md`
+`doc/design-doc.md` §4.2/§11, `tests/test_header.py` (new),
+`agent-notes/todo.md`
 
-#### Commit 1 — "two-row header below 640 px" (t-54)
+Correction (2026-11-21): with a 640 px minimum window width a breakpoint at
+640 px could never be reached. The header switches to two rows when the window
+is narrower than 760 px, the width at which the single row no longer fits.
 
-1. Define `HEADER_BREAKPOINT = 640`, `HEADER_HEIGHT = 56`, and
+#### Commit 0 — "window defaults from the design" (t-72)
+
+1. `init_ui`: default size 1080 × 700, minimum 640 × 480 (set the minimum only
+   once the header allows it, in commit 1, if it fails before).
+2. Remove tab-layout margins that are not on the spacing scale (§4.4).
+
+#### Commit 1 — "two-row header below 760 px" (t-54)
+
+1. Define `HEADER_BREAKPOINT = 760`, `HEADER_HEIGHT = 56`, and
    `HEADER_HEIGHT_COMPACT = 96` (two 48 px rows) as module constants in
    `dashboard.py`.
 2. Split `build_header()` into a widget that owns two layouts: row 1 (title,
@@ -412,11 +840,18 @@ Affected files: `dashboard.py` (`build_header`, `init_ui`, `resizeEvent`),
    once the header no longer forces more, and assert
    `minimumSizeHint().width() <= 640`.
 
-Verification: offscreen — resize to 1080 / 760 / 640 / 639 px and assert header
-height is 56 px above the breakpoint and 96 px below it, the switcher is on
-row 2 only in compact mode, card columns are 3 / 2 / 1 / 1, and
-`minimumSizeHint().width() <= 640`. Manual: drag the window narrow on Windows;
-check the 150 % scaling note in §11. Gates: black, ruff, mypy clean.
+Verification: `tests/test_header.py` — resize to 1080 / 760 / 700 / 640 px
+and assert the header is one row (56 px) at 1080 and 760 and two rows (96 px)
+at 700 and 640, the switcher is on row 2 only in compact mode, and
+`minimumSizeHint().width() <= 640`; default size is 1080 × 700. Do not assert
+card column counts at exact widths (they depend on scroll-bar and margin
+widths). Manual: drag the window narrow on Windows; check the 150 % scaling
+note in §11. Gates green.
+
+#### Commit 2 — "record responsive header"
+
+Check off t-54 and t-72, update `design-doc.md` §11 row 3 to "under 760 px:
+view switcher on a second header row", Executed markers.
 
 ---
 
