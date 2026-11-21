@@ -862,6 +862,13 @@ note in §11. Gates green.
 Check off t-54 and t-72, update `design-doc.md` §11 row 3 to "under 760 px:
 view switcher on a second header row", Executed markers.
 
+> **Executed 2026-11-21** on branch `feat/responsive-header`: commit 0
+> `5fd6160` "window defaults from the design", commit 1 `06ab673` "two-row
+> header below 760 px", commit 2 "record responsive header". Deviation: the
+> single header row needs about 870 px (measured with the offscreen fonts), so
+> `HEADER_BREAKPOINT` is 900, not 760; a test asserts the breakpoint is never
+> narrower than the row.
+
 ---
 
 ## Done
