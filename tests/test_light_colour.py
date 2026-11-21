@@ -81,3 +81,51 @@ def test_refresh_updates_the_slider(window: Any) -> None:
 def test_light_without_a_reading_still_builds(window: Any, unknown: Any) -> None:
     card = _card(window, _lamp(color_temperature=unknown))
     assert card.temperature_slider.value() == 2200
+
+
+# --- hue and saturation (second commit) --------------------------------------
+
+COLOUR = ["colorHue", "colorSaturation"]
+
+
+def _colour_lamp(**kw: Any) -> StubLight:
+    kw.setdefault("color_hue", 120.0)
+    kw.setdefault("color_saturation", 0.5)
+    return StubLight(can_receive=kw.pop("can_receive", COLOUR), **kw)
+
+
+def test_colour_controls_need_both_capabilities(window: Any) -> None:
+    assert hasattr(_card(window, _colour_lamp()), "colour_button")
+    for partial in (["colorHue"], ["colorSaturation"], []):
+        card = _card(window, _colour_lamp(can_receive=partial))
+        assert not hasattr(card, "colour_button")
+        assert not hasattr(card, "hue_slider")
+
+
+def test_colour_controls_are_hidden_until_the_button_is_pressed(window: Any) -> None:
+    card = _card(window, _colour_lamp())
+    assert card.colour_box.isHidden()
+    card.colour_button.click()
+    assert not card.colour_box.isHidden()
+    assert card.hue_slider.value() == 120
+    assert card.saturation_slider.value() == 50
+    card.colour_button.click()
+    assert card.colour_box.isHidden()
+
+
+def test_commit_sends_both_values_scaled(window: Any, wait_until: Wait) -> None:
+    lamp = _colour_lamp()
+    card = _card(window, lamp)
+    card.saturation_slider._slider.setValue(80)
+    card.saturation_slider._commit()
+    wait_until(lambda: lamp.colour_calls == [(120.0, 0.8)])
+    assert lamp.threads[0] is not threading.main_thread()
+    card.hue_slider._slider.setValue(300)
+    card.hue_slider._commit()
+    wait_until(lambda: lamp.colour_calls[-1] == (300.0, 0.8))
+
+
+def test_refresh_updates_colour_sliders(window: Any) -> None:
+    card = _card(window, _colour_lamp())
+    card.update_from_device(_colour_lamp(color_hue=240.0, color_saturation=1.0))
+    assert (card.hue_slider.value(), card.saturation_slider.value()) == (240, 100)

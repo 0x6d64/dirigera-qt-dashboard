@@ -135,6 +135,7 @@ class DeviceCard(QFrame):
         on_blind_position: Optional[Callable[["DeviceCard", int], None]] = None,
         on_temperature: Optional[Callable[["DeviceCard", int], None]] = None,
         on_blind_state: Optional[Callable[["DeviceCard", str], None]] = None,
+        on_colour: Optional[Callable[["DeviceCard", float, float], None]] = None,
         parent=None,
     ):
         """Build the card. Every callback receives the card itself, so the
@@ -146,6 +147,7 @@ class DeviceCard(QFrame):
         self._on_brightness = on_brightness
         self._on_blind_position = on_blind_position
         self._on_temperature = on_temperature
+        self._on_colour = on_colour
         self._on_blind_state = on_blind_state
 
         self._controls: list[QWidget] = []
@@ -343,6 +345,9 @@ class DeviceCard(QFrame):
                 self._controls.append(self.temperature_slider)
                 self.control_zone.addWidget(self.temperature_slider)
 
+            if {"colorHue", "colorSaturation"} <= set(_can_receive(self.device)):
+                self._build_colour_controls()
+
         elif dtype == "outlet":
             # Power toggle switch
             switch_row = QHBoxLayout()
@@ -424,6 +429,57 @@ class DeviceCard(QFrame):
                 caption="Active power", initial_value=power, unit="W"
             )
             self.control_zone.addWidget(self.power_metric)
+
+    def _build_colour_controls(self) -> None:
+        """A "Colour" button that reveals hue and saturation sliders.
+
+        Hidden by default so the card stays calm (dirigera-api.md §3 row 1).
+        """
+        attrs = self.device.attributes
+        hue = getattr(attrs, "color_hue", None)
+        sat = getattr(attrs, "color_saturation", None)
+        self.colour_button = QPushButton("Colour")
+        self.colour_button.setCheckable(True)
+        self.colour_button.setFixedHeight(28)
+        self.colour_button.setAccessibleName(f"{self.full_name} colour controls")
+        self.hue_slider = LabeledSlider(
+            label="Hue",
+            minimum=0,
+            maximum=360,
+            initial_value=round(hue) if hue is not None else 0,
+            unit="°",
+        )
+        self.hue_slider.setAccessibleName(f"{self.full_name} hue")
+        self.saturation_slider = LabeledSlider(
+            label="Sat.",
+            minimum=0,
+            maximum=100,
+            initial_value=round(sat * 100) if sat is not None else 0,
+            unit="%",
+        )
+        self.saturation_slider.setAccessibleName(f"{self.full_name} saturation")
+        self.colour_box = QWidget()
+        box_layout = QVBoxLayout(self.colour_box)
+        box_layout.setContentsMargins(0, 0, 0, 0)
+        box_layout.setSpacing(theme.SP8)
+        box_layout.addWidget(self.hue_slider)
+        box_layout.addWidget(self.saturation_slider)
+        self.colour_box.setVisible(False)
+        self.colour_button.toggled.connect(self.colour_box.setVisible)
+        for slider in (self.hue_slider, self.saturation_slider):
+            slider.committed.connect(self._commit_colour)
+        self._controls += [self.colour_button, self.hue_slider, self.saturation_slider]
+        self.control_zone.addWidget(self.colour_button)
+        self.control_zone.addWidget(self.colour_box)
+
+    def _commit_colour(self, _value: int) -> None:
+        """Send both current values; the hub takes hue and saturation together."""
+        if self._on_colour is not None:
+            self._on_colour(
+                self,
+                float(self.hue_slider.value()),
+                self.saturation_slider.value() / 100,
+            )
 
     def _reading_values(self) -> dict[str, Any]:
         """The non-None readings of this device, keyed by attribute name."""
@@ -689,6 +745,19 @@ class DeviceCard(QFrame):
                 continue
             slider.blockSignals(True)
             slider.set_value(int(value))
+            slider.blockSignals(False)
+        for name, attr, scale in (
+            ("hue_slider", "color_hue", 1),
+            ("saturation_slider", "color_saturation", 100),
+        ):
+            slider = getattr(self, name, None)
+            value = getattr(attrs, attr, None)
+            if not isinstance(slider, LabeledSlider) or value is None:
+                continue
+            if protect_user and slider.is_user_active():
+                continue
+            slider.blockSignals(True)
+            slider.set_value(round(value * scale))
             slider.blockSignals(False)
         self._sync_readings()
         metric = getattr(self, "power_metric", None)
