@@ -163,3 +163,25 @@ def test_get_local_networks_lists_a_shared_subnet_once(
     monkeypatch.setattr(nd.netifaces, "interfaces", lambda: list(ifaces))
     monkeypatch.setattr(nd.netifaces, "ifaddresses", lambda name: ifaces[name])
     assert nd.get_local_networks() == ["192.168.1.0/24"]
+
+
+def test_should_stop_ends_the_scan_early(monkeypatch: pytest.MonkeyPatch) -> None:
+    import threading
+    import time
+
+    monkeypatch.setattr(nd, "get_local_networks", lambda: ["10.9.0.0/22"])
+    scanned: list[str] = []
+    stop = threading.Event()
+
+    def slow_scan(ip: str) -> None:
+        scanned.append(ip)
+        if len(scanned) >= 10:
+            stop.set()
+        time.sleep(0.01)
+
+    monkeypatch.setattr(nd, "scan_ip", slow_scan)
+    started = time.monotonic()
+    result = nd.discover_dirigera_hubs(max_workers=4, should_stop=stop.is_set)
+    assert result == []
+    assert time.monotonic() - started < 5
+    assert len(scanned) < 1016 // 2  # far fewer than the 1016 addresses

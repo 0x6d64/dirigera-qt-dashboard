@@ -2,8 +2,8 @@
 
 import ipaddress
 import socket
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Dict, List, Optional, Tuple, cast
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+from typing import Callable, Dict, List, Optional, Tuple, cast
 
 import netifaces
 import requests
@@ -162,10 +162,17 @@ def hosts_to_scan(networks: List[str], max_hosts: int = MAX_SCAN_HOSTS) -> List[
 
 
 def discover_dirigera_hubs(
-    max_workers: int = 50, timeout_per_ip: float = 1.0
+    max_workers: int = 50,
+    timeout_per_ip: float = 1.0,
+    should_stop: Optional[Callable[[], bool]] = None,
 ) -> List[Tuple[str, Optional[str]]]:
     """
     Discover Dirigera hubs on the local network.
+
+    ``should_stop`` is polled while results are collected; once it returns
+    True the pending probes are cancelled and the hubs found so far are
+    returned. Only probes already in flight keep running, each for at most
+    its own timeout.
 
     Returns:
         List of tuples (ip_address, mac_address) for discovered hubs. The MAC
@@ -176,15 +183,21 @@ def discover_dirigera_hubs(
     if not ips_to_scan:
         return []
 
-    discovered_hubs = []
+    discovered_hubs: List[Tuple[str, Optional[str]]] = []
 
-    # Scan IPs in parallel
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_ip = {executor.submit(scan_ip, ip): ip for ip in ips_to_scan}
-
-        for future in as_completed(future_to_ip):
-            result = future.result()
-            if result:
-                discovered_hubs.append(result)
+    # No `with` block: its exit would wait for every queued probe.
+    executor = ThreadPoolExecutor(max_workers=max_workers)
+    try:
+        pending = {executor.submit(scan_ip, ip) for ip in ips_to_scan}
+        while pending:
+            if should_stop is not None and should_stop():
+                break
+            done, pending = wait(pending, timeout=0.1, return_when=FIRST_COMPLETED)
+            for future in done:
+                result = future.result()
+                if result:
+                    discovered_hubs.append(result)
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
 
     return discovered_hubs

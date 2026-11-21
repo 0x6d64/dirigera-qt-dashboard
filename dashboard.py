@@ -1,4 +1,5 @@
 import configparser
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, override
@@ -7,7 +8,7 @@ from dirigera import Hub
 from dirigera.devices.blinds import BlindsStateEnum
 from dirigera.devices.scene import Scene
 from PyQt6 import sip
-from PyQt6.QtCore import QEvent, Qt, QThread, QTimer, pyqtSignal
+from PyQt6.QtCore import QEvent, QObject, Qt, QThread, QTimer, pyqtSignal
 from PyQt6.QtGui import QCloseEvent
 from PyQt6.QtWidgets import (
     QApplication,
@@ -58,10 +59,21 @@ class DiscoveryThread(QThread):
     # Named discovery_done to avoid shadowing the built-in QThread.finished.
     discovery_done = pyqtSignal(list)  # type: ignore[call-arg]  # (ip, mac)
 
+    def __init__(self, parent: Optional[QObject] = None) -> None:
+        super().__init__(parent)
+        self._stop = threading.Event()
+
+    def request_stop(self) -> None:
+        """Ask the scan to stop; it ends cooperatively, never forcibly."""
+        self._stop.set()
+
+    def stop_requested(self) -> bool:
+        return self._stop.is_set()
+
     def run(self):
         """Run the discovery process."""
         try:
-            hubs = discover_dirigera_hubs()
+            hubs = discover_dirigera_hubs(should_stop=self._stop.is_set)
             self.discovery_done.emit(hubs)
         except Exception:
             self.discovery_done.emit([])
@@ -516,6 +528,11 @@ class DirigeraDashboard(QMainWindow):
 
     def discover_hubs(self):
         """Start the hub discovery process in a background thread."""
+        thread = getattr(self, "discovery_thread", None)
+        if thread is not None and thread.isRunning():
+            return
+        self.connection_block.discover_button.setEnabled(False)
+
         # Create and configure the progress dialog
         self.progress_dialog = QProgressDialog(
             "Scanning local network for Dirigera hubs...", "Cancel", 0, 0, self
@@ -537,9 +554,9 @@ class DirigeraDashboard(QMainWindow):
 
     def on_discovery_canceled(self):
         """Handle cancellation of the discovery process."""
-        if hasattr(self, "discovery_thread") and self.discovery_thread.isRunning():
-            self.discovery_thread.terminate()
-            self.discovery_thread.wait()
+        thread = getattr(self, "discovery_thread", None)
+        if thread is not None and thread.isRunning():
+            thread.request_stop()
         self.set_status_text("Discovery canceled")
 
     def on_discovery_finished(self, discovered_hubs: List[Tuple[str, str]]):
@@ -550,6 +567,10 @@ class DirigeraDashboard(QMainWindow):
         if hasattr(self, "progress_dialog"):
             self.progress_dialog.canceled.disconnect(self.on_discovery_canceled)
             self.progress_dialog.close()
+        self.connection_block.discover_button.setEnabled(True)
+
+        if self.discovery_thread.stop_requested():
+            return  # canceled (or closing): drop the partial result
 
         if not discovered_hubs:
             QMessageBox.information(
@@ -1069,6 +1090,9 @@ class DirigeraDashboard(QMainWindow):
         and the application quits, once the last worker has finished.
         """
         self.refresh_timer.stop()
+        discovery = getattr(self, "discovery_thread", None)
+        if discovery is not None and discovery.isRunning():
+            discovery.request_stop()
         running = self._running_workers()
         if not running:
             super().closeEvent(event)
