@@ -192,3 +192,37 @@ for d in hub.get("/devices"):
 | 5 | Values of `color_mode`, `room.icon`, `room.color` | Read from the dump |
 | 6 | Does `light_level` stay populated while a light is off? | Read from the dump with a light off |
 | 7 | Event shapes for button presses, add/remove, reachability | Log raw events from a listener while pressing a remote |
+
+## 5. Observed on a real hub (2026-11-21)
+
+Read with `tools/hub_get.py` (GET only) on one home: 2 lights, 2 plugs (one
+INSPELNING with metering), a STARKVIND air purifier, 2 VINDSTYRKA sensors, 3
+remotes. Answers to section 4 where the data settles them:
+
+1. **Raw `/devices` also lists the hub itself** (`deviceType` `gateway`).
+   `get_all_devices()` filters it out, so the app never sees it.
+2. **Metering plug (INSPELNING E2206)** carries energy on the outlet itself (no
+   separate `electricalSensor`; question 3). Attributes: `currentActivePower` W,
+   `currentVoltage` V, `currentAmps` A, `totalEnergyConsumed` kWh (with
+   `totalEnergyConsumedLastUpdated`), `energyConsumedAtLastReset` kWh,
+   `timeOfLastEnergyReset`. `canReceive` contains `energyConsumedAtLastReset`,
+   so the reset is a `PATCH` of that attribute; the value to send (presumably
+   0) is unverified, and it was not tried because it would erase the user's
+   counter. Usage since the last reset is
+   `totalEnergyConsumed - energyConsumedAtLastReset`.
+3. **Air purifier (STARKVIND E2007)**: `fanMode` `low` with
+   `fanModeSequence` `lowMediumHighAuto` and `motorState` 20, so modes map to
+   motor-state steps of 10. `currentPM25` is a plain integer. Filter:
+   `filterLifetime` 259200 and `filterElapsedTime` 353271 are minutes (259200
+   min = 180 days, STARKVIND's six-month filter), `filterAlarmStatus` true once
+   elapsed passes lifetime (question 2, filter times). `motorRuntime` is also a
+   counter, unit presumably minutes.
+4. **Air quality sensor (VINDSTYRKA E2112)**: `currentTemperature`,
+   `currentRH`, `currentPM25`, `vocIndex`; `maxMeasuredPM25` 999 and
+   `minMeasuredPM25` 0 look like range bounds, not measured extremes.
+5. **No history found.** `/home` returns `user`, `hub`, `devices`, `users`,
+   `scenes`, `rooms`, `deviceSets`, `music`, `adaptiveProfiles`: no readings
+   over time. Guessed routes (`/history`, `/devices/{id}/history`,
+   `/devices/{id}/measurements`, `/statistics`, `/insights`, `/energy`,
+   `/events`, …) return 404, and no public documentation names one. The IKEA
+   app's graphs may come from IKEA's cloud or from a route not found yet.

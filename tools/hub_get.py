@@ -10,6 +10,9 @@ Usage (from the repo root):
     uv run python tools/hub_get.py /devices/<device-id>
     uv run python tools/hub_get.py /home
 
+In Git Bash, leave out the leading slash (`devices`): MSYS rewrites `/devices`
+into a Windows path. The script adds the slash itself.
+
 Credentials come from the DIRIGERA_IP and DIRIGERA_TOKEN environment variables,
 or else from config.ini next to dashboard.py. The token is never printed.
 Serial numbers are replaced with "<redacted>" so the output can be shared.

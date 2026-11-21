@@ -20,6 +20,8 @@ reused.
 - **req-19** — Metering plugs must show the cost of their usage, from a
   configurable price per kWh and currency; when unset the defaults are Romanian
   prices (RON). *(user, 2026-11-21; t-84, open)*
+- **req-20** — The air purifier card must show the filter's health and when the
+  filter needs changing. *(user, 2026-11-21; t-85, open)*
 
 ## Inferred
 
