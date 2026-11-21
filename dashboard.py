@@ -2,9 +2,10 @@ import configparser
 import ipaddress
 import logging
 import threading
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, override
+from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple, override
 
 from dirigera import Hub
 from dirigera.devices.blinds import BlindsStateEnum
@@ -33,7 +34,11 @@ from PyQt6.QtWidgets import (
 )
 
 import theme
-from network_discovery import discover_dirigera_hubs
+from network_discovery import (
+    discover_dirigera_hubs,
+    get_local_networks,
+    hosts_to_scan,
+)
 from widgets.card import DeviceCard, device_sort_key
 from widgets.chip import StatusChip
 from widgets.connection import ConnectionBlock
@@ -64,6 +69,67 @@ QWIDGETSIZE_MAX = 16777215
 # Saved credentials live next to this file, whatever the working directory.
 CONFIG_PATH = Path(__file__).resolve().parent / "config.ini"
 
+DEFAULT_DISCOVERY_WORKERS = 50
+DEFAULT_DISCOVERY_TIMEOUT = 1.0
+
+
+@dataclass
+class DiscoverySettings:
+    """Scan scope from the optional [discovery] section of config.ini (t-22)."""
+
+    networks: Optional[List[str]] = None  # None: detect the local networks
+    max_workers: int = DEFAULT_DISCOVERY_WORKERS
+    timeout: float = DEFAULT_DISCOVERY_TIMEOUT
+
+
+def parse_discovery_settings(
+    section: Mapping[str, str],
+) -> Tuple[DiscoverySettings, List[str]]:
+    """Read a [discovery] section; return the settings and any problems.
+
+    Every bad value is reported and replaced by its default.
+    """
+    settings = DiscoverySettings()
+    problems: List[str] = []
+
+    raw = section.get("networks", "").strip()
+    if raw:
+        networks: List[str] = []
+        for part in raw.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            try:
+                networks.append(str(ipaddress.IPv4Network(part, strict=False)))
+            except ValueError:
+                problems.append(f"networks: '{part}' is not an IPv4 network")
+                networks = []
+                break
+        settings.networks = networks or None
+
+    raw = section.get("max_workers", "").strip()
+    if raw:
+        try:
+            workers = int(raw)
+            if not 1 <= workers <= 500:
+                raise ValueError
+            settings.max_workers = workers
+        except ValueError:
+            problems.append("max_workers: use a whole number from 1 to 500")
+
+    raw = section.get("timeout", "").strip()
+    if raw:
+        try:
+            timeout = float(raw)
+            if not 0.1 <= timeout <= 30:
+                raise ValueError
+            settings.timeout = timeout
+        except ValueError:
+            problems.append("timeout: use seconds from 0.1 to 30")
+
+    return settings, problems
+
+
 # Section label for devices that are not assigned to a room.
 UNKNOWN_ROOM = "Unknown room"
 
@@ -73,6 +139,14 @@ def widget_name(widget: QWidget) -> str:
     return str(getattr(widget, "full_name", "") or "")
 
 
+def scan_scope_text(networks: List[str]) -> str:
+    """Progress text naming what a scan covers."""
+    if not networks:
+        return "No local networks to scan."
+    count = len(hosts_to_scan(networks))
+    return f"Scanning {count} addresses on {', '.join(networks)}…"
+
+
 class DiscoveryThread(QThread):
     """Background thread for network discovery."""
 
@@ -80,9 +154,14 @@ class DiscoveryThread(QThread):
     discovery_done = pyqtSignal(list)  # type: ignore[call-arg]  # (ip, mac)
     discovery_failed = pyqtSignal(str)  # type: ignore[call-arg]
 
-    def __init__(self, parent: Optional[QObject] = None) -> None:
+    def __init__(
+        self,
+        settings: Optional[DiscoverySettings] = None,
+        parent: Optional[QObject] = None,
+    ) -> None:
         super().__init__(parent)
         self._stop = threading.Event()
+        self._settings = settings or DiscoverySettings()
 
     def request_stop(self) -> None:
         """Ask the scan to stop; it ends cooperatively, never forcibly."""
@@ -94,7 +173,12 @@ class DiscoveryThread(QThread):
     def run(self):
         """Run the discovery process."""
         try:
-            hubs = discover_dirigera_hubs(should_stop=self._stop.is_set)
+            hubs = discover_dirigera_hubs(
+                max_workers=self._settings.max_workers,
+                timeout_per_ip=self._settings.timeout,
+                should_stop=self._stop.is_set,
+                networks=self._settings.networks,
+            )
             self.discovery_done.emit(hubs)
         except Exception as e:  # thread boundary: an escape would be lost
             log.exception("Hub discovery failed")
@@ -326,6 +410,7 @@ class DirigeraDashboard(QMainWindow):
         A missing file is normal. An unreadable or malformed one is reported
         in the status caption and leaves the fields empty.
         """
+        self.discovery_settings = DiscoverySettings()
         if not CONFIG_PATH.exists():
             return
         config = configparser.ConfigParser()
@@ -334,6 +419,17 @@ class DirigeraDashboard(QMainWindow):
         except (configparser.Error, OSError, UnicodeDecodeError) as error:
             self.set_status_text(f"Could not read config.ini: {error}", "danger")
             return
+        if "discovery" in config:
+            self.discovery_settings, problems = parse_discovery_settings(
+                config["discovery"]
+            )
+            if problems:
+                self.set_status_text(
+                    "Ignored invalid [discovery] settings in config.ini ("
+                    + "; ".join(problems)
+                    + "); using defaults",
+                    "danger",
+                )
         if "hub" not in config:
             return
         hub = config["hub"]
@@ -656,16 +752,25 @@ class DirigeraDashboard(QMainWindow):
         self.connection_block.discover_button.setEnabled(False)
         self.connection_block.set_message("")
 
+        settings = self.discovery_settings
+        networks = (
+            settings.networks if settings.networks is not None else get_local_networks()
+        )
+        # Resolved here so the scan and the text naming it share one scope.
+        scan_settings = DiscoverySettings(
+            networks, settings.max_workers, settings.timeout
+        )
+
         # Create and configure the progress dialog
         self.progress_dialog = QProgressDialog(
-            "Scanning local network for Dirigera hubs...", "Cancel", 0, 0, self
+            scan_scope_text(networks), "Cancel", 0, 0, self
         )
         self.progress_dialog.setWindowTitle("Discovering Hubs")
         self.progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
         self.progress_dialog.setMinimumDuration(0)
 
         # Create and start the discovery thread
-        self.discovery_thread = DiscoveryThread()
+        self.discovery_thread = DiscoveryThread(scan_settings)
         self.discovery_thread.discovery_done.connect(self.on_discovery_finished)
         self.discovery_thread.discovery_failed.connect(self.on_discovery_failed)
 

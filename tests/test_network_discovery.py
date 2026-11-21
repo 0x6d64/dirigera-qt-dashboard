@@ -80,8 +80,8 @@ def test_api_probe_network_error_is_not_a_hub(
 def _scan(
     monkeypatch: pytest.MonkeyPatch, port: bool, api: bool, mac: str | None
 ) -> Any:
-    monkeypatch.setattr(nd, "check_dirigera_port", lambda ip: port)
-    monkeypatch.setattr(nd, "looks_like_dirigera_api", lambda ip: api)
+    monkeypatch.setattr(nd, "check_dirigera_port", lambda ip, timeout=1.0: port)
+    monkeypatch.setattr(nd, "looks_like_dirigera_api", lambda ip, timeout=1.0: api)
     monkeypatch.setattr(nd, "get_mac_address", lambda ip: mac)
     return nd.scan_ip("10.0.0.2")
 
@@ -105,7 +105,7 @@ def test_scan_oui_is_only_a_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_discover_collects_hits(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(nd, "get_local_networks", lambda: ["192.168.1.0/30"])
     monkeypatch.setattr(
-        nd, "scan_ip", lambda ip: (ip, None) if ip.endswith(".2") else None
+        nd, "scan_ip", lambda ip, timeout=1.0: (ip, None) if ip.endswith(".2") else None
     )
     assert nd.discover_dirigera_hubs() == [("192.168.1.2", None)]
 
@@ -173,7 +173,7 @@ def test_should_stop_ends_the_scan_early(monkeypatch: pytest.MonkeyPatch) -> Non
     scanned: list[str] = []
     stop = threading.Event()
 
-    def slow_scan(ip: str) -> None:
+    def slow_scan(ip: str, timeout: float = 1.0) -> None:
         scanned.append(ip)
         if len(scanned) >= 10:
             stop.set()
@@ -192,7 +192,7 @@ def test_one_failing_probe_does_not_abort_the_scan(
 ) -> None:
     monkeypatch.setattr(nd, "get_local_networks", lambda: ["10.9.0.0/29"])
 
-    def scan(ip: str) -> tuple[str, str | None] | None:
+    def scan(ip: str, timeout: float = 1.0) -> tuple[str, str | None] | None:
         if ip == "10.9.0.2":
             raise RuntimeError("probe blew up")
         return (ip, None) if ip in ("10.9.0.1", "10.9.0.3") else None
@@ -200,3 +200,79 @@ def test_one_failing_probe_does_not_abort_the_scan(
     monkeypatch.setattr(nd, "scan_ip", scan)
     result = nd.discover_dirigera_hubs(max_workers=2)
     assert sorted(result) == [("10.9.0.1", None), ("10.9.0.3", None)]
+
+
+def _mock_ifaces(monkeypatch: pytest.MonkeyPatch, ifaces: dict[str, Any]) -> None:
+    monkeypatch.setattr(nd.netifaces, "interfaces", lambda: list(ifaces))
+    monkeypatch.setattr(nd.netifaces, "ifaddresses", lambda name: ifaces[name])
+
+
+def test_get_local_networks_skips_link_local(monkeypatch: pytest.MonkeyPatch) -> None:
+    inet = nd.netifaces.AF_INET
+    _mock_ifaces(
+        monkeypatch,
+        {
+            "eth0": {inet: [{"addr": "169.254.3.4", "netmask": "255.255.0.0"}]},
+            "eth1": {inet: [{"addr": "192.168.1.2", "netmask": "255.255.255.0"}]},
+        },
+    )
+    assert nd.get_local_networks() == ["192.168.1.0/24"]
+
+
+def test_get_local_networks_skips_single_host_networks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    inet = nd.netifaces.AF_INET
+    _mock_ifaces(
+        monkeypatch,
+        {
+            "ppp0": {inet: [{"addr": "10.8.0.2", "netmask": "255.255.255.255"}]},
+            "eth1": {inet: [{"addr": "192.168.1.2", "netmask": "255.255.255.0"}]},
+        },
+    )
+    assert nd.get_local_networks() == ["192.168.1.0/24"]
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["docker0", "veth1a2b", "vboxnet0", "vmnet8", "tun0", "tap0", "wg0", "utun3"],
+)
+def test_get_local_networks_skips_virtual_interfaces(
+    monkeypatch: pytest.MonkeyPatch, name: str
+) -> None:
+    inet = nd.netifaces.AF_INET
+    _mock_ifaces(
+        monkeypatch,
+        {
+            name: {inet: [{"addr": "172.17.0.1", "netmask": "255.255.0.0"}]},
+            "eth0": {inet: [{"addr": "192.168.1.2", "netmask": "255.255.255.0"}]},
+        },
+    )
+    assert nd.get_local_networks() == ["192.168.1.0/24"]
+
+
+def test_windows_guid_names_are_not_judged_by_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    inet = nd.netifaces.AF_INET
+    guid = "{7B2E1D40-0000-4C1A-9F00-AABBCCDDEEFF}"
+    _mock_ifaces(
+        monkeypatch,
+        {guid: {inet: [{"addr": "192.168.7.2", "netmask": "255.255.255.0"}]}},
+    )
+    assert nd.get_local_networks() == ["192.168.7.0/24"]
+
+
+def test_explicit_networks_override_detection(monkeypatch: pytest.MonkeyPatch) -> None:
+    def detect() -> list[str]:
+        raise AssertionError("auto-detection must not run")
+
+    monkeypatch.setattr(nd, "get_local_networks", detect)
+    seen: list[tuple[str, float]] = []
+
+    def scan(ip: str, timeout: float = 1.0) -> None:
+        seen.append((ip, timeout))
+
+    monkeypatch.setattr(nd, "scan_ip", scan)
+    nd.discover_dirigera_hubs(timeout_per_ip=0.25, networks=["10.5.0.0/30"])
+    assert sorted(seen) == [("10.5.0.1", 0.25), ("10.5.0.2", 0.25)]

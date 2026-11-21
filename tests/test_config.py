@@ -89,3 +89,66 @@ def test_found_regardless_of_working_directory(
 def test_config_path_is_next_to_dashboard() -> None:
     expected = Path(dashboard.__file__).resolve().parent / "config.ini"
     assert dashboard.CONFIG_PATH == expected
+
+
+def test_discovery_section_sets_the_scan_scope(window: Any, tmp_path: Path) -> None:
+    write_config(
+        tmp_path / "config.ini",
+        "[discovery]\nnetworks = 10.0.0.0/24, 192.168.5.7/24\n"
+        "max_workers = 20\ntimeout = 0.5\n",
+    )
+    window.load_config()
+    settings = window.discovery_settings
+    assert settings.networks == ["10.0.0.0/24", "192.168.5.0/24"]
+    assert settings.max_workers == 20
+    assert settings.timeout == 0.5
+    assert window.status_label.property("tone") != "danger"
+
+
+def test_discovery_defaults_without_a_section(window: Any, tmp_path: Path) -> None:
+    write_config(tmp_path / "config.ini", "[hub]\nip_address = 10.0.0.5\n")
+    window.load_config()
+    settings = window.discovery_settings
+    assert settings.networks is None
+    assert settings.max_workers == dashboard.DEFAULT_DISCOVERY_WORKERS
+    assert settings.timeout == dashboard.DEFAULT_DISCOVERY_TIMEOUT
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "networks = not-a-network",
+        "networks = 10.0.0.0/24, junk",
+        "max_workers = many",
+        "max_workers = 0",
+        "timeout = soon",
+        "timeout = -1",
+    ],
+)
+def test_invalid_discovery_values_fall_back_with_a_message(
+    window: Any,
+    tmp_path: Path,
+    dialogs: list[tuple[str, str]],
+    body: str,
+) -> None:
+    write_config(tmp_path / "config.ini", f"[discovery]\n{body}\n")
+    window.load_config()
+    settings = window.discovery_settings
+    assert settings.networks is None
+    assert settings.max_workers == dashboard.DEFAULT_DISCOVERY_WORKERS
+    assert settings.timeout == dashboard.DEFAULT_DISCOVERY_TIMEOUT
+    assert window.status_label.property("tone") == "danger"
+    assert "[discovery]" in window.status_label.text()
+    assert dialogs == []
+
+
+def test_one_bad_discovery_value_keeps_the_good_ones(
+    window: Any, tmp_path: Path
+) -> None:
+    write_config(
+        tmp_path / "config.ini", "[discovery]\nmax_workers = 12\ntimeout = soon\n"
+    )
+    window.load_config()
+    assert window.discovery_settings.max_workers == 12
+    assert window.discovery_settings.timeout == dashboard.DEFAULT_DISCOVERY_TIMEOUT
+    assert window.status_label.property("tone") == "danger"

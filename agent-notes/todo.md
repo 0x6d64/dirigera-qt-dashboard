@@ -42,8 +42,8 @@ take the next free number (see `AGENTS.md`).
 
 - [x] **t-20 [B·M]** Make discovery less dependent on MAC OUI guessing — `54:EF:44` is generic Espressif and the list can go stale *(network_discovery.py:13)*. Prefer an API probe or mDNS/SSDP, keeping OUI as a fallback.
 - [x] **t-21 [B·S]** Fix large-subnet scanning: for networks > 512 addresses only the first /24 is scanned *(network_discovery.py:108–111)*. Iterate all /24s with a total cap.
-- [ ] **t-22 [C·S]** Make worker count and per-IP timeout configurable, and add a user-visible scan scope.
-- [ ] **t-23 [C·S]** Avoid scanning VPN/virtual interfaces, or let the user pick the interface.
+- [x] **t-22 [C·S]** Make worker count and per-IP timeout configurable, and add a user-visible scan scope.
+- [x] **t-23 [C·S]** Avoid scanning VPN/virtual interfaces, or let the user pick the interface.
 - [x] **t-24 [C·S]** Deduplicate scanned networks — multiple interfaces can report the same subnet and double the scan time *(network_discovery.py:24–41)*.
 - [x] **t-25 [B·S]** Fix discovery UX: the progress dialog's Cancel button does nothing, and clicking Discover again spawns a second concurrent scan *(dashboard.py:237–253)*. Disable the button during the scan and wire Cancel to stop the thread. *(2026-11-21 review: Cancel now calls `QThread.terminate()`, which is unsafe for a thread running Python and leaves the scan's pool threads running — replace it with a cooperative stop flag checked by `discover_dirigera_hubs`)*
 
