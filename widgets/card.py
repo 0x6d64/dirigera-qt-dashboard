@@ -17,6 +17,7 @@ Follows design-doc.md §8.1 (header, footer and error handling live in
   lights -> outlets -> blinds -> air/environment -> sensors -> remotes.
 """
 
+import functools
 from datetime import datetime
 from typing import Any, Callable, Optional, Tuple, override
 
@@ -80,6 +81,11 @@ READINGS_PER_ROW = 3
 
 # Battery level at or below which the chip warns (design-doc.md §14 item 4).
 LOW_BATTERY_PERCENT = 20
+
+
+def _const(value: Any, *_ignored: Any) -> Any:
+    """Return `value`, whatever the signal passes (binds a button's action)."""
+    return value
 
 
 def _bound_to_kelvin(bound: int) -> int:
@@ -190,29 +196,46 @@ class DeviceCard(CardBase):
         self._update_status_chip()
         self._elide_name()
 
+    def _connect_callback(
+        self,
+        signal: Any,
+        callback: Optional[Callable[..., None]],
+        convert: Optional[Callable[[Any], Any]] = None,
+    ) -> None:
+        """Call `callback(card, value)` when `signal` fires, if there is a callback.
+
+        `convert` maps the signal's argument to the value passed on.
+        """
+        if callback is None:
+            return
+        signal.connect(
+            lambda value, cb=callback: cb(
+                self, convert(value) if convert is not None else value
+            )
+        )
+
+    def _power_row(self) -> None:
+        """A "Power" label with an on/off switch, shared by lights and outlets."""
+        switch_row = QHBoxLayout()
+        switch_row.setContentsMargins(0, 0, 0, 0)
+        switch_label = QLabel("Power")
+        switch_label.setStyleSheet(label_style(theme.TEXT2, theme.FONT_LABEL))
+        switch_row.addWidget(switch_label)
+        switch_row.addStretch()
+
+        is_on = bool(getattr(self.device.attributes, "is_on", False))
+        self.switch = ToggleSwitch(accessible_name=f"{self.full_name} power")
+        self.switch.setChecked(is_on)
+        self._connect_callback(self.switch.toggled, self._on_toggle)
+        switch_row.addWidget(self.switch)
+        self._controls.append(self.switch)
+        self.control_zone.addLayout(switch_row)
+
     def _build_controls(self) -> None:
         dtype = getattr(self.device, "device_type", "unknown")
 
         if dtype == "light":
-            # On/Off switch row
-            switch_row = QHBoxLayout()
-            switch_row.setContentsMargins(0, 0, 0, 0)
-            switch_label = QLabel("Power")
-            switch_label.setStyleSheet(label_style(theme.TEXT2, theme.FONT_LABEL))
-            switch_row.addWidget(switch_label)
-            switch_row.addStretch()
-
-            is_on = bool(getattr(self.device.attributes, "is_on", False))
-            self.switch = ToggleSwitch(accessible_name=f"{self.full_name} power")
-            self.switch.setChecked(is_on)
-            if self._on_toggle is not None:
-                cb = self._on_toggle
-                self.switch.toggled.connect(
-                    lambda chk, callback=cb: callback(self, chk)
-                )
-            switch_row.addWidget(self.switch)
-            self._controls.append(self.switch)
-            self.control_zone.addLayout(switch_row)
+            self._power_row()
 
             # Brightness slider, only for dimmable lights. `light_level` is an
             # Optional pydantic field, so hasattr() is always true; a light
@@ -226,11 +249,9 @@ class DeviceCard(CardBase):
                     initial_value=lvl,
                     unit="%",
                 )
-                if self._on_brightness is not None:
-                    cb_bright = self._on_brightness
-                    self.brightness_slider.committed.connect(
-                        lambda val, callback=cb_bright: callback(self, val)
-                    )
+                self._connect_callback(
+                    self.brightness_slider.committed, self._on_brightness
+                )
                 self.brightness_slider.setAccessibleName(f"{self.full_name} brightness")
                 self._controls.append(self.brightness_slider)
                 self.control_zone.addWidget(self.brightness_slider)
@@ -247,11 +268,9 @@ class DeviceCard(CardBase):
                     unit="K",
                     gradient=(theme.TEMP_WARM, theme.TEMP_COOL),
                 )
-                if self._on_temperature is not None:
-                    cb_temp = self._on_temperature
-                    self.temperature_slider.committed.connect(
-                        lambda val, callback=cb_temp: callback(self, val)
-                    )
+                self._connect_callback(
+                    self.temperature_slider.committed, self._on_temperature
+                )
                 self.temperature_slider.setAccessibleName(
                     f"{self.full_name} colour temperature"
                 )
@@ -262,25 +281,7 @@ class DeviceCard(CardBase):
                 self._build_colour_controls()
 
         elif dtype == "outlet":
-            # Power toggle switch
-            switch_row = QHBoxLayout()
-            switch_row.setContentsMargins(0, 0, 0, 0)
-            switch_label = QLabel("Power")
-            switch_label.setStyleSheet(label_style(theme.TEXT2, theme.FONT_LABEL))
-            switch_row.addWidget(switch_label)
-            switch_row.addStretch()
-
-            is_on = bool(getattr(self.device.attributes, "is_on", False))
-            self.switch = ToggleSwitch(accessible_name=f"{self.full_name} power")
-            self.switch.setChecked(is_on)
-            if self._on_toggle is not None:
-                cb_toggle = self._on_toggle
-                self.switch.toggled.connect(
-                    lambda chk, callback=cb_toggle: callback(self, chk)
-                )
-            switch_row.addWidget(self.switch)
-            self._controls.append(self.switch)
-            self.control_zone.addLayout(switch_row)
+            self._power_row()
 
         elif dtype == "blinds":
             # Position slider
@@ -292,11 +293,7 @@ class DeviceCard(CardBase):
                 initial_value=pos,
                 unit="%",
             )
-            if self._on_blind_position is not None:
-                cb_pos = self._on_blind_position
-                self.blind_slider.committed.connect(
-                    lambda val, callback=cb_pos: callback(self, val)
-                )
+            self._connect_callback(self.blind_slider.committed, self._on_blind_position)
             self.blind_slider.setAccessibleName(f"{self.full_name} position")
             self._controls.append(self.blind_slider)
             self.control_zone.addWidget(self.blind_slider)
@@ -318,11 +315,11 @@ class DeviceCard(CardBase):
                     btn = QPushButton(action)
                     btn.setFixedHeight(28)
                     btn.setAccessibleName(f"{self.full_name} {action.lower()}")
-                    if self._on_blind_state is not None:
-                        cb_state = self._on_blind_state
-                        btn.clicked.connect(
-                            lambda _, a=action, callback=cb_state: callback(self, a)
-                        )
+                    self._connect_callback(
+                        btn.clicked,
+                        self._on_blind_state,
+                        functools.partial(_const, action),
+                    )
                     btn_row.addWidget(btn)
                     self._controls.append(btn)
                 self.control_zone.addLayout(btn_row)
@@ -409,11 +406,11 @@ class DeviceCard(CardBase):
         box_layout.addWidget(fan_label)
         self.fan_speed = SegmentedControl(list(FAN_SPEED_LABELS))
         self.fan_speed.setAccessibleName(f"{self.full_name} fan speed")
-        if self._on_fan_speed is not None:
-            cb_fan = self._on_fan_speed
-            self.fan_speed.current_changed.connect(
-                lambda index, callback=cb_fan: callback(self, FAN_MOTOR_STATES[index])
-            )
+        self._connect_callback(
+            self.fan_speed.current_changed,
+            self._on_fan_speed,
+            lambda index: FAN_MOTOR_STATES[index],
+        )
         box_layout.addWidget(self.fan_speed)
         self._controls.append(self.fan_speed)
         self.control_zone.addWidget(self._fan_box)
