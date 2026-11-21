@@ -46,9 +46,9 @@ during implementation. Each entry cites its origin.
   smoke tests (`QT_QPA_PLATFORM=offscreen`, stub client subclassing
   `AbstractSmartHomeHub`). *(established during t-1…t-10 execution)*
 - **req-10** — Discovery must cover all local subnets, not just the first
-  /24 of a large network. *(t-21, open)*
+  /24 of a large network. *(t-21, implemented)*
 - **req-11** — Only one discovery scan may run at a time, and the progress
-  dialog's Cancel button must actually stop the scan. *(t-25, open)*
+  dialog's Cancel button must actually stop the scan. *(t-25, implemented)*
 - **req-12** — Token generation must use the auth flow that actually exists
   in the installed `dirigera` version (currently the `dirigera.hub.auth`
   challenge flow). *(t-11, implemented)*

@@ -272,6 +272,14 @@ Mark `req-8` implemented, check off t-27 and t-28. Gates green.
 
 ### Plan: discovery cancel, large subnets, dedupe (t-25, t-21, t-24)
 
+> **Executed 2026-11-21** on branch `fix/discovery`: commit 1 "scan every /24
+> of large networks once" (`cb9ccee`), commit 2 "cooperative discovery cancel"
+> (`9b187e7`), docs and checkboxes in "record discovery fixes". Deviation:
+> `discover_dirigera_hubs` polls with `concurrent.futures.wait(timeout=0.1)`
+> instead of `as_completed`, so `should_stop` is checked even when no probe
+> finishes; `DiscoveryThread.stop_requested()` lets `on_discovery_finished`
+> drop a canceled or closing scan's result.
+
 Goal: Cancel really stops a scan without `QThread.terminate()`, only one scan
 runs at a time, networks larger than /23 are scanned beyond their first /24,
 and duplicate networks are scanned once (`req-10`, `req-11`).
