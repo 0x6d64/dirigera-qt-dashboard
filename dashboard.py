@@ -921,7 +921,7 @@ class DirigeraDashboard(QMainWindow):
         """Group devices into (room name, devices) pairs in display order.
 
         Groups are keyed by room id, so two rooms that share a name stay
-        separate. Sections sort by name case-insensitively (design-doc.md §15
+        separate. Sections sort by name case-insensitively (design-doc.md §14
         item 2: alphabetical), with the id as a stable tie-breaker.
         """
         groups: Dict[str, Tuple[str, List[Any]]] = {}

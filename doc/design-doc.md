@@ -3,13 +3,14 @@
 Version 1.0 · Scope: the desktop window only, light theme only.
 
 This document is the single reference for the dashboard's look, layout, components
-and behaviour. An implementer should be able to build from it without the earlier
-working documents. It consolidates `visual-language-identity.md`, `look-and-feel.md`
-and `qt-device-widget-mapping.md`. Where this document and those disagree, this one
-wins and the disagreement is a bug to report.
+and behaviour. Facts about the `dirigera` library are in `dirigera-api.md`, Qt
+pitfalls in `qt-gotchas.md`, and the exact token values in `theme.py`.
 
-It changes no project file and defines no `req-` or `t-` IDs. Existing IDs are cited
-from `doc/reqs.md` and `agent-notes/todo.md`.
+It defines no `req-` or `t-` IDs; it cites them from `doc/reqs.md` and
+`agent-notes/todo.md`. It is the target design: where the code differs, the gap is
+tracked in the "Design conformance gaps" section of `agent-notes/todo.md`, and the
+document is not wrong. Where this document and `theme.py` disagree on a value, the
+code wins and this document is the bug.
 
 ## 0. How to read this document
 
@@ -18,17 +19,16 @@ Tags mark the basis of non-obvious statements:
 | Tag | Meaning |
 | --- | --- |
 | `[decided]` | Chosen by the owner |
-| `[verified]` | Checked in a PyQt 6.12.1 offscreen render or a computed contrast ratio |
+| `[verified]` | Checked in a PyQt 6.12.1 offscreen render, a computed contrast ratio, or a test in `tests/` |
 | `[lib]` | Taken from the installed `dirigera` 1.6.1 source or its README |
+| `[known]` | General Qt knowledge, not re-tested |
 | `[proposed]` | Designer's proposal, open to change |
-| `[open]` | Needs a decision or data before it can be finalised |
 
-Known limits:
+Anything that still needs a decision or data is listed in section 14, not inline;
+inline text points there.
 
-1. The verified renders used Linux with DejaVu Sans. The target is Windows 10/11 with
-   Segoe UI. Re-check layout and truncation on Windows before release.
-2. No live hub data was used. Device values in the mockup are invented.
-3. The app name is a placeholder ("Home") until decided (section 15).
+Known limit: the verified renders used Linux with DejaVu Sans. The target is
+Windows 10/11 with Segoe UI (section 14, item 11).
 
 ## 1. Purpose and principles
 
@@ -60,7 +60,7 @@ stock imagery, no animation for its own sake.
 2. "Dirigera" is an IKEA product name. Use it only descriptively in running text. The
    `dirigera` library describes itself as an unofficial client `[lib]`. Show an
    "unofficial" notice in About and the README. `[proposed]`
-3. The application name is `[open]` (section 15). Check it is free to use before
+3. The application name is undecided (section 14, item 1). Check it is free to use before
    creating icons.
 
 ## 3. Information architecture
@@ -128,47 +128,36 @@ Base unit 4 px. Use only these values: 4, 8, 12, 16, 20, 24. `[proposed]`
 
 ### 5.1 Tokens
 
-Light theme only. Values were contrast-checked `[verified]`.
+Light theme only. Values live in `theme.py` (one constant per token, upper-cased:
+`ACCENT`, `TEXT2`, ...); this table gives the role of each.
 
-| # | Token | Value | Use |
-| --- | --- | --- | --- |
-| 1 | `window` | `#F4F5F7` | Window background |
-| 2 | `surface` | `#FFFFFF` | Cards, header, rail-free content |
-| 3 | `sunken` | `#ECEEF1` | Slider tracks, offline cards, search field, hover |
-| 4 | `border` | `#D5D9E0` | Card and header outlines (decorative, not text) |
-| 5 | `text` | `#1A1D23` | Primary text |
-| 6 | `text-2` | `#505968` | Captions, units, types, labels |
-| 7 | `accent` | `#1F5FD1` | On-state, primary action, focus ring, slider fill |
-| 8 | `accent-hover` | `#1A50B3` | Primary button hover |
-| 9 | `on-accent` | `#FFFFFF` | Text on accent |
-| 10 | `accent-soft` | `#E6EEFC` | Selected segment, selected room |
-| 11 | `off` | `#7C8696` | Switch track when off |
-| 12 | `ok` | `#17753A` | Ok chip text |
-| 13 | `ok-bg` | `#E3F4EA` | Ok chip background |
-| 14 | `warn` | `#8F4A00` | Warning chip text |
-| 15 | `warn-bg` | `#FBE9D7` | Warning chip background |
-| 16 | `danger` | `#B3261E` | Danger chip text, error text |
-| 17 | `danger-bg` | `#FBE4E2` | Danger chip background |
+| # | Token | Use |
+| --- | --- | --- |
+| 1 | `window` | Window background |
+| 2 | `surface` | Cards, header, content areas |
+| 3 | `sunken` | Slider tracks, offline cards, search field, hover |
+| 4 | `border` | Card and header outlines (decorative, not text) |
+| 5 | `text` | Primary text |
+| 6 | `text-2` | Captions, units, types, labels |
+| 7 | `accent` | On-state, primary action, focus ring, slider fill |
+| 8 | `accent-hover` | Primary button hover |
+| 9 | `on-accent` | Text on accent |
+| 10 | `accent-soft` | Selected segment, selected room |
+| 11 | `off` | Switch track when off |
+| 12 | `ok` | Ok chip text |
+| 13 | `ok-bg` | Ok chip background |
+| 14 | `warn` | Warning chip text |
+| 15 | `warn-bg` | Warning chip background |
+| 16 | `danger` | Danger chip text, error text |
+| 17 | `danger-bg` | Danger chip background |
 
 ### 5.2 Contrast requirements
 
 Every text pairing must meet 4.5:1. Non-text indicators (switch track, focus ring,
-slider handle) must meet 3:1 against their background. `[verified]`
+slider handle) must meet 3:1 against their background. `[verified]` (test)
 
-| # | Pairing | Ratio |
-| --- | --- | --- |
-| 1 | `text` on `window` | 15.5 |
-| 2 | `text` on `surface` | 16.9 |
-| 3 | `text-2` on `surface` | 7.1 |
-| 4 | `on-accent` on `accent` | 5.8 |
-| 5 | `accent` on `surface` (non-text) | 5.8 |
-| 6 | `off` on `surface` (non-text) | 3.7 |
-| 7 | `ok` on `ok-bg` | 5.1 |
-| 8 | `warn` on `warn-bg` | 5.6 |
-| 9 | `danger` on `danger-bg` | 5.4 |
-| 10 | `text-2` on `sunken` | 6.1 |
-
-Add a test that asserts these thresholds if the palette changes (`req-9`).
+The pairings are listed in `tests/test_theme_contrast.py`, which asserts both
+thresholds on every run. Add a pairing there when a new token is used.
 
 ### 5.3 Colour rules
 
@@ -185,10 +174,10 @@ Add a test that asserts these thresholds if the palette changes (`req-9`).
 ### 6.1 Typeface
 
 1. Windows: `Segoe UI Variable`, falling back to `Segoe UI`. `[proposed]` Availability of
-   the Variable face is `[open]`; detect it with `QFontDatabase.families()` at start-up.
+   the Variable face is unchecked (section 14, item 11).
 2. Other platforms: system UI sans-serif. `[proposed]`
 3. Numeric values should use tabular figures where available so changing values do not
-   shift layout. Whether Qt applies this on Windows is `[open]`; if not, give numeric
+   shift layout. Whether Qt applies this on Windows is unchecked (section 14, item 11); if not, give numeric
    labels a fixed minimum width.
 
 ### 6.2 Scale
@@ -218,7 +207,7 @@ Rules:
 | --- | --- | --- |
 | 1 | Card | 10 px |
 | 2 | Button, search field, segment group | 6 px |
-| 3 | Chip | Fully rounded (9 px for a 18 px chip) |
+| 3 | Chip | Fully rounded (half the 20 px chip height; `theme.RADIUS_CHIP`) |
 | 4 | Switch | Fully rounded |
 | 5 | Slider track and thumb | Fully rounded |
 
@@ -230,14 +219,15 @@ No shadows, no elevation. Separation is by background (`surface` on `window`) an
 ### 7.3 Icons
 
 1. Monoline, 24 px grid, 1.5 px stroke, round caps and joins. `[proposed]`
-2. Rendered from SVG strings in code via `QtSvg` (available `[verified]`), recoloured
+2. Rendered from SVG strings in code (`widgets/icons.py`) via `QtSvg`, recoloured
    by substituting `currentColor` with the token.
 3. Required set: one per device category, status (ok, warn, danger, offline, moving,
    battery 0 to 4), actions (scene play, undo, refresh, settings), and a generic scene
    glyph.
 4. Scene icons: the hub has 38 values `[lib]`. Map common ones; use the generic glyph
    for the rest in version 1.
-5. Licence of any icon set used must allow redistribution in a desktop app. `[open]`
+5. Licence of any icon set used must allow redistribution in a desktop app
+   (section 14, item 6).
 
 ## 8. Components
 
@@ -270,7 +260,7 @@ Rules:
 
 1. A card is not clickable as a whole; only its controls are. `[proposed]`
 2. Device name never wraps. If it does not fit, truncate with an ellipsis and show the
-   full name in a tooltip. `[verified]` in the failure case (section 14, item 3).
+   full name in a tooltip. `[proposed]`; check with Windows fonts (section 14, item 11).
 3. The card's order within its room is type, then name, using the order: lights,
    outlets, blinds, air and environment, sensors, remotes. A stable order prevents
    layout shifts on refresh. `[proposed]`
@@ -301,11 +291,8 @@ Variants:
 3. Thumb moves over 120 ms, out-cubic easing. `[verified]`
 4. Focus: 2 px accent ring, inset. `[verified]`
 5. Accessible name set on each instance, for example "Bookshelf power". `[proposed]`
-6. Implemented as a custom `QAbstractButton` subclass with a thumb property
-   (appendix A of `qt-device-widget-mapping.md`).
-
-Implementation note: do not name the animated property `pos`; it collides with
-`QWidget.pos` `[verified]`.
+6. Implemented as a custom `QAbstractButton` subclass with a `thumb` property
+   (`widgets/switch.py`; property naming in `qt-gotchas.md`).
 
 ### 8.4 Slider
 
@@ -316,13 +303,12 @@ Implementation note: do not name the animated property `pos`; it collides with
 3. Slider minimum height 24 px so the thumb is not clipped. `[verified]`
 4. Value on the right in a fixed-width column, right aligned, body size. `[verified]`
 5. Value updates live while dragging. The command is sent on release or after a short
-   pause (`req-6`). `[proposed]`
+   pause (`req-6`). `[verified]` (test)
 6. Minimum on light brightness is 1 %, not 0 (the library rejects 0) `[lib]`.
 7. Colour-temperature slider: warm-to-cool gradient track. `[proposed]` Not yet rendered
    in the mockup.
-8. Disabled state: track and thumb in muted tones of the enabled colours. Implement by
-   setting colours from a property or a separate rule, not by `QSlider:disabled::sub-page`;
-   that selector painted the whole groove grey in Fusion `[verified]`.
+8. Disabled state: track and thumb in muted tones of the enabled colours (see
+   `qt-gotchas.md`, item 4).
 
 ### 8.5 Metric
 
@@ -372,10 +358,11 @@ Label size, medium weight, `text-2`, sentence case. Placed above each room's car
 2. Anatomy: glyph, name (title), primary button "Activate" aligned right or bottom. `[proposed]`
 3. After activation, the button area shows "Activated" in `ok` text for about two
    seconds, then returns. No modal dialog. `[proposed]`
-4. Undo: appears for the allowed window after activation. Duration is `[open]`;
-   `undo_allowed_duration` has no documented unit `[lib]`.
+4. Undo: appears for the allowed window after activation. Not implemented: the
+   duration is unknown (`undo_allowed_duration` has no documented unit `[lib]`;
+   section 14, item 12).
 5. Automatic (non-user) scenes are hidden by default, shown when "Show automatic scenes"
-   is enabled. `[proposed]`
+   is enabled. `[proposed]` Decision pending (section 14, item 3).
 
 ### 8.11 Energy card
 
@@ -409,7 +396,7 @@ connection block (8.12). `[proposed]`
 ### 9.2 Rooms
 
 Header as in 4.2 with the Rooms segment selected. Content: room sections in order, each
-with its label and card grid. Section order is `[open]`. `[verified]`
+with its label and card grid. Sections are ordered alphabetically (section 14, item 2). `[verified]`
 
 ### 9.3 Scenes
 
@@ -419,16 +406,17 @@ grid, with an optional "Show automatic scenes" toggle above the grid. `[proposed
 ### 9.4 Energy
 
 Same header with the Energy segment selected. Content: energy cards grouped by room.
-Whether totals are shown per home or per room is `[open]`. `[proposed]`
+Whether totals are shown per home or per room is undecided (section 14, item 5).
 
 ## 10. Behaviour
 
 ### 10.1 Commands
 
-1. Every command runs off the GUI thread (`req-4`). `[lib]` one shared hub session.
+1. Every command runs off the GUI thread (`req-4`); one shared hub session
+   (`dirigera-api.md`).
 2. Slider commands are coalesced; the latest value wins (`req-6`). `[proposed]`
 3. On failure, the control is resynchronised with the device's real state (`req-3`).
-   `[verified]` in the existing code's approach.
+   `[verified]` (test)
 4. A command in flight shows "Sending…" in the card footer. `[proposed]`
 
 ### 10.2 Refresh
@@ -436,7 +424,7 @@ Whether totals are shown per home or per room is `[open]`. `[proposed]`
 1. Refresh runs in a worker. The Refresh button shows "Refreshing…" and is disabled
    during the run. `[proposed]`
 2. The current view is only rebuilt after all data has been fetched successfully
-   (`req-2`). `[verified]` in the existing code's approach.
+   (`req-2`). `[verified]` (test)
 3. On failure, the last good data stays and the hub chip turns amber (3.2). `[proposed]`
 4. Card order, scroll position and focus are preserved across refresh (`t-19`). `[proposed]`
 
@@ -455,7 +443,7 @@ Whether totals are shown per home or per room is `[open]`. `[proposed]`
 3. Values updating several times a second do not animate. `[proposed]`
 4. Skeletons do not animate. `[proposed]`
 5. Reduced motion: provide an in-app setting; use the OS setting if Qt exposes it on
-   Windows `[open]`.
+   Windows (section 14, item 7).
 
 ### 10.5 Keyboard
 
@@ -475,7 +463,7 @@ Whether totals are shown per home or per room is `[open]`. `[proposed]`
 
 Minimum window size 640 × 480 px. `[proposed]`
 
-Check that slider label and value columns still fit at 150 % scaling on Windows. `[open]`
+Check that slider label and value columns still fit at 150 % scaling on Windows (section 14, item 11).
 
 ## 12. Accessibility
 
@@ -484,7 +472,8 @@ Check that slider label and value columns still fit at 150 % scaling on Windows.
 2. Contrast per section 5.2. `[verified]`
 3. Every interactive control has an accessible name. `[proposed]`
 4. Focus indicator is never removed. `[verified]`
-5. Text scales with the system font size where Qt honours it on Windows `[open]`.
+5. Text scales with the system font size where Qt honours it on Windows (section 14,
+   item 11).
 6. Grayscale screenshots must still show each device's state. `[proposed]`
 
 ## 13. Implementation guidance
@@ -494,28 +483,13 @@ Check that slider label and value columns still fit at 150 % scaling on Windows.
 1. Put every token in one module as data, and generate the stylesheet from it. Do not
    hard-code colours in widgets. `[proposed]`
 2. Theme module, icon module (SVG strings), and widget modules per component. Keep the
-   flat module layout described in `AGENTS.md`. `[lib, AGENTS.md]`
+   flat module layout described in `AGENTS.md`. `[proposed]`
 3. Each card is a widget built from its device type; the mapping from device type to
-   controls follows `qt-device-widget-mapping.md`, section 4. `[proposed]`
+   controls is in `dirigera-api.md`, section 3. `[proposed]`
 
-### 13.2 Qt pitfalls found during prototyping
+### 13.2 Qt pitfalls
 
-Each was reproduced, not guessed `[verified]`:
-
-1. **Property name clash.** A dynamic property named `pos` does not match in QSS
-   selectors, and a `pyqtProperty` named `pos` shadows the `pos()` method. Use prefixed
-   names such as `segpos` and `thumb`.
-2. **Disabled sub-page rule.** `QSlider:disabled::sub-page` paints the whole slider
-   groove, including when enabled, in Fusion. Do not use that selector.
-3. **Handle clipping.** An 18 px slider handle is clipped unless the slider has a
-   minimum height of 24 px.
-4. **Progress bar height.** QSS `height` on `QProgressBar` did not apply in testing; use
-   `setFixedHeight`.
-5. **Dynamic property changes.** After changing a property that drives a QSS selector,
-   call `unpolish` then `polish` on the widget, or the new style does not appear.
-   `[known]`
-6. **Noise.** The offscreen platform prints "does not support propagateSizeHints()".
-   Ignore it when asserting that no real warnings occurred. `[verified]`
+See `qt-gotchas.md`.
 
 ### 13.3 Performance
 
@@ -523,49 +497,40 @@ Each was reproduced, not guessed `[verified]`:
    `[proposed]`
 2. Avoid drop shadows and per-widget effects inside scroll areas. `[known]`
 3. Refresh makes many hub calls, one per device class, each with a 10 s timeout
-   `[lib]`. Measure before optimising `[open]`.
+   `[lib]`. Measure before optimising (section 14, item 13).
 
-## 14. Known issues and mockup defects (resolved)
+## 14. Decisions
 
-1. **Grey slider track.** Cause found by bisecting the stylesheet: the disabled sub-page
-   rule (13.2, item 2). Resolved by removing it. `[verified]`
-2. **Metric misuse.** A door's state was shown as a big number. Resolved: states are
-   words. `[verified]`
-3. **Truncated name.** A long name clipped in a card. Resolved in the mockup by a
-   shorter sample name; the truncation rule in 8.1 governs real data. `[verified]` the
-   clip; truncation behaviour itself `[open]` until tested with Windows fonts.
-
-## 15. Open decisions
-
-| # | Decision | Default proposed |
+| # | Decision | Status |
 | --- | --- | --- |
-| 1 | Application name | Neutral name, checked for availability. Placeholder "Home" in the mockup |
-| 2 | Room section order | Alphabetical |
-| 3 | Show automatic scenes by default | No |
-| 4 | Low-battery threshold | 20 % |
-| 5 | Energy totals per home or per room | Per room, with a home total |
-| 6 | Icon source | Hand-drawn, or a licence-checked set |
-| 7 | Reduced-motion behaviour on Windows | In-app setting |
-| 8 | Colour-temperature gradient rendering | Implement and verify |
-| 9 | Air-quality colour bands | None until a standard is chosen |
-| 10 | Disabled control colours | Muted tones of enabled colours; verify |
+| 1 | Application name | Open. Neutral name, checked for availability; "Home" is a placeholder |
+| 2 | Room section order | Decided and implemented: alphabetical, case-insensitive |
+| 3 | Show automatic scenes by default | Open. Default proposed: no (t-77) |
+| 4 | Low-battery threshold | Decided and implemented: 20 % (`LOW_BATTERY_PERCENT`) |
+| 5 | Energy totals per home or per room | Open. Default proposed: per room, with a home total |
+| 6 | Icon source | Open. Hand-drawn, or a licence-checked set |
+| 7 | Reduced-motion behaviour on Windows | Open. Default proposed: in-app setting |
+| 8 | Colour-temperature gradient rendering | Open. Implement and verify |
+| 9 | Air-quality colour bands | Open. None until a standard is chosen |
+| 10 | Disabled control colours | Open. Muted tones of enabled colours; verify |
+| 11 | Windows verification: Segoe UI Variable, tabular figures, name truncation, 150 % scaling, text scaling | Open. Check on Windows before release |
+| 12 | Scene undo duration | Open. Unit of `undo_allowed_duration` unknown |
+| 13 | Refresh cost | Open. Measure against a real hub before optimising |
 
-## 16. Acceptance checklist
+## 15. Acceptance checklist
 
-1. Every text pairing in 5.2 is at or above 4.5:1; every indicator at or above 3:1.
-2. A grayscale screenshot shows every device's state.
-3. No card has more than one accent item, apart from its own switch on-state.
-4. No raw `device_type`, enum repr, bare ✓, or unexplained icon appears on screen.
-5. Spacing and radii use only the values in sections 4.4 and 7.1.
-6. Long names truncate with a tooltip and never wrap.
-7. Every control is reachable by keyboard, with a visible focus ring.
-8. Offline cards keep their grid position after refresh.
-9. Layout is correct at 1080, 760 and 640 px widths.
-10. Verified on Windows at 100 % and 150 % scaling with Segoe UI, in the light theme.
-11. Contrast assertions run in the test suite (`req-9`).
+Items marked A are asserted by tests in `tests/`; M items are checked by hand.
 
-## 17. Change log
-
-| Version | Change |
-| --- | --- |
-| 1.0 | First consolidated design document from the visual language, look-and-feel and widget mapping documents |
+1. A: every text pairing in section 5.2 is at or above 4.5:1; every indicator at or
+   above 3:1.
+2. M: a grayscale screenshot shows every device's state.
+3. M: no card has more than one accent item, apart from its own switch on-state.
+4. M: no raw `device_type`, enum repr, bare check mark, or unexplained icon appears on
+   screen.
+5. M: spacing and radii use only the values in sections 4.4 and 7.1.
+6. M: long names truncate with a tooltip and never wrap.
+7. M: every control is reachable by keyboard, with a visible focus ring.
+8. M: offline cards keep their grid position after refresh.
+9. M: layout is correct at 1080, 760 and 640 px widths.
+10. M: verified on Windows at 100 % and 150 % scaling with Segoe UI, in the light
+    theme.

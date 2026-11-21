@@ -82,7 +82,7 @@ Found by comparing the implementation with `doc/design-doc.md` in the 2026-11-21
 - [ ] **t-73 [C·S]** Refresh button shows "Refreshing…" while running (§10.2.1); first-load skeleton (§8.13).
 - [ ] **t-74 [C·M]** Keyboard and accessibility: arrow keys in the segmented control, fixed width for metric values, accessible names on blind buttons and sliders, reduced-motion setting (§10.4.5, §10.5, §12.3).
 - [ ] **t-75 [C·S]** Outlets with metering show their energy footer in the Rooms view, as electrical sensors do.
-- [ ] **t-76 [C·S]** Fix the design doc itself: references to the missing `visual-language-identity.md` and `look-and-feel.md`, the 20 px vs 18 px chip height, stale `[open]`/`[verified]` tags (room order, low-battery threshold, window size), missing contrast pairings in §5.2, and "Dirigera" as the app title against §2.2. Add polling to §10.2 (see t-56).
+- [ ] **t-76 [C·S]** Fix the design doc itself. Done on `docs/design-doc-cleanup`: missing-doc references, stale `[open]`/`[verified]` tags, §5.2 pairings (now owned by the contrast test), chip radius vs height. Remaining: window size (1080 vs code 1000, with t-70), "Dirigera" as the app title against §2.2, and polling in §10.2 (see t-56).
 - [ ] **t-77 [C·S]** Decide whether "automatic scenes" exist: the library's `SceneType` has no automatic type, so §8.10.5 and §9.3 cannot be built as written.
 - [ ] **t-78 [C·S]** Verify on a real blind whether level 100 means open or closed; the card labels the slider "Open" and the chip says "Open" at 100 (§8.1).
 

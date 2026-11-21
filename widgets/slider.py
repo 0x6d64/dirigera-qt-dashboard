@@ -12,7 +12,7 @@ Follows design-doc.md §8.4:
   and after a short pause for every other user change — track clicks, arrow
   and Page keys, mouse wheel — so no input path leaves a value unsent.
   Programmatic `set_value()` never fires it.
-- Does NOT use `QSlider:disabled::sub-page` (design-doc.md §13.2 pitfall 2)
+- Does NOT use `QSlider:disabled::sub-page` (doc/qt-gotchas.md item 4)
 """
 
 from typing import override
