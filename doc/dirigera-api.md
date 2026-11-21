@@ -156,7 +156,7 @@ disable controls. Never show the raw `device_type` string; humanize it.
 | 1 | `light` | Switch; brightness 1 to 100; colour temperature (gradient slider); hue and saturation | 0 is rejected by the library, "off" goes through the switch. Colour controls belong in a secondary section. `QColor.hueF()` returns 0 to 1 and -1 for greys; convert to 0 to 360 |
 | 2 | `outlet`, `electricalSensor` | Switch (outlets); power W, voltage V, current A, total kWh, only non-None values | Merge a sensor into the outlet with the same `relation_id`; standalone read-only tile only if no outlet matches |
 | 3 | `blinds` | Position slider (0 to 100); Up, Stop, Down buttons; moving state as text | Do not label the ends "open" or "closed" until checked on a real blind |
-| 4 | `airPurifier` | Fan mode as segments; PM2.5; filter progress; alarm badge; child lock, status light | Not implemented. `motor_state` semantics and units are `[unverified]`; hide until checked |
+| 4 | `airPurifier` | Fan speed (Off, Auto, 1–5 via `motorState`, §5 item 3); PM2.5; filter life and alarm | Child lock is deliberately not shown (owner decision 2026-11-21, `req-21`); status light is not planned. Fan control is t-80, filter health t-85 |
 | 5 | `*Controller` | Name, type, battery, reachability | No press state exists; a live "pressed" flash needs the event shape (section 2.6 item 4) |
 | 6 | `environmentSensor` | Temperature, humidity, PM2.5, VOC index, CO2: non-None only | Min/max PM2.5 in a tooltip. No air-quality colour bands until a standard is chosen |
 | 7 | `motionSensor`, `occupancySensor` | State word ("Motion" / "Clear"); light level on motion sensors | |

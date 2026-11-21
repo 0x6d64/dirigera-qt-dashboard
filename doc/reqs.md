@@ -22,6 +22,12 @@ reused.
   prices (RON). *(user, 2026-11-21; t-84, open)*
 - **req-20** — The air purifier card must show the filter's health and when the
   filter needs changing. *(user, 2026-11-21; t-85, open)*
+- **req-21** — The dashboard must not show or control the air purifier's child
+  lock, although the hub exposes it (`childLock`). *(user, 2026-11-21; decision,
+  no task)*
+- **req-22** — The dashboard can show each room in the colour the user chose in
+  the IKEA app, with a toggle between colour mode and the current black and
+  white (neutral) look. *(user, 2026-11-21; t-86, open)*
 
 ## Inferred
 
