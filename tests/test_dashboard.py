@@ -9,6 +9,7 @@ from conftest import StubHub, StubLight, StubScene, make_device
 from PyQt6.QtWidgets import QApplication
 
 import dashboard
+import workers
 from dashboard import widget_name
 
 Wait = Callable[..., None]
@@ -23,7 +24,7 @@ def hub(monkeypatch: pytest.MonkeyPatch) -> StubHub:
         ],
         scenes=[StubScene("s1", "Evening")],
     )
-    monkeypatch.setattr(dashboard, "Hub", lambda token, ip_address: stub)
+    monkeypatch.setattr(workers, "Hub", lambda token, ip_address: stub)
     return stub
 
 
