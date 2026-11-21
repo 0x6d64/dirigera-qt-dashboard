@@ -87,9 +87,13 @@ def make_device(
     name: str = "Device",
     room: tuple[str, str] | None = ("r1", "Kitchen"),
     reachable: bool = True,
+    adaptive: tuple[str, bool] | None = None,
     **attributes: Any,
 ) -> SimpleNamespace:
-    """A minimal stand-in shaped like a `dirigera` device."""
+    """A minimal stand-in shaped like a `dirigera` device.
+
+    `adaptive` is the top-level `adaptive_profile` state (id, active).
+    """
     attributes.setdefault("custom_name", name)
     return SimpleNamespace(
         id=id_,
@@ -98,7 +102,15 @@ def make_device(
         room=SimpleNamespace(id=room[0], name=room[1]) if room else None,
         capabilities=SimpleNamespace(can_receive=[]),
         attributes=SimpleNamespace(**attributes),
+        adaptive_profile=(
+            SimpleNamespace(id=adaptive[0], active=adaptive[1]) if adaptive else None
+        ),
     )
+
+
+def make_profile(id_: str, name: str | None) -> SimpleNamespace:
+    """A stand-in for the library's `AdaptiveProfile`."""
+    return SimpleNamespace(id=id_, name=name)
 
 
 class StubLight:
@@ -149,6 +161,11 @@ class StubLight:
         self.attributes.color_hue = hue
         self.attributes.color_saturation = saturation
 
+    def activate_adaptive_profile(self, profile_id: str) -> None:
+        self._command()
+        self.sent.append(("profile", profile_id))
+        self.adaptive_profile = SimpleNamespace(id=profile_id, active=True)
+
     def reload(self) -> "StubLight":
         return self
 
@@ -186,6 +203,9 @@ class StubHub:
         self.scenes = scenes or []
         self.fail = False
         self.calls: list[threading.Thread] = []
+        self.profiles: list[Any] = []
+        self.profiles_fail = False
+        self.profile_calls = 0
         # The event listener blocks until stopped; tests call the callbacks
         # kept in `listener` themselves (nothing opens or fires by default).
         self.listener: dict[str, Any] = {}
@@ -204,6 +224,12 @@ class StubHub:
 
     def get_scenes(self) -> list[Any]:
         return self.scenes
+
+    def get_adaptive_profiles(self) -> list[Any]:
+        self.profile_calls += 1
+        if self.profiles_fail:
+            raise RuntimeError("no profiles")
+        return self.profiles
 
     def create_event_listener(self, **callbacks: Any) -> None:
         self.listener = callbacks

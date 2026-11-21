@@ -7,7 +7,7 @@ through a signal, so nothing is lost when a thread ends.
 import json
 import logging
 import threading
-from typing import Any, Callable, Dict, Optional, Protocol
+from typing import Any, Callable, Dict, List, Optional, Protocol
 
 from dirigera import Hub
 from dirigera.devices.scene import Scene
@@ -179,14 +179,25 @@ class CommandWorker(QThread):
 
 
 class RefreshWorker(QThread):
-    """Fetch devices and scenes off the GUI thread (req-2, req-4)."""
+    """Fetch devices and scenes off the GUI thread (req-2, req-4).
 
-    refreshed = pyqtSignal(list, list)  # type: ignore[call-arg]
+    With `with_profiles` it also fetches the adaptive profiles (t-15); that
+    downloads all of `/home`, so only connect, manual and timer refreshes ask.
+    """
+
+    # devices, scenes, adaptive profiles (a list, or None when not fetched)
+    refreshed = pyqtSignal(list, list, object)  # type: ignore[call-arg]
     failed = pyqtSignal(str)  # type: ignore[call-arg]
 
-    def __init__(self, hub: Hub, parent: Optional[QWidget] = None) -> None:
+    def __init__(
+        self,
+        hub: Hub,
+        parent: Optional[QWidget] = None,
+        with_profiles: bool = False,
+    ) -> None:
         super().__init__(parent)
         self._hub = hub
+        self._with_profiles = with_profiles
 
     def run(self) -> None:
         """Fetch both collections and emit them together, or the error text."""
@@ -197,7 +208,14 @@ class RefreshWorker(QThread):
             log.exception("Refreshing from the hub failed")
             self.failed.emit(str(e))
             return
-        self.refreshed.emit(devices, scenes)
+        profiles: Optional[List[Any]] = None
+        if self._with_profiles:
+            # A failed profile fetch never fails the refresh (req-2).
+            try:
+                profiles = list(self._hub.get_adaptive_profiles())
+            except Exception as e:
+                log.warning("Fetching adaptive profiles failed: %s", e)
+        self.refreshed.emit(devices, scenes, profiles)
 
 
 class EventWorker(QThread):

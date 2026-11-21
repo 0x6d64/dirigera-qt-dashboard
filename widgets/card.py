@@ -19,9 +19,12 @@ Follows design-doc.md §8.1 (header, footer and error handling live in
 
 import functools
 from datetime import datetime
-from typing import Any, Callable, Optional, Tuple, override
+from typing import Any, Callable, Optional, Sequence, Tuple, cast, override
 
+from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QStandardItemModel, QWheelEvent
 from PyQt6.QtWidgets import (
+    QComboBox,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -31,6 +34,7 @@ from PyQt6.QtWidgets import (
 )
 
 import theme
+from adaptive import UNKNOWN_PROFILE, active_profile_id, supports_adaptive
 from widgets.cardbase import PENDING_TEXT, CardBase, device_name, label_style
 from widgets.metric import MetricWidget
 from widgets.segments import SegmentedControl
@@ -78,6 +82,14 @@ _READINGS: dict[str, tuple[tuple[str, str, str], ...]] = {
 # `motorState` each one sends (0 off, 1 auto, 10 to 50 speeds 1 to 5).
 FAN_SPEED_LABELS = ("Off", "Auto", "1", "2", "3", "4", "5")
 FAN_MOTOR_STATES = (0, 1, 10, 20, 30, 40, 50)
+
+# Adaptive profile row of a light card (t-15, design-doc.md §8.1).
+ADAPTIVE_LABEL = "Adaptive"
+OFF_LABEL = "Off"
+LEAVE_HINT = "Change brightness or warmth to stop following the profile"
+# Quiet time after the last pick before the profile is sent; read when the
+# timer starts, so tests can change it.
+PROFILE_COMMIT_MS = 300
 
 # Readings shown side by side before the next row starts (§8.5.3).
 READINGS_PER_ROW = 3
@@ -164,6 +176,28 @@ def device_sort_key(device: Any) -> Tuple[int, str]:
     return (weight, name_str.lower())
 
 
+class ProfileBox(QComboBox):
+    """The adaptive profile picker; the mouse wheel never changes it.
+
+    Cards sit in a scroll area: a wheel turn over a card must scroll the
+    page, not switch a light's profile (doc/qt-gotchas.md).
+    """
+
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        # Profile names are user-chosen: never let them widen the card.
+        self.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.setMinimumContentsLength(8)
+
+    @override
+    def wheelEvent(self, e: Optional[QWheelEvent]) -> None:
+        if e is not None:
+            e.ignore()
+
+
 class DeviceCard(CardBase):
     """Calm, structured card representation of a single smart home device."""
 
@@ -177,6 +211,8 @@ class DeviceCard(CardBase):
         on_blind_state: Optional[Callable[["DeviceCard", str], None]] = None,
         on_colour: Optional[Callable[["DeviceCard", float, float], None]] = None,
         on_fan_speed: Optional[Callable[["DeviceCard", int], None]] = None,
+        on_profile: Optional[Callable[["DeviceCard", Optional[str]], None]] = None,
+        profiles: Sequence[Tuple[str, str]] = (),
         parent=None,
     ):
         """Build the card. Every callback receives the card itself, so the
@@ -190,6 +226,11 @@ class DeviceCard(CardBase):
         self._on_colour = on_colour
         self._on_blind_state = on_blind_state
         self._on_fan_speed = on_fan_speed
+        self._on_profile = on_profile
+        self._profile_opts: Tuple[Tuple[str, str], ...] = tuple(profiles)
+        self._profile_timer = QTimer(self)
+        self._profile_timer.setSingleShot(True)
+        self._profile_timer.timeout.connect(self._commit_profile)
 
         self._controls: list[QWidget] = []
         self._readings_box: Optional[QWidget] = None
@@ -290,6 +331,9 @@ class DeviceCard(CardBase):
                 self._controls.append(self.temperature_slider)
                 self.control_zone.addWidget(self.temperature_slider)
 
+            if supports_adaptive(self.device):
+                self._build_profile_row()
+
             if {"colorHue", "colorSaturation"} <= set(_can_receive(self.device)):
                 self._build_colour_controls()
 
@@ -352,6 +396,96 @@ class DeviceCard(CardBase):
                 caption="Active power", initial_value=power, unit="W"
             )
             self.control_zone.addWidget(self.power_metric)
+
+    def _build_profile_row(self) -> None:
+        """An "Adaptive" label with a picker: Off, then the hub's profiles.
+
+        Hidden while the hub has no profiles (t-15). Choosing sends once, after
+        a short quiet time, like the sliders (req-6).
+        """
+        self._profile_row = QWidget()
+        row = QHBoxLayout(self._profile_row)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(theme.SP8)
+        label = QLabel(ADAPTIVE_LABEL)
+        label.setStyleSheet(label_style(theme.TEXT2, theme.FONT_LABEL))
+        row.addWidget(label)
+        self.profile_box = ProfileBox()
+        self.profile_box.setAccessibleName(f"{self.full_name} adaptive profile")
+        self.profile_box.activated.connect(self._on_profile_picked)
+        row.addWidget(self.profile_box, stretch=1)
+        self._controls.append(self.profile_box)
+        self.control_zone.addWidget(self._profile_row)
+        self._fill_profiles()
+
+    def set_profiles(self, options: Sequence[Tuple[str, str]]) -> None:
+        """Adopt the hub's `(id, label)` profile list; sends nothing."""
+        options = tuple(options)
+        if options == self._profile_opts:
+            return
+        self._profile_opts = options
+        self._fill_profiles()
+
+    def _fill_profiles(self) -> None:
+        box = getattr(self, "profile_box", None)
+        if not isinstance(box, ProfileBox):
+            return
+        box.blockSignals(True)
+        box.clear()
+        box.addItem(OFF_LABEL, None)
+        for profile_id, text in self._profile_opts:
+            box.addItem(text, profile_id)
+        box.blockSignals(False)
+        self._profile_row.setVisible(bool(self._profile_opts))
+        self._sync_profile(protect_user=False)
+
+    def _sync_profile(self, protect_user: bool) -> None:
+        """Show the profile the light follows; sends nothing.
+
+        "Off" cannot be chosen while a profile is active: the library has no
+        way to leave adaptive mode (dirigera-api.md §5 item 7), the hint says
+        what ends it. A profile missing from the list shows as unknown.
+        """
+        box = getattr(self, "profile_box", None)
+        if not isinstance(box, ProfileBox):
+            return
+        if protect_user and (self._profile_timer.isActive() or self._popup_open(box)):
+            return
+        active = active_profile_id(self.device)
+        box.blockSignals(True)
+        if box.count() > len(self._profile_opts) + 1:  # a stale unknown item
+            box.removeItem(box.count() - 1)
+        model = cast(QStandardItemModel, box.model())
+        if active is None:
+            box.setCurrentIndex(0)
+        else:
+            index = box.findData(active)
+            if index < 0:
+                box.addItem(UNKNOWN_PROFILE, active)
+                index = box.count() - 1
+                unknown = model.item(index)
+                if unknown is not None:
+                    unknown.setEnabled(False)
+            box.setCurrentIndex(index)
+        off_item = model.item(0)
+        if off_item is not None:
+            off_item.setEnabled(active is None)
+        box.setToolTip("" if active is None else LEAVE_HINT)
+        box.blockSignals(False)
+
+    @staticmethod
+    def _popup_open(box: QComboBox) -> bool:
+        view = box.view()
+        return view is not None and view.isVisible()
+
+    def _on_profile_picked(self, _index: int) -> None:
+        self._profile_timer.start(PROFILE_COMMIT_MS)
+
+    def _commit_profile(self) -> None:
+        """Send the last pick, unless it is what the light already follows."""
+        data = self.profile_box.currentData()
+        if data != active_profile_id(self.device) and self._on_profile is not None:
+            self._on_profile(self, data)
 
     def _build_colour_controls(self) -> None:
         """A "Colour" button that reveals hue and saturation sliders.
@@ -685,6 +819,7 @@ class DeviceCard(CardBase):
             slider.blockSignals(True)
             slider.set_value(round(value * scale))
             slider.blockSignals(False)
+        self._sync_profile(protect_user)
         self._sync_fan_speed()
         self._sync_readings()
         metric = getattr(self, "power_metric", None)

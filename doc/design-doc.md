@@ -283,6 +283,14 @@ Rules:
    outlets, blinds, air and environment, sensors, remotes. A stable order prevents
    layout shifts on refresh. `[proposed]`
 
+Light card: adaptive row (`t-15`). A light that carries an adaptive profile state gets,
+after the warmth slider, a row with the label "Adaptive" and a combo box: "Off", then
+the hub's profile names (profiles are created in the IKEA app only). It shows the profile
+the light follows, or "Unknown profile" when that id is not in the list. While a profile
+is active "Off" is disabled and the tooltip says "Change brightness or warmth to stop
+following the profile". The row is hidden while the hub reports no profiles. The popup
+is not a modal dialog (8.14), and the mouse wheel never changes the box. `[proposed]`
+
 ### 8.2 Status chip
 
 | # | Property | Value |
@@ -475,6 +483,10 @@ e.g. "Home: 120 W now · 18.40 kWh · 28.34 RON" and "45 W now · 1.30 kWh · 2.
    stale caption appears (3.2). A failed manual refresh still reports in a dialog until
    `t-66` replaces it. `[verified]` (test)
 8. A scene activation triggers a background refresh after a short delay (1.5 s). `[verified]` (test)
+9. An adaptive profile change, and a brightness, warmth or colour change on a light that
+   follows a profile, triggers a background refresh after 5 s, when the hub has applied
+   it (`t-15`). Profiles themselves are fetched only on connect, manual refresh and the
+   timer poll. `[verified]` (test)
 
 ### 10.3 Live updates
 
