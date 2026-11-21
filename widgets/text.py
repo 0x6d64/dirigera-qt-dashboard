@@ -89,3 +89,33 @@ def energy_footer(attrs: Any, with_power: bool = False) -> str:
     parts = [format_power(attrs)] if with_power else []
     parts += [format_volts(attrs), format_amps(attrs), format_kwh(attrs)]
     return " · ".join(p for p in parts if p)
+
+
+def _whole(value: Any) -> Optional[int]:
+    """An int that is not a bool, else None (bools are ints in Python)."""
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def filter_text(lifetime: Any, elapsed: Any, alarm: Any) -> Optional[str]:
+    """Air purifier filter health from the hub's minutes, None when unknown.
+
+    `lifetime` and `elapsed` are minutes (259200 = 180 days). The text says
+    how much filter is left and when to change it; an alarm, or no time left,
+    says the filter is used up.
+    """
+    total = _whole(lifetime)
+    used = _whole(elapsed)
+    if total is None or total <= 0 or used is None:
+        return None
+    remaining = max(0, total - used)
+    if alarm is True or remaining == 0:
+        return "Filter used up · change now"
+    percent = round(100 * remaining / total)
+    days = remaining // 1440
+    if days == 0:
+        when = "change today"
+    elif days == 1:
+        when = "change in 1 day"
+    else:
+        when = f"change in {days} days"
+    return f"Filter {percent} % · {when}"

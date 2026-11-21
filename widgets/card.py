@@ -37,7 +37,7 @@ from widgets.chip import StatusChip
 from widgets.metric import MetricWidget
 from widgets.slider import LabeledSlider
 from widgets.switch import ToggleSwitch
-from widgets.text import energy_footer, relative_time, type_label
+from widgets.text import energy_footer, filter_text, relative_time, type_label
 
 # Device category sorting weight per design-doc.md §8.1 rule 3
 # (keys are the library's camelCase `device_type` values; every controller
@@ -596,6 +596,12 @@ class DeviceCard(QFrame):
                 self._set_chip("Dry", "neutral")
             else:
                 self._set_chip("", "neutral")
+        elif dtype == "airPurifier":
+            # Only the filter alarm is a state worth a chip (req-20).
+            if getattr(attrs, "filter_alarm_status", None) is True:
+                self._set_chip("Change filter", "warn")
+            else:
+                self._set_chip("", "neutral")
         else:
             # No readable state (remotes, air quality sensors): no chip
             # rather than an invented one (design-doc.md §1 principle 1).
@@ -666,6 +672,17 @@ class DeviceCard(QFrame):
         if isinstance(battery, (int, float)):
             self._set_footer(f"Battery {int(battery)}%")
             return
+
+        # Air purifier: filter life left (req-20).
+        if dtype == "airPurifier":
+            text = filter_text(
+                getattr(attrs, "filter_lifetime", None),
+                getattr(attrs, "filter_elapsed_time", None),
+                getattr(attrs, "filter_alarm_status", None),
+            )
+            if text is not None:
+                self._set_footer(text)
+                return
 
         # Electrical sensors and metering outlets: the energy readings. An
         # outlet has no power metric on its card, so its footer leads with W.
