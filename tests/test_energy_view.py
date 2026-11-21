@@ -103,3 +103,16 @@ def test_empty_energy_view_shows_its_empty_state(qapp: Any) -> None:
     assert not view.empty_label.isVisible()
     assert view.scroll_area.isVisible()
     view.hide()
+
+
+def test_view_price_reaches_new_and_existing_cards(qapp: Any) -> None:
+    view = EnergyView()
+    view.set_price(1.0, "EUR")
+    view.set_rooms(
+        [("Kitchen", [_outlet("a", "Kettle", None, 1.0, total_energy_consumed=2.0)])]
+    )
+    (card,) = view.cards()
+    assert card.usage_label.text() == "Usage 2.00 kWh · 2.00 EUR"
+
+    view.set_price(2.0, "EUR")
+    assert card.usage_label.text() == "Usage 2.00 kWh · 4.00 EUR"

@@ -16,6 +16,7 @@ Only outlets and electrical sensors reach this view; the dashboard filters
 them before calling `EnergyView.set_rooms()`.
 """
 
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple, override
 
 from PyQt6.QtCore import Qt, QTimer
@@ -31,7 +32,7 @@ from settings import DEFAULT_CURRENCY, DEFAULT_PRICE_PER_KWH
 from widgets.cardbase import CardBase, label_style
 from widgets.grid import CardGrid
 from widgets.metric import MetricWidget
-from widgets.text import format_amps, format_kwh, format_volts
+from widgets.text import format_amps, format_kwh, format_volts, usage_text
 
 
 class EnergyCard(CardBase):
@@ -42,8 +43,16 @@ class EnergyCard(CardBase):
     run through the dashboard's `run_device_command`.
     """
 
-    def __init__(self, device: Any, parent: Optional[QWidget] = None) -> None:
+    def __init__(
+        self,
+        device: Any,
+        parent: Optional[QWidget] = None,
+        price_per_kwh: float = DEFAULT_PRICE_PER_KWH,
+        currency: str = DEFAULT_CURRENCY,
+    ) -> None:
         super().__init__(device, parent)
+        self.price_per_kwh = price_per_kwh
+        self.currency = currency
         attrs = getattr(device, "attributes", None)
 
         # Metric zone: live power, then the A / V caption line.
@@ -62,6 +71,12 @@ class EnergyCard(CardBase):
         self.caption_label.setVisible(bool(self.caption_label.text()))
         self.card_layout.addWidget(self.caption_label)
 
+        # Usage since the last reset with its cost; hidden without usage data.
+        self.usage_label = QLabel()
+        self.usage_label.setStyleSheet(label_style(theme.TEXT2, theme.FONT_CAPTION))
+        self.card_layout.addWidget(self.usage_label)
+        self._update_usage()
+
         # Footer: total energy, or an explicit "no data" line.
         self._init_footer()
         self._update_state()
@@ -70,6 +85,20 @@ class EnergyCard(CardBase):
     def is_metered(self) -> bool:
         """Return True when the device reports live power."""
         return self.power_metric is not None
+
+    def set_price(self, price_per_kwh: float, currency: str) -> None:
+        """Use a new price for the usage cost and redraw the usage line."""
+        self.price_per_kwh = price_per_kwh
+        self.currency = currency
+        self._update_usage()
+
+    def _update_usage(self) -> None:
+        attrs = getattr(self.device, "attributes", None)
+        text = usage_text(
+            attrs, self.price_per_kwh, self.currency, datetime.now().date()
+        )
+        self.usage_label.setText(text or "")
+        self.usage_label.setVisible(text is not None)
 
     def update_from_device(self, device: Any) -> bool:
         """Show the readings of a freshly fetched `device` in place (t-19).
@@ -98,6 +127,7 @@ class EnergyCard(CardBase):
         text = self._format_captions(attrs)
         self.caption_label.setText(text)
         self.caption_label.setVisible(bool(text))
+        self._update_usage()
         self._update_footer()
         self._update_state()
 
@@ -178,6 +208,8 @@ class EnergyView(QWidget):
         """Set the price the usage costs are computed from (req-19)."""
         self.price_per_kwh = price_per_kwh
         self.currency = currency
+        for card in self.cards():
+            card.set_price(price_per_kwh, currency)
 
     def update_rooms(self, rooms: List[Tuple[str, List[Any]]]) -> None:
         """Show (room label, devices) pairs, updating cards in place (t-19).
@@ -231,7 +263,14 @@ class EnergyView(QWidget):
             layout.addWidget(label)
 
             grid = CardGrid()
-            grid.set_cards([EnergyCard(device) for device in devices])
+            grid.set_cards(
+                [
+                    EnergyCard(
+                        device, price_per_kwh=self.price_per_kwh, currency=self.currency
+                    )
+                    for device in devices
+                ]
+            )
             layout.addWidget(grid)
 
             self.content_layout.insertWidget(self.content_layout.count() - 1, section)
