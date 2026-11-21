@@ -98,6 +98,7 @@ class SceneTile(QFrame):
 
         self.activate_button = QPushButton("Activate")
         self.activate_button.setProperty("buttonVariant", "primary")
+        self.activate_button.setAccessibleName(f"Activate {self.full_name}")
         self.activate_button.clicked.connect(self._activate)
         footer.addWidget(self.activate_button)
 

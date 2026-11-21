@@ -288,6 +288,7 @@ class DeviceCard(QFrame):
                     self.brightness_slider.committed.connect(
                         lambda val, callback=cb_bright: callback(self, val)
                     )
+                self.brightness_slider.setAccessibleName(f"{self.full_name} brightness")
                 self._controls.append(self.brightness_slider)
                 self.control_zone.addWidget(self.brightness_slider)
 
@@ -329,6 +330,7 @@ class DeviceCard(QFrame):
                 self.blind_slider.committed.connect(
                     lambda val, callback=cb_pos: callback(self, val)
                 )
+            self.blind_slider.setAccessibleName(f"{self.full_name} position")
             self._controls.append(self.blind_slider)
             self.control_zone.addWidget(self.blind_slider)
 
@@ -348,6 +350,7 @@ class DeviceCard(QFrame):
                 for action in ("Up", "Down", "Stop"):
                     btn = QPushButton(action)
                     btn.setFixedHeight(28)
+                    btn.setAccessibleName(f"{self.full_name} {action.lower()}")
                     if self._on_blind_state is not None:
                         cb_state = self._on_blind_state
                         btn.clicked.connect(

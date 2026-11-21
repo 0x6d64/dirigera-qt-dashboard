@@ -128,7 +128,7 @@ class EnergyCard(QFrame):
         offline = getattr(device, "is_reachable", True) is False
         self._apply_style(offline=offline)
         if offline:
-            self.status_chip.set_status("Offline", "neutral")
+            self._set_chip("Offline", "neutral")
         else:
             self._update_chip(attrs, dtype)
 
@@ -157,7 +157,7 @@ class EnergyCard(QFrame):
         offline = getattr(device, "is_reachable", True) is False
         self._apply_style(offline=offline)
         if offline:
-            self.status_chip.set_status("Offline", "neutral")
+            self._set_chip("Offline", "neutral")
         else:
             self._update_chip(attrs, getattr(device, "device_type", "device"))
         return True
@@ -172,17 +172,20 @@ class EnergyCard(QFrame):
             }}
             """)
 
+    def _set_chip(self, text: str, variant: str) -> None:
+        """Show the state chip, or hide it when there is no state to show."""
+        self.status_chip.set_status(text, variant)
+        self.status_chip.setVisible(bool(text))
+
     def _update_chip(self, attrs: Any, dtype: str) -> None:
-        if dtype == "outlet":
-            is_on = getattr(attrs, "is_on", None)
-            if is_on is True:
-                self.status_chip.set_status("On", "ok")
-            elif is_on is False:
-                self.status_chip.set_status("Off", "neutral")
-            else:
-                self.status_chip.set_status("Ready", "neutral")
+        """Chip for a readable outlet state; nothing otherwise (no invented state)."""
+        is_on = getattr(attrs, "is_on", None) if dtype == "outlet" else None
+        if is_on is True:
+            self._set_chip("On", "ok")
+        elif is_on is False:
+            self._set_chip("Off", "neutral")
         else:
-            self.status_chip.set_status("Ready", "neutral")
+            self._set_chip("", "neutral")
 
     @staticmethod
     def _format_captions(attrs: Any) -> str:

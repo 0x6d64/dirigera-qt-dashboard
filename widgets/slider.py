@@ -15,7 +15,7 @@ Follows design-doc.md §8.4:
 - Does NOT use `QSlider:disabled::sub-page` (doc/qt-gotchas.md item 4)
 """
 
-from typing import override
+from typing import Optional, override
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import QHBoxLayout, QLabel, QSlider, QWidget
@@ -162,6 +162,12 @@ class LabeledSlider(QWidget):
     def set_unit(self, unit: str) -> None:
         self._unit = unit
         self._update_value_label(self._slider.value())
+
+    @override
+    def setAccessibleName(self, name: Optional[str]) -> None:
+        """Name the control for screen readers; the focusable part is the slider."""
+        super().setAccessibleName(name)
+        self._slider.setAccessibleName(name)
 
     @override
     def setEnabled(self, enabled: bool) -> None:

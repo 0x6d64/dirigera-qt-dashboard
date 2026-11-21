@@ -2,7 +2,7 @@
 Width-driven card grid for room sections.
 
 Follows design-doc.md §4.3 and §11:
-- Cards are at least 280 px wide with 16 px gaps between them.
+- Cards are at least 280 px wide (scene tiles 240 px, §8.10) with 16 px gaps.
 - The column count is the largest number of cards that fits in the available
   width, so the grid reflows when the window is resized.
 - Grids never reorder their cards; ordering is the caller's responsibility.
@@ -23,20 +23,26 @@ CARD_MIN_WIDTH = 280
 CARD_GAP = theme.SP16
 
 
-def grid_columns_for_width(width: int) -> int:
-    """Return the largest number of minimum-width cards that fit in `width`."""
+def grid_columns_for_width(width: int, min_width: int = CARD_MIN_WIDTH) -> int:
+    """Return the largest number of `min_width` cards that fit in `width`."""
     if width <= 0:
         return 1
-    return max(1, (width + CARD_GAP) // (CARD_MIN_WIDTH + CARD_GAP))
+    return max(1, (width + CARD_GAP) // (min_width + CARD_GAP))
 
 
 class FlowLayout(QLayout):
     """Left-to-right layout that wraps into equal-width columns."""
 
-    def __init__(self, parent: Optional[QWidget] = None, gap: int = CARD_GAP):
+    def __init__(
+        self,
+        parent: Optional[QWidget] = None,
+        gap: int = CARD_GAP,
+        min_width: int = CARD_MIN_WIDTH,
+    ):
         super().__init__(parent)
         self._items: List[QLayoutItem] = []
         self._gap = gap
+        self._min_width = min_width
         self.setContentsMargins(0, 0, 0, 0)
 
     @override
@@ -83,7 +89,7 @@ class FlowLayout(QLayout):
 
     @override
     def minimumSize(self) -> QSize:
-        size = QSize(CARD_MIN_WIDTH, 0)
+        size = QSize(self._min_width, 0)
         for item in self._items:
             size = size.expandedTo(item.minimumSize())
         margins = self.contentsMargins()
@@ -97,9 +103,9 @@ class FlowLayout(QLayout):
             margins.left(), margins.top(), -margins.right(), -margins.bottom()
         )
         items = self._visible_items()
-        columns = grid_columns_for_width(effective.width())
+        columns = grid_columns_for_width(effective.width(), self._min_width)
         column_width = max(
-            CARD_MIN_WIDTH,
+            self._min_width,
             (effective.width() - self._gap * (columns - 1)) // columns,
         )
 
@@ -138,9 +144,10 @@ class FlowLayout(QLayout):
 class CardGrid(QWidget):
     """Grid of cards that reflows to the largest column count that fits."""
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, min_width: int = CARD_MIN_WIDTH):
         super().__init__(parent)
-        self._flow = FlowLayout(self)
+        self._min_width = min_width
+        self._flow = FlowLayout(self, min_width=min_width)
         policy = QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         policy.setHeightForWidth(True)
         self.setSizePolicy(policy)
@@ -159,7 +166,7 @@ class CardGrid(QWidget):
 
     def columns(self) -> int:
         """Return the column count for the current width."""
-        return grid_columns_for_width(self.width())
+        return grid_columns_for_width(self.width(), self._min_width)
 
     def apply_filter(self, predicate: Callable[[QWidget], bool]) -> int:
         """Show only the cards matching `predicate`; return how many are shown.
@@ -203,4 +210,4 @@ class CardGrid(QWidget):
 
     @override
     def sizeHint(self) -> QSize:
-        return QSize(CARD_MIN_WIDTH, self._flow.heightForWidth(self.width()))
+        return QSize(self._min_width, self._flow.heightForWidth(self.width()))

@@ -11,9 +11,13 @@ Follows design-doc.md §8.5:
 from typing import Optional
 
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QFont, QFontMetrics
 from PyQt6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 import theme
+
+# Representative reading whose width the value label reserves.
+REFERENCE_VALUE = "8888"
 
 
 class MetricWidget(QWidget):
@@ -53,6 +57,15 @@ class MetricWidget(QWidget):
                 background-color: transparent;
             }}
             """)
+
+        # Reserve the width of a typical reading so changing digits do not
+        # shift the unit or the layout (design-doc.md §6.1.3).
+        font = QFont(self._value_label.font())
+        font.setPixelSize(theme.FONT_METRIC)
+        font.setWeight(QFont.Weight.DemiBold)
+        self._value_label.setMinimumWidth(
+            QFontMetrics(font).horizontalAdvance(REFERENCE_VALUE)
+        )
 
         self._unit_label = QLabel(unit)
         self._unit_label.setStyleSheet(f"""
