@@ -95,6 +95,11 @@ FAN_MODE_FOR_MOTOR_STATE = {
 }
 
 
+def is_hidden_device(device: Any) -> bool:
+    """True when the hub flags the device hidden; the IKEA app hides it too (t-89)."""
+    return getattr(device, "is_hidden", False) is True
+
+
 def widget_name(widget: QWidget) -> str:
     """Return the display name a card or scene tile is filtered by (t-50)."""
     return str(getattr(widget, "full_name", "") or "")
@@ -861,8 +866,10 @@ class DirigeraDashboard(QMainWindow):
 
         Existing cards are updated in place, so scroll position, order, focus
         and a slider being dragged survive; only new ids add cards and only
-        vanished ids remove them.
+        vanished ids remove them. Devices the hub marks hidden are left out
+        everywhere: cards, energy view and the status counts (t-89).
         """
+        devices = [device for device in devices if not is_hidden_device(device)]
         self._remove_skeleton()
         self._last_refresh = datetime.now()
         self._update_caption()
