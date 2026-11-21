@@ -235,6 +235,33 @@ check the 150 % scaling note in §11. Gates: black, ruff, mypy clean.
 
 ## Done
 
+### Plan: pytest suite (t-32, t-55; t-53 test part)
+
+Goal: a small suite that guards behaviour (requirements) and pure logic, not
+layout or styling, so it survives UI work. Executed on branch
+`plan/test-suite`.
+
+1. Add `pytest` to the dev group, `pythonpath`/`testpaths` config and shared
+   fixtures in `tests/conftest.py` (offscreen `QApplication`, recording
+   `QMessageBox` stub, `wait_until`/`pump` helpers, stub device/light/scene/hub,
+   a `window` fixture that never reads the real `config.ini`).
+2. Pure logic: discovery helpers with mocked network (req-5), room grouping,
+   labels, sort order.
+3. Widget contracts: `LabeledSlider` commit semantics (req-6); WCAG contrast of
+   theme token pairs (t-53).
+4. Dashboard behaviour against a stub hub: connect verification (req-1),
+   failed refresh keeps view (req-2), failed command resync (req-3), no GUI-thread
+   hub calls (req-4), inline scene errors, scene lookup after refresh, filter,
+   deferred close (req-14).
+5. Bookkeeping in `todo.md`.
+
+Rules for new tests: assert state a user can observe or a requirement, use the
+stubs in `conftest.py`, never assert pixel sizes, stylesheet text or widget-tree
+shape. Not covered here: CI (t-33), real-hub runs, the remaining ad-hoc scripts
+of t-55 (energy view, header responsiveness).
+
+Verification: `uv run pytest`, plus the three gates.
+
 ### Plan: design document v1.0 implementation (t-40 … t-53)
 
 Goal: Implement the visual design described in `doc/design-doc.md` v1.0 —
