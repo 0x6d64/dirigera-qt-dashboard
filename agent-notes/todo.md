@@ -119,9 +119,9 @@ Stated by the user; recorded, not yet planned.
 ## From open-question decisions (2026-11-21)
 
 - [x] **t-87 [C·S]** Energy totals (`design-doc.md` §14 item 5): show a total per room on the Energy tab and one home total. Coordinate with t-84 so the cost totals use the same sums.
-- [ ] **t-88 [C·S]** PM2.5 bands (`design-doc.md` §14 item 9): label PM2.5 readings on the purifier and air quality sensor cards as good (≤ 15), moderate (≤ 35) or poor (above), in µg/m³, using the existing ok/warn/error tones with the word always shown.
-- [ ] **t-89 [C·S]** Hide devices the hub flags `is_hidden` (`doc/dirigera-api.md` §2.2 row 6), like the IKEA app. None on the test hub are hidden today, so test it with stubs.
-- [ ] **t-90 [C·S]** Automatic scenes toggle (`design-doc.md` §8.10.5, §9.3, §14 item 3): hide scenes whose `type` is not `userScene` (the test hub has four `customScene` "Smart Notifications@…" entries, two with the same name) unless a "Show automatic scenes" toggle above the scene grid is on; off by default, choice remembered.
+- [x] **t-88 [C·S]** PM2.5 bands (`design-doc.md` §14 item 9): label PM2.5 readings on the purifier and air quality sensor cards as good (≤ 15), moderate (≤ 35) or poor (above), in µg/m³, using the existing ok/warn/error tones with the word always shown.
+- [x] **t-89 [C·S]** Hide devices the hub flags `is_hidden` (`doc/dirigera-api.md` §2.2 row 6), like the IKEA app. None on the test hub are hidden today, so test it with stubs.
+- [x] **t-90 [C·S]** Automatic scenes toggle (`design-doc.md` §8.10.5, §9.3, §14 item 3): hide scenes whose `type` is not `userScene` (the test hub has four `customScene` "Smart Notifications@…" entries, two with the same name) unless a "Show automatic scenes" toggle above the scene grid is on; off by default, choice remembered.
 
 - [x] **t-91 [C·S]** Air purifier filter footer says how overdue the filter is (owner feedback 2026-11-21): past its lifetime, "Filter overdue by 65 days · change now" instead of "Filter used up · change now" (kept for under one day overdue). *(done on `fix/filter-overdue`)*
 

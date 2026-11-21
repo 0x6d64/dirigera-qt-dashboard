@@ -395,7 +395,7 @@ update after the refresh).
 
 ### Plan: PM2.5 bands, hidden devices, automatic scenes (t-88, t-89, t-90)
 
-Status: open
+Status: done 2026-11-21
 
 Goal: PM2.5 readings say good / moderate / poor (`design-doc.md` §14 item 9),
 devices the hub marks hidden are not shown (`doc/dirigera-api.md` §2.2 row 6),
@@ -406,7 +406,7 @@ Affected files: `widgets/text.py`, `widgets/metric.py`, `widgets/card.py`,
 `dashboard.py`, `tests/test_display_rules.py` (new),
 `doc/design-doc.md`, `doc/dirigera-api.md`, `agent-notes/todo.md`
 
-#### Commit 1 — "band PM2.5 readings" (t-88)
+#### Commit 1 — "band PM2.5 readings" (t-88) ✓ executed 2026-11-21
 
 1. `widgets/text.py`: `pm25_band(value) -> Optional[Tuple[str, str]]`: ≤ 15 →
    `("Good", "ok")`, ≤ 35 → `("Moderate", "warn")`, above → `("Poor",
@@ -420,14 +420,14 @@ Affected files: `widgets/text.py`, `widgets/metric.py`, `widgets/card.py`,
    word for a sensor card and changes on refresh. If new colour pairings
    arise, add them to `tests/test_theme_contrast.py`.
 
-#### Commit 2 — "hide devices the hub marks hidden" (t-89)
+#### Commit 2 — "hide devices the hub marks hidden" (t-89) ✓ executed 2026-11-21
 
 1. `_on_refreshed` drops devices whose `is_hidden` is true before rooms,
    energy view and counts (`getattr(device, "is_hidden", False) is True`).
 2. Tests: a hidden device gets no card, no energy card and is not counted in
    the status summary; a device that becomes visible again gets a card.
 
-#### Commit 3 — "hide automatic scenes behind a toggle" (t-90)
+#### Commit 3 — "hide automatic scenes behind a toggle" (t-90) ✓ executed 2026-11-21
 
 1. `ui_settings() -> QSettings` and the autouse QSettings test fixture
    already exist (`settings.py`, `tests/conftest.py`, t-92); import
@@ -446,12 +446,17 @@ Affected files: `widgets/text.py`, `widgets/metric.py`, `widgets/card.py`,
    hides them again; the setting persists into a new window; search still
    filters the shown tiles.
 
-#### Commit 4 — "record display rules"
+#### Commit 4 — "record display rules" ✓ executed 2026-11-21
 
 Bookkeeping: t-88, t-89, t-90; design-doc §14 items 3 and 9 implemented,
 §8.10.5/§9.3 lose the `[proposed]` tags; `doc/dirigera-api.md` §2.2 row 6.
 
 Verification: gates.
+
+> **Executed 2026-11-21** on branch `feat/display-rules`: commit 1 "band PM2.5
+> readings" (`3c1b852`), commit 2 "hide devices the hub marks hidden"
+> (`15e196a`), commit 3 "hide automatic scenes behind a toggle" (`f8a7e8a`),
+> commit 4 "record display rules" (the commit that adds this note; not merged).
 
 ---
 

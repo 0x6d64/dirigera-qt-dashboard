@@ -534,13 +534,13 @@ See `qt-gotchas.md`.
 | --- | --- | --- |
 | 1 | Application name | Decided: keep "Dirigera Dashboard" |
 | 2 | Room section order | Decided and implemented: alphabetical, case-insensitive |
-| 3 | Show automatic scenes by default | Decided: no; non-`userScene` scenes are hidden behind a toggle (t-90) |
+| 3 | Show automatic scenes by default | Decided and implemented: no; non-`userScene` scenes are hidden behind a toggle (t-90) |
 | 4 | Low-battery threshold | Decided and implemented: 20 % (`LOW_BATTERY_PERCENT`) |
 | 5 | Energy totals per home or per room | Decided and implemented: a total per room and one home total (t-87) |
 | 6 | Icon source | Decided and implemented: icons drawn in code (`widgets/icons.py`) |
 | 7 | Reduced-motion behaviour on Windows | Decided: no setting; animations stay as they are |
 | 8 | Colour-temperature gradient rendering | Decided and implemented: groove gradient between `TEMP_WARM` and `TEMP_COOL`, no fill |
-| 9 | Air-quality colour bands | Decided: WHO-style PM2.5 bands, good ≤ 15, moderate ≤ 35, poor above (µg/m³), shown with a word, never colour alone (t-88) |
+| 9 | Air-quality colour bands | Decided and implemented: WHO-style PM2.5 bands, good ≤ 15, moderate ≤ 35, poor above (µg/m³), shown with a word, never colour alone (t-88) |
 | 10 | Disabled control colours | Decided and implemented: muted tones of enabled colours, checked by `tests/test_theme_contrast.py` |
 | 11 | Windows verification: Segoe UI Variable, tabular figures, name truncation, 150 % scaling, text scaling | Checked by the owner on Windows (2026-11-21): looks fine |
 | 12 | Scene undo | Decided: no undo |
