@@ -189,7 +189,7 @@ for d in hub.get("/devices"):
 | 2 | Units of PM2.5, illuminance, filter times; meaning of `motor_state` | Compare against the IKEA app's displayed values |
 | 3 | Is a plug's energy on the outlet or a separate electrical sensor? | Dump shows whether an `electricalSensor` shares its `relationId` |
 | 4 | Should `is_hidden` devices be shown? | Decided: no, hide them (t-89) |
-| 5 | Values of `color_mode`, `room.icon`, `room.color` | Read from the dump; room colours get best-guess RGB values (t-86) |
+| 5 | Values of `color_mode`, `room.icon`, `room.color` | Read from the dump; `room.color` is a hub colour name (e.g. `ikea_green_no_65`) mapped by its hue word to best-guess RGB values (t-86, `theme.ROOM_COLOURS`) |
 | 6 | Does `light_level` stay populated while a light is off? | Answered by the owner: yes, the hub keeps the last value |
 | 7 | Event shapes for button presses, add/remove, reachability | Only needed for live updates (t-16); answer then |
 

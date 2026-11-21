@@ -172,6 +172,20 @@ thresholds on every run. Add a pairing there when a new token is used.
 4. The only gradient in the app is the colour-temperature track (warm to cool), since
    it encodes a real scale. `[proposed]`
 
+### 5.4 Room colours (opt-in)
+
+A "Room colours" toggle above the Rooms sections shows the colour the user picked
+for each room in the IKEA app (req-22; t-86). It is off by default and the choice is
+remembered. When on, a room with a known colour gets:
+
+1. a 10 px round dot before its section label (Rooms and Energy views);
+2. a 3 px left edge on each card in that room (device and energy cards).
+
+The room colour marks the room only. Text colours and state colours (5.3) never
+change, and a room with an unknown or missing colour stays neutral. Marker colours
+come from `theme.ROOM_COLOURS`, mid tones checked at 3:1 against the window and
+card surfaces in `tests/test_room_colours.py`. `[decided]`
+
 ## 6. Typography
 
 ### 6.1 Typeface
@@ -409,7 +423,9 @@ connection block (8.12). `[proposed]`
 ### 9.2 Rooms
 
 Header as in 4.2 with the Rooms segment selected. Content: room sections in order, each
-with its label and card grid. Sections are ordered alphabetically (section 14, item 2). `[verified]`
+with its label and card grid. Sections are ordered alphabetically (section 14, item 2). A "Room colours"
+toggle above the sections switches the room markers on or off (section 5.4).
+`[verified]`
 
 ### 9.3 Scenes
 

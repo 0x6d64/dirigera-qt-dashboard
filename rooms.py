@@ -3,7 +3,7 @@
 Pure functions, no Qt. The Rooms and Energy views both use them.
 """
 
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 # Section label for devices that are not assigned to a room.
 UNKNOWN_ROOM = "Unknown room"
@@ -36,6 +36,17 @@ def get_room(device: Any) -> Tuple[str, str]:
     if room is None:
         return "", UNKNOWN_ROOM
     return str(getattr(room, "id", "") or ""), room.name or UNKNOWN_ROOM
+
+
+def room_colour_name(device: Any) -> Optional[str]:
+    """Return the hub's colour name for a device's room (req-22), if any.
+
+    Stub rooms in tests have no `color`, so it is read with getattr; an empty
+    or missing name is None.
+    """
+    room = getattr(device, "room", None)
+    name = getattr(room, "color", None) if room is not None else None
+    return name if isinstance(name, str) and name else None
 
 
 def group_by_room(devices: List[Any]) -> List[Tuple[str, List[Any]]]:
