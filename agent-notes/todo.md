@@ -44,7 +44,7 @@ take the next free number (see `AGENTS.md`).
 - [ ] **t-22 [C·S]** Make worker count and per-IP timeout configurable, and add a user-visible scan scope.
 - [ ] **t-23 [C·S]** Avoid scanning VPN/virtual interfaces, or let the user pick the interface.
 - [ ] **t-24 [C·S]** Deduplicate scanned networks — multiple interfaces can report the same subnet and double the scan time *(network_discovery.py:24–41)*.
-- [ ] **t-25 [B·S]** Fix discovery UX: the progress dialog's Cancel button does nothing, and clicking Discover again spawns a second concurrent scan *(dashboard.py:237–253)*. Disable the button during the scan and wire Cancel to stop the thread.
+- [ ] **t-25 [B·S]** Fix discovery UX: the progress dialog's Cancel button does nothing, and clicking Discover again spawns a second concurrent scan *(dashboard.py:237–253)*. Disable the button during the scan and wire Cancel to stop the thread. *(2026-11-21 review: Cancel now calls `QThread.terminate()`, which is unsafe for a thread running Python and leaves the scan's pool threads running — replace it with a cooperative stop flag checked by `discover_dirigera_hubs`)*
 
 ## Error handling & configuration
 
@@ -53,6 +53,20 @@ take the next free number (see `AGENTS.md`).
 - [ ] **t-28 [B·S]** Resolve `config.ini` relative to the script/home directory instead of the current working directory *(dashboard.py:139)* — launching from elsewhere silently loses saved credentials.
 - [ ] **t-29 [B·M]** Stop storing the bearer token in plaintext `config.ini`; support an environment variable or OS keyring, with `config.ini` as fallback.
 - [ ] **t-30 [C·S]** Validate the IP address format before attempting a connection *(dashboard.py:282)*.
+
+## Review fixes (2026-11-21)
+
+Found in the 2026-11-21 repo review and fixed on `improve-ui` the same day.
+
+- [x] **t-57 [A·M]** Device commands (toggle, brightness, blind position and state) and the reload after a failure ran on the GUI thread and froze the window for up to the 10 s hub timeout (`req-4`; t-17 had only moved connect and refresh). *(done: `CommandWorker`; the card shows "Sending…" meanwhile)*
+- [x] **t-58 [B·S]** A card's chip and footer did not follow a successful command: after switching a light on the chip still said "Off" until the next refresh. *(done: `DeviceCard.sync_from_device()` after every command)*
+- [x] **t-59 [B·S]** Non-dimmable lights got a brightness slider at an invented 50 %: `light_level` is an Optional pydantic field, so `hasattr()` was always true. *(done)*
+- [x] **t-60 [B·S]** The "Low battery" chip never appeared: the chip refresh in `DeviceCard.__init__` overwrote what the footer update had set. *(done: the battery check lives in `_update_status_chip`)*
+- [x] **t-61 [A·S]** Closing the window during a hub call aborted the process: `closeEvent` waited 2 s per worker against a 10 s timeout, nothing checked `requestInterruption()`, and the discovery thread was not waited for (`req-14`). *(done: the window hides and the close completes once the last worker finishes)*
+- [x] **t-62 [B·S]** Every finished discovery ran the cancel handler, because `QProgressDialog.close()` emits `canceled`; it called `terminate()` on the returning thread. *(done)*
+- [x] **t-63 [C·S]** A refresh during scene activation dropped the "Activated"/"Failed" line, because the tile was looked up by object identity. *(done: matched by scene id)*
+- [x] **t-64 [C·S]** Rooms were grouped by name (two rooms with the same name merged) and sorted case-sensitively; the fallback label was "Unknown Room". *(done)*
+- [x] **t-65 [C·S]** Remove dead dashboard code: `DEFAULT_BRIGHTNESS`, `VIEW_*`, `handle_manual_ip`, `get_device_name`, `toggle_light`, `toggle_outlet`. *(done)*
 
 ## Typing, tests & CI
 

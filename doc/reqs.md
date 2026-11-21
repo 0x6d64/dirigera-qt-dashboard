@@ -26,7 +26,8 @@ during implementation. Each entry cites its origin.
   wording updated after the t-45 card refactor replaced checkboxes with
   switches)*
 - **req-4** — Blocking network I/O must run in a worker thread, never on the
-  GUI thread. *(t-17, implemented; also stated as a rule in `AGENTS.md`)*
+  GUI thread. *(t-17 for connect and refresh, t-57 for device commands,
+  implemented; also stated as a rule in `AGENTS.md`)*
 - **req-5** — Hub discovery must not depend solely on a static MAC OUI list;
   hubs must be identified by their unauthenticated API response, with the OUI
   list kept only as a fallback. *(t-20, implemented)*
@@ -51,3 +52,6 @@ during implementation. Each entry cites its origin.
 - **req-12** — Token generation must use the auth flow that actually exists
   in the installed `dirigera` version (currently the `dirigera.hub.auth`
   challenge flow). *(t-11, implemented)*
+- **req-14** — Closing the window while hub calls are in flight must not
+  crash or lose the call; the app may finish them before it exits, but no
+  running worker thread may be destroyed. *(t-61, implemented)*
