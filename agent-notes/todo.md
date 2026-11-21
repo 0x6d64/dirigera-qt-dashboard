@@ -51,7 +51,7 @@ take the next free number (see `AGENTS.md`).
 - [ ] **t-26 [B·M]** Replace broad `except Exception` blocks with specific handling plus logging *(dashboard.py:48,151,298,355,501–539)*. Discovery failures are currently swallowed and appear as "no hubs found".
 - [ ] **t-27 [B·S]** Surface `config.ini` parse/read errors instead of ignoring them silently *(dashboard.py:137–152)*.
 - [ ] **t-28 [B·S]** Resolve `config.ini` relative to the script/home directory instead of the current working directory *(dashboard.py:139)* — launching from elsewhere silently loses saved credentials.
-- [ ] **t-29 [B·M]** Stop storing the bearer token in plaintext `config.ini`; support an environment variable or OS keyring, with `config.ini` as fallback.
+- [x] **t-29 [B·M]** *(obsolete 2026-11-21: user decided plaintext `config.ini` is acceptable; req-7 withdrawn)* Stop storing the bearer token in plaintext `config.ini`; support an environment variable or OS keyring, with `config.ini` as fallback.
 - [ ] **t-30 [C·S]** Validate the IP address format before attempting a connection *(dashboard.py:282)*.
 
 ## Review fixes (2026-11-21)

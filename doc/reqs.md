@@ -36,9 +36,9 @@ during implementation. Each entry cites its origin.
   (drag, track click, arrow/Page keys, mouse wheel) must send its value.
   *(t-18, implemented: `LabeledSlider.committed` fires on release after a drag
   and after a 300 ms pause for every other change)*
-- **req-7** — The hub token must not be stored in plaintext as the primary
-  mechanism; an environment variable or OS keyring is preferred, with
-  `config.ini` as fallback. *(t-29, open)*
+- **req-7** — *Obsolete (2026-11-21, user decision).* The hub token must not be
+  stored in plaintext as the primary mechanism. Dropped: a gitignored
+  `config.ini` is accepted for this single-user desktop tool. *(t-29, obsolete)*
 - **req-8** — Saved credentials must resolve relative to the script/home
   directory, not the current working directory, so launching from elsewhere
   does not silently lose them. *(t-28, open)*
