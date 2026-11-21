@@ -127,6 +127,9 @@ Orientation docs: `README.md`, `doc/design-doc.md` (visual design),
 
 ## Git
 
+- Hooks: after cloning run `uv run pre-commit install --install-hooks`. Commits then
+  run formatting, lint and type checks (config: `.pre-commit-config.yaml`);
+  pushes also run the fast tests. Do not bypass them with `--no-verify`.
 - **Never stage or commit files unless promoted by the user.** An explicit
   request to stage/commit (e.g. "commit this") counts as promotion; finishing
   a task or running the gates does not. When unsure, propose a commit message
