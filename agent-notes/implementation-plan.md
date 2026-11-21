@@ -20,6 +20,340 @@ Plans use `###`, commits inside a plan use `####`.
 
 ## Active plans
 
+### Execution order, batch 3 (2026-11-21)
+
+The owner's feature requests and open-question decisions of 2026-11-21, built
+by Haiku subagents in this order, one branch per plan, each merged into
+`master` with `--no-ff` (branches kept). Rules for every plan:
+
+- Read `AGENTS.md` and `doc/qt-gotchas.md` first. Colours, spacing and fonts
+  come from `theme.py`; hub calls run in a worker (`run_device_command`).
+- Tests go in `tests/`, use the fixtures in `tests/conftest.py`, and test
+  behaviour (values, texts, signals, which command is sent), not pixel layout.
+  Put pure logic (mappings, formatting, parsing) in plain functions and unit
+  test them directly.
+- All four gates green on every commit: `uv run black .`, `uv run ruff check .`,
+  `uv run mypy .`, `uv run pytest`. Never `--no-verify`.
+- No modal dialogs (`design-doc.md` §8.14; the `dialogs` fixture must stay
+  empty). Never show or control the child lock (`req-21`).
+- Bookkeeping on the branch: check off the `t-` items in `agent-notes/todo.md`,
+  mark the matching `req-` entries in `doc/reqs.md` implemented, update the
+  design-doc or `doc/dirigera-api.md` lines named in the plan, and add an
+  Executed marker with commit hashes to the plan.
+- Files are UTF-8 with LF line endings.
+
+1. `feat/purifier-controls` — filter health, fan speed (t-85, t-80)
+2. `feat/energy-reset-cost` — reset, cost, totals (t-83, t-84, t-87)
+3. `feat/display-rules` — PM2.5 bands, hidden devices, automatic scenes
+   toggle (t-88, t-89, t-90)
+4. `feat/room-colours` — room colours with a toggle (t-86); reuses the UI
+   settings helper from plan 3
+
+Not planned: t-15 and t-16 (L effort, polling meets `req-13`), t-82 (no hub
+route for history), t-78 (no blind).
+
+### Plan: air purifier filter health and fan speed (t-85, t-80)
+
+Goal: the purifier card shows how much filter life is left and warns when the
+filter must be changed (`req-20`), and lets the user pick Off, Auto or speed
+1–5 (`req-15`).
+
+Facts (`doc/dirigera-api.md` §5 item 3, confirmed on a real STARKVIND):
+`motor_state` 0 = off, 1 = auto, 10/20/30/40/50 = speeds 1–5; while in auto
+the hub reports the speed it picked (e.g. 30) in `motor_state` and `fan_mode`
+`auto`. `filter_lifetime` and `filter_elapsed_time` are minutes (259200 = 180
+days); `filter_alarm_status` is true once elapsed passes lifetime. The library
+attributes are `motor_state`, `fan_mode` (a `FanModeEnum`), `filter_lifetime`,
+`filter_elapsed_time`, `filter_alarm_status`; `set_motor_state(int)` sends
+`motorState` and stores it locally, but does not update `fan_mode`.
+
+Affected files: `widgets/text.py`, `widgets/card.py`, `dashboard.py`,
+`tests/test_purifier.py` (new), `tests/conftest.py` (stub, if needed),
+`doc/dirigera-api.md` §3, `doc/design-doc.md` (purifier card lines if any),
+`doc/reqs.md`, `agent-notes/todo.md`
+
+#### Commit 1 — "show air purifier filter health" (t-85)
+
+1. `widgets/text.py`: `filter_text(lifetime, elapsed, alarm) -> Optional[str]`.
+   None when lifetime or elapsed is not a positive int / int. Remaining =
+   `max(0, lifetime - elapsed)`; percent = `round(100 * remaining /
+   lifetime)`; days = `remaining // 1440`. Text: `"Filter 40 % · change in 72
+   days"` ("1 day" singular, "change today" at 0 days); when `alarm` is true or
+   remaining is 0: `"Filter used up · change now"`.
+2. `DeviceCard._update_footer`: for `airPurifier`, footer is `filter_text(...)`
+   when not None.
+3. `DeviceCard._update_status_chip`: for `airPurifier`, chip `"Change filter"`
+   in `warn` when `filter_alarm_status` is true, otherwise no chip. Offline
+   still wins (existing reachability branch runs first).
+4. Tests: `filter_text` cases (fresh filter, half used, 1 day, 0 days, overdue
+   with alarm, overdue without alarm, missing values); card footer text and
+   chip for a purifier made with `make_device("airPurifier", ...)` with and
+   without the alarm.
+
+#### Commit 2 — "add air purifier fan speed control" (t-80)
+
+1. `widgets/card.py`: constants `FAN_SPEED_LABELS = ("Off", "Auto", "1", "2",
+   "3", "4", "5")` and `FAN_MOTOR_STATES = (0, 1, 10, 20, 30, 40, 50)`; pure
+   function `fan_speed_index(motor_state, fan_mode) -> Optional[int]`:
+   `fan_mode` value `"auto"` or `motor_state == 1` → 1 (Auto); `motor_state ==
+   0` or `fan_mode` value `"off"` → 0; otherwise speed `min(5, max(1,
+   round(motor_state / 10)))` → index `speed + 1`; None when both unknown.
+   Read the enum's `.value` like `_reading_values` does.
+2. Purifier card: a "Fan" label row over a `SegmentedControl(FAN_SPEED_LABELS)`
+   in the control zone, above the readings; accessible name `"<name> fan
+   speed"`. Selection from `fan_speed_index`; append it to `self._controls`
+   so offline disables it. New constructor callback `on_fan_speed:
+   Callable[[DeviceCard, int], None]` called with the motor state for the
+   clicked segment (not the index). Drop `("Fan mode", "", "fan_mode")` from
+   `_READINGS["airPurifier"]`; the control shows it. Keep PM2.5.
+3. `_sync`: set the segment from the device with signals blocked (the same
+   pattern as the switch), so refreshes and resyncs never send a command.
+4. `dashboard.py`: `set_fan_speed(card, motor_state)` runs
+   `device.set_motor_state(motor_state)` through `run_device_command` with
+   action `"set fan speed"`; after the call succeeds, inside the same command
+   callable, set `device.attributes.fan_mode` to the matching `FanModeEnum`
+   (0 → OFF, 1 → AUTO, 10/20 → LOW, 30/40 → MEDIUM, 50 → HIGH) so the resync
+   shows the new mode before the next refresh. Wire it in
+   `create_device_widget`.
+5. Tests: `fan_speed_index` table (including auto reporting 30 and stale
+   values); clicking each segment calls the callback with the right motor
+   state; a window-level test with a stub purifier (records `set_motor_state`
+   calls and the thread, can fail) checks the command runs off the GUI thread,
+   the selection follows success, and a failure resyncs and shows the card
+   error; a refresh with a changed `motor_state` moves the selection without
+   sending a command.
+
+#### Commit 3 — "record purifier controls"
+
+Bookkeeping (see batch rules): t-80, t-85; `req-15`, `req-20`;
+`doc/dirigera-api.md` §3 air purifier row (fan speed control and filter
+footer implemented).
+
+Verification: gates; manual on the real hub by the owner (speed changes,
+filter footer reads "Filter used up · change now", chip "Change filter").
+
+---
+
+### Plan: energy reset, cost and totals (t-83, t-84, t-87)
+
+Goal: on the Energy tab, metering plugs can reset their usage counter
+(`req-18`), usage is shown with its cost from a configurable price
+(`req-19`), and each room plus the whole home gets a total
+(`design-doc.md` §14 item 5).
+
+Facts (`doc/dirigera-api.md` §5 item 2): library outlet attributes
+`total_energy_consumed` (kWh, never resets), `energy_consumed_at_last_reset`
+(kWh), `time_of_last_energy_reset` (datetime), `current_active_power` (W).
+Reset = `PATCH /devices/{id}` with `[{"attributes":
+{"energyConsumedAtLastReset": 0}}]`; the hub then copies the current total
+into `energyConsumedAtLastReset` and sets the reset time to now. The library
+has no setter; use `device.dirigera_client.patch(route=f"/devices/{device.id}",
+data=[...])`. Offer the reset only when `"energyConsumedAtLastReset"` is in
+`device.capabilities.can_receive`.
+
+Definitions used everywhere: **usage** of a device = `total -
+at_last_reset` when both are numbers, else `total`, else None. Cost = usage ×
+price.
+
+Affected files: `widgets/text.py`, `widgets/energy.py`, `dashboard.py`,
+`config.ini.example`, `README.md`, `tests/test_energy_view.py`,
+`tests/test_energy_reset.py` (new), `tests/test_config.py`,
+`doc/design-doc.md` §8.11/§9.4, `doc/reqs.md`, `agent-notes/todo.md`
+
+#### Commit 1 — "add energy price settings" (t-84)
+
+1. `dashboard.py`: `EnergySettings` dataclass (`price_per_kwh: float = 1.54`,
+   `currency: str = "RON"`) and `parse_energy_settings(section)` returning
+   `(settings, problems)`, the same pattern as `parse_discovery_settings`:
+   price a float with `0 < price <= 100` (accept `,` as decimal separator),
+   currency 1–8 non-blank characters; each bad value is reported and replaced
+   by its default. `load_config` reads `[energy]` and reports problems in the
+   status caption like `[discovery]`. Pass the settings to the energy view
+   (`EnergyView.set_price(price, currency)`).
+2. `config.ini.example`: commented `[energy]` section with the default and the
+   source ("Romania, March 2026, residential incl. network costs and taxes").
+   README: one short paragraph.
+3. Tests: parser cases (unset, valid, comma decimal, zero, negative,
+   non-number, empty currency, too long), and that a bad `[energy]` value
+   shows the problem in the status text.
+
+#### Commit 2 — "show energy usage and cost" (t-84)
+
+1. `widgets/text.py`: `usage_kwh(attrs) -> Optional[float]` (definition
+   above), `format_cost(kwh, price, currency) -> str` (`"2.00 RON"`, two
+   decimals).
+2. `EnergyCard`: a usage line under the A/V caption: `"Since 21 Nov: 1.30 kWh ·
+   2.00 RON"` when a reset time exists (date as `%d %b`, add the year when it
+   is not this year), else `"Usage 18.40 kWh · 28.34 RON"`; hidden when usage
+   is None. Footer keeps `"Total … kWh"`. The card gets the price from the
+   view; `update_from_device` refreshes the line, and `set_price` on the view
+   updates every card.
+3. Tests: helper unit tests; card texts with and without reset data, after a
+   price change, and with no energy data.
+
+#### Commit 3 — "add energy counter reset" (t-83)
+
+1. `EnergyCard`: a small "Reset" button (only when the capability is there),
+   two-step inline confirm: first click shows "Confirm reset" and "Cancel"
+   buttons in place of "Reset" plus a caption "Usage since the last reset
+   will be lost"; Cancel or 5 s without a click (single-shot `QTimer`) returns
+   to "Reset". No dialog. Accessible names `"<name> reset usage"` etc.
+2. Make `EnergyCard` usable by `run_device_command`: it needs `device`,
+   `set_pending(bool)` ("Sending…" in the footer), `sync_from_device()`
+   (redraw from `self.device`) and `show_error(message)` (danger-toned footer
+   for `CARD_ERROR_MS`, then normal). Type `run_device_command`'s card
+   parameter with a small `Protocol` (or `Any`) instead of `DeviceCard`.
+3. `EnergyView` gets an `on_reset: Callable[[EnergyCard], None]` callback
+   (passed through to the cards, also to cards created on rebuild).
+   `dashboard.py`: `reset_energy(card)` runs the PATCH through
+   `run_device_command` with action `"reset energy"`; on success call
+   `_request_background_refresh()` so the hub's new values arrive.
+4. Tests: button only with the capability; first click does not send,
+   confirm sends exactly one PATCH with the exact route and data (stub
+   `dirigera_client` recording calls and thread, off the GUI thread); cancel
+   and the timeout send nothing; failure shows the card error; the `dialogs`
+   fixture stays empty.
+
+#### Commit 4 — "show room and home energy totals" (t-87)
+
+1. Each room section in the Energy view gets a caption under its label:
+   `"45 W now · 1.30 kWh · 2.00 RON"` (sum of live power of devices reporting
+   it, sum of usage, cost); parts with no data are left out; no caption when
+   nothing is reported. A home total line at the top of the view:
+   `"Home: 120 W now · 18.40 kWh · 28.34 RON"`. Pure helper
+   `energy_totals(devices) -> (watts|None, kwh|None)` in `widgets/text.py`.
+2. Totals update on refresh in place (the `update_rooms` fast path must
+   update them too) and on `set_price`.
+3. Tests: helper sums (mixed missing values), room caption and home line
+   texts, update after a refresh with new readings.
+
+#### Commit 5 — "record energy reset, cost and totals"
+
+Bookkeeping: t-83, t-84, t-87; `req-18`, `req-19`; design-doc §14 item 5
+implemented, §8.11/§9.4 describe the usage line, reset and totals;
+`widgets/energy.py` module docstring no longer says totals are open.
+
+Verification: gates; manual by the owner on the real hub (reset once, values
+update after the refresh).
+
+---
+
+### Plan: PM2.5 bands, hidden devices, automatic scenes (t-88, t-89, t-90)
+
+Goal: PM2.5 readings say good / moderate / poor (`design-doc.md` §14 item 9),
+devices the hub marks hidden are not shown (`doc/dirigera-api.md` §2.2 row 6),
+and automatic scenes are hidden behind a remembered toggle (§8.10.5, §9.3,
+§14 item 3).
+
+Affected files: `widgets/text.py`, `widgets/metric.py`, `widgets/card.py`,
+`dashboard.py`, `tests/conftest.py`, `tests/test_display_rules.py` (new),
+`doc/design-doc.md`, `doc/dirigera-api.md`, `agent-notes/todo.md`
+
+#### Commit 1 — "band PM2.5 readings" (t-88)
+
+1. `widgets/text.py`: `pm25_band(value) -> Optional[Tuple[str, str]]`: ≤ 15 →
+   `("Good", "ok")`, ≤ 35 → `("Moderate", "warn")`, above → `("Poor",
+   "danger")`; None for non-numbers.
+2. PM2.5 readings (purifier and `environmentSensor`) get the unit `µg/m³` and
+   show the band word next to the value, coloured with the matching theme
+   text colour (`theme.OK`, `theme.WARN`, `theme.DANGER`); the word is always
+   there, so colour is never the only signal. Add the smallest needed API to
+   `MetricWidget` (e.g. `set_note(text, tone)`); refreshes update it.
+3. Tests: band boundaries (0, 15, 15.1, 35, 36, None); the metric shows the
+   word for a sensor card and changes on refresh. If new colour pairings
+   arise, add them to `tests/test_theme_contrast.py`.
+
+#### Commit 2 — "hide devices the hub marks hidden" (t-89)
+
+1. `_on_refreshed` drops devices whose `is_hidden` is true before rooms,
+   energy view and counts (`getattr(device, "is_hidden", False) is True`).
+2. Tests: a hidden device gets no card, no energy card and is not counted in
+   the status summary; a device that becomes visible again gets a card.
+
+#### Commit 3 — "hide automatic scenes behind a toggle" (t-90)
+
+1. `dashboard.py`: `ui_settings() -> QSettings` (IniFormat, UserScope,
+   organisation `"dirigera-qt-dashboard"`, application `"dashboard"`), the one
+   place UI preferences are kept (plan t-86 reuses it). `tests/conftest.py`:
+   an autouse fixture that points `QSettings.setPath(IniFormat, UserScope,
+   tmp_path)` at a temp dir, so tests never touch the real settings.
+2. `is_user_scene(scene) -> bool`: true when the scene's `type` value is
+   `"userScene"`, and when the type is missing (stubs, unknown data).
+3. Above the scene grid: a row with the label "Show automatic scenes" and a
+   `ToggleSwitch` (accessible name the same text); off by default; state read
+   from and written to `ui_settings()` (key `scenes/show_automatic`).
+   `_update_scenes` gets only the scenes to show; toggling re-runs it with
+   `self.scenes` and re-applies the search filter. The status summary counts
+   shown scenes.
+4. Tests (`StubScene` gets an optional `type_` argument, default
+   `"userScene"`): custom scenes hidden by default; toggle shows them and
+   hides them again; the setting persists into a new window; search still
+   filters the shown tiles.
+
+#### Commit 4 — "record display rules"
+
+Bookkeeping: t-88, t-89, t-90; design-doc §14 items 3 and 9 implemented,
+§8.10.5/§9.3 lose the `[proposed]` tags; `doc/dirigera-api.md` §2.2 row 6.
+
+Verification: gates.
+
+---
+
+### Plan: room colours (t-86)
+
+Goal: optionally mark each room with the colour the owner picked in the IKEA
+app (`req-22`), with a remembered toggle; the default stays the current
+neutral look.
+
+Facts: the hub reports room colours as names, e.g. `ikea_green_no_65`,
+`ikea_blue_no_63` (`device.room.color`; the stub rooms in tests have no
+`color`, so read it with `getattr(..., "color", None)`). The owner accepted
+best-guess RGB values; no exploration.
+
+Affected files: `theme.py`, `dashboard.py`, `widgets/card.py`,
+`widgets/energy.py`, `tests/test_room_colours.py` (new),
+`tests/test_theme_contrast.py`, `doc/design-doc.md`, `doc/dirigera-api.md`,
+`doc/reqs.md`, `agent-notes/todo.md`
+
+#### Commit 1 — "map IKEA room colour names" (t-86)
+
+1. `theme.py`: `ROOM_COLOURS` dict from hue word to hex (at least red, orange,
+   yellow, green, turquoise, blue, purple, lilac, pink, beige, brown, grey),
+   mid tones that reach 3:1 against `theme.BG` and `theme.SURFACE` (non-text
+   contrast). `room_colour(name) -> Optional[str]`: split the name on `_`,
+   return the colour of the first known hue word; None for None, empty or
+   unknown names.
+2. Tests: names from the real hub map to green and blue; unknown and None
+   give None; every `ROOM_COLOURS` value is ≥ 3:1 against `BG` and `SURFACE`
+   (reuse the contrast helper in `tests/test_theme_contrast.py`).
+
+#### Commit 2 — "show room colours with a toggle" (t-86)
+
+1. Toggle row "Room colours" with a `ToggleSwitch` above the room sections in
+   the Rooms view (same pattern as the automatic scenes toggle); off by
+   default; persisted with `ui_settings()` key `rooms/colours`.
+2. When on: each room section label (Rooms and Energy views) gets a 10 px
+   round colour dot before the name, and each device and energy card in that
+   room a 3 px left border in the room colour (the other borders unchanged;
+   offline styling still applies). Rooms whose colour is None stay neutral.
+   Text colours never change, and state colours stay as they are (§5.3).
+3. Toggling restyles existing widgets in place (no rebuild); refreshes keep
+   the current mode.
+4. Tests: off by default and no room colour anywhere; on → a room with a
+   known colour has the marker and its cards carry the colour in their style
+   sheet, a room without a colour does not; the setting persists into a new
+   window.
+
+#### Commit 3 — "record room colours"
+
+Bookkeeping: t-86; `req-22`; design-doc gets a short room-colour section
+(marker and card edge only, never text or state, default off);
+`doc/dirigera-api.md` §4 row 5 note that names map by hue word.
+
+Verification: gates; manual by the owner (colours look roughly like the app).
+
+---
+
 ### Plan: dirigera 1.6.1 migration follow-ups (t-12, t-14 … t-16)
 
 Goal: Adopt the capabilities added in `dirigera` 1.6.1 that the card UI does
