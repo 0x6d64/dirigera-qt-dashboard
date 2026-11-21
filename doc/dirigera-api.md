@@ -5,9 +5,10 @@ What the `dirigera` library (version pinned in `uv.lock`; facts below were read 
 it describes the library, not the app's design (see `design-doc.md`) or its code.
 
 Tags: `[lib]` read in the library source or its README; `[unverified]` needs real hub
-data before it is relied on; `[opinion]` judgment, open to challenge. No live hub was
+data before it is relied on; `[opinion]` judgment, open to challenge; `[known]` general
+knowledge, not re-tested. No live hub was
 available when this was written, so nothing here was observed on real payloads.
-Section 5 gives a read-only way to dump them.
+Section 4 gives a read-only way to dump them.
 
 ## 1. Findings that affect the implementation
 
@@ -26,7 +27,9 @@ Section 5 gives a read-only way to dump them.
    single device that fails pydantic validation, so one odd device fails the whole
    refresh. The library README confirms this can happen ("reports data that the
    library doesn't expect yet"). Measure latency on the real hub before optimizing
-   `[unverified]`; relevant to `t-17`, `t-19`, `req-2`.
+   `[unverified]`; relevant to `req-2`. A cheaper refresh would use one raw
+   `hub.get("/devices")` with per-device conversion in `try/except`; the library's
+   `dict_to_*` converters are not documented as public API.
 3. **Plugs with metering can split into two devices.** `[lib]` Some plugs (the README
    names GRILLPLATS) report energy as a separate `electricalSensor` that shares the
    outlet's `relation_id`. Merge it into the outlet card by `relation_id`; do not
@@ -47,7 +50,7 @@ Section 5 gives a read-only way to dump them.
    calls through one worker or use one `Hub` per thread (`req-4` already forbids GUI
    thread I/O).
 7. **Several displayed values have no documented unit or meaning.** `[lib]` See
-   section 5, items 1 to 6. Do not invent labels for them.
+   section 4, items 1 to 6. Do not invent labels for them.
 
 ## 2. What the API exposes
 
@@ -141,7 +144,6 @@ History (power, temperature, motion), "last motion" time, button presses as stat
 hub health. Anything shown over time must be sampled in memory by the app and is
 lost on exit. That makes sparklines a live-updates feature, not a launch feature.
 
-
 ## 3. Device to controls
 
 What each device type can sensibly show. A control appears only if its capability is
@@ -163,18 +165,7 @@ disable controls. Never show the raw `device_type` string; humanize it.
 | 11 | unknown | Name, humanized type, model, manufacturer | `get_all_devices()` cannot return unknown types in 1.6.1; keep the fallback anyway |
 | 12 | scenes | Name, mapped glyph with generic fallback, Activate, inline result | Undo window and "next run" are possible from `undo_allowed_duration` and `triggers[]` but not planned |
 
-## 4. Threading and state notes
-
-1. Hub calls block and the shared `requests.Session` is not documented as
-   thread-safe `[unverified]`; the app runs every call in a worker (`req-4`).
-2. Event listener (`t-16`): events carry only the changed attributes. Either merge
-   the camelCase keys or `reload()` the event's device (one `GET /devices/{id}`),
-   which is simpler and robust. Refetch everything after a reconnect.
-3. A refresh can skip `get_all_devices()` for one raw `hub.get("/devices")` and
-   per-device conversion in `try/except`, but only if measurement shows the 12-call
-   cost matters. The library's `dict_to_*` converters are not documented as public API.
-
-## 5. Open questions and how to answer them
+## 4. Open questions and how to answer them
 
 Answer from real data, not assumption. The dump below is read-only. Supply the token
 through an environment variable and never print or commit it; strip serial numbers
