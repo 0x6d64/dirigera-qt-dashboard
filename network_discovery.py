@@ -1,6 +1,7 @@
 """Network discovery utilities for finding Dirigera hubs on the local network."""
 
 import ipaddress
+import logging
 import socket
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from typing import Callable, Dict, List, Optional, Tuple, cast
@@ -9,6 +10,8 @@ import netifaces
 import requests
 import urllib3
 from getmac import get_mac_address
+
+log = logging.getLogger(__name__)
 
 # The hub uses a self-signed certificate, so the identification probe must
 # skip TLS verification (same behavior as the dirigera library itself).
@@ -81,7 +84,7 @@ def check_dirigera_port(ip: str, timeout: float = 1.0) -> bool:
             sock.settimeout(timeout)
             result = sock.connect_ex((ip, DIRIGERA_PORT))
             return result == 0
-    except (socket.error, socket.timeout):
+    except OSError:  # includes socket.timeout
         return False
 
 
@@ -194,7 +197,11 @@ def discover_dirigera_hubs(
                 break
             done, pending = wait(pending, timeout=0.1, return_when=FIRST_COMPLETED)
             for future in done:
-                result = future.result()
+                try:
+                    result = future.result()
+                except Exception:  # one failing probe must not abort the scan
+                    log.exception("Probe failed; skipping that address")
+                    continue
                 if result:
                     discovered_hubs.append(result)
     finally:

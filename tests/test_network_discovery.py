@@ -185,3 +185,18 @@ def test_should_stop_ends_the_scan_early(monkeypatch: pytest.MonkeyPatch) -> Non
     assert result == []
     assert time.monotonic() - started < 5
     assert len(scanned) < 1016 // 2  # far fewer than the 1016 addresses
+
+
+def test_one_failing_probe_does_not_abort_the_scan(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(nd, "get_local_networks", lambda: ["10.9.0.0/29"])
+
+    def scan(ip: str) -> tuple[str, str | None] | None:
+        if ip == "10.9.0.2":
+            raise RuntimeError("probe blew up")
+        return (ip, None) if ip in ("10.9.0.1", "10.9.0.3") else None
+
+    monkeypatch.setattr(nd, "scan_ip", scan)
+    result = nd.discover_dirigera_hubs(max_workers=2)
+    assert sorted(result) == [("10.9.0.1", None), ("10.9.0.3", None)]

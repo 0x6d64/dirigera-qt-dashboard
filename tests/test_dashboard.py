@@ -152,6 +152,22 @@ def test_failed_command_resyncs_card_and_reports(
     assert dialogs == []
 
 
+def test_failing_reload_is_logged_and_the_failure_still_reported(
+    window: Any, wait_until: Wait, caplog: pytest.LogCaptureFixture
+) -> None:
+    lamp = StubLight(fail=True)
+
+    def broken_reload() -> Any:
+        raise OSError("reload broke")
+
+    lamp.reload = broken_reload  # type: ignore[method-assign]
+    card = _card(window, lamp)
+    with caplog.at_level("WARNING", logger="dashboard"):
+        card.switch.setChecked(True)
+        wait_until(lambda: "hub said no" in card.footer_label.text())
+    assert any("reload broke" in r.getMessage() for r in caplog.records)
+
+
 def test_card_error_clears_after_its_timeout(
     window: Any, monkeypatch: pytest.MonkeyPatch, wait_until: Wait
 ) -> None:

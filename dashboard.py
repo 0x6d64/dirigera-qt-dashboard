@@ -1,5 +1,6 @@
 import configparser
 import ipaddress
+import logging
 import threading
 from datetime import datetime
 from pathlib import Path
@@ -40,6 +41,8 @@ from widgets.grid import CardGrid
 from widgets.scene import SceneTile
 from widgets.segments import SegmentedControl
 
+log = logging.getLogger(__name__)
+
 # Seconds between automatic background refreshes (req-13, t-56).
 POLL_INTERVAL_S = 30
 # Delay before the refresh that follows a scene activation: the hub applies a
@@ -62,6 +65,7 @@ class DiscoveryThread(QThread):
 
     # Named discovery_done to avoid shadowing the built-in QThread.finished.
     discovery_done = pyqtSignal(list)  # type: ignore[call-arg]  # (ip, mac)
+    discovery_failed = pyqtSignal(str)  # type: ignore[call-arg]
 
     def __init__(self, parent: Optional[QObject] = None) -> None:
         super().__init__(parent)
@@ -79,8 +83,9 @@ class DiscoveryThread(QThread):
         try:
             hubs = discover_dirigera_hubs(should_stop=self._stop.is_set)
             self.discovery_done.emit(hubs)
-        except Exception:
-            self.discovery_done.emit([])
+        except Exception as e:  # thread boundary: an escape would be lost
+            log.exception("Hub discovery failed")
+            self.discovery_failed.emit(str(e))
 
 
 class ConnectWorker(QThread):
@@ -101,7 +106,8 @@ class ConnectWorker(QThread):
             # Hub() never contacts the hub, so verify the credentials with a
             # lightweight authenticated probe before claiming success (req-1).
             hub.get("/home")
-        except Exception as e:
+        except Exception as e:  # thread boundary: an escape would be lost
+            log.exception("Connecting to the hub at %s failed", self._ip_address)
             self.failed.emit(str(e))
             return
         self.connected.emit(hub, self._ip_address)
@@ -121,7 +127,8 @@ class SceneTriggerWorker(QThread):
         """Trigger the scene and emit it back, or the scene plus the error."""
         try:
             self._scene.trigger()
-        except Exception as e:
+        except Exception as e:  # thread boundary: an escape would be lost
+            log.exception("Triggering a scene failed")
             self.failed.emit(self._scene, str(e))
             return
         self.triggered.emit(self._scene)
@@ -152,11 +159,13 @@ class CommandWorker(QThread):
         """Send the command; on error reload the device and emit the message."""
         try:
             self._command()
-        except Exception as e:
+        except Exception as e:  # thread boundary: an escape would be lost
+            log.exception("Command %r failed", self._action)
             try:
                 self._device.reload()
-            except Exception:
-                pass  # the in-memory state is the best truth left
+            except Exception as reload_error:  # thread boundary, as above
+                # The in-memory state is the best truth left.
+                log.warning("Reloading the device failed: %s", reload_error)
             self.failed.emit(self._card, self._action, str(e))
             return
         self.succeeded.emit(self._card)
@@ -177,7 +186,8 @@ class RefreshWorker(QThread):
         try:
             devices = self._hub.get_all_devices()
             scenes = self._hub.get_scenes()
-        except Exception as e:
+        except Exception as e:  # thread boundary: an escape would be lost
+            log.exception("Refreshing from the hub failed")
             self.failed.emit(str(e))
             return
         self.refreshed.emit(devices, scenes)
@@ -554,6 +564,7 @@ class DirigeraDashboard(QMainWindow):
         # Create and start the discovery thread
         self.discovery_thread = DiscoveryThread()
         self.discovery_thread.discovery_done.connect(self.on_discovery_finished)
+        self.discovery_thread.discovery_failed.connect(self.on_discovery_failed)
 
         # Handle dialog cancellation
         self.progress_dialog.canceled.connect(self.on_discovery_canceled)
@@ -569,15 +580,27 @@ class DirigeraDashboard(QMainWindow):
             thread.request_stop()
         self.set_status_text("Discovery canceled")
 
-    def on_discovery_finished(self, discovered_hubs: List[Tuple[str, str]]):
-        """Handle completion of the discovery process."""
-        # Close the progress dialog. QProgressDialog.close() emits canceled,
-        # which would terminate the thread that just finished and report a
-        # cancel, so disconnect the cancel handler first.
+    def _end_discovery_ui(self) -> None:
+        """Close the progress dialog and re-enable the Discover button."""
+        # QProgressDialog.close() emits canceled, which would terminate the
+        # thread that just finished and report a cancel, so disconnect the
+        # cancel handler first.
         if hasattr(self, "progress_dialog"):
             self.progress_dialog.canceled.disconnect(self.on_discovery_canceled)
             self.progress_dialog.close()
         self.connection_block.discover_button.setEnabled(True)
+
+    def on_discovery_failed(self, message: str) -> None:
+        """Report a scan that raised, so it never reads as "no hubs found"."""
+        self._end_discovery_ui()
+        if self.discovery_thread.stop_requested():
+            return  # canceled (or closing): nobody is waiting for the result
+        self.connection_block.set_message(f"Discovery failed: {message}", "danger")
+        self.set_status_text("Discovery failed", "danger")
+
+    def on_discovery_finished(self, discovered_hubs: List[Tuple[str, str]]):
+        """Handle completion of the discovery process."""
+        self._end_discovery_ui()
 
         if self.discovery_thread.stop_requested():
             return  # canceled (or closing): drop the partial result
@@ -665,7 +688,7 @@ class DirigeraDashboard(QMainWindow):
 
     def refresh_devices(self):
         """Start a refresh the user asked for (t-17)."""
-        self._start_refresh(background=False)
+        self._start_refresh()
 
     def _poll(self) -> None:
         """Timer tick: refresh unless that would be wasteful or stack up.
@@ -681,9 +704,9 @@ class DirigeraDashboard(QMainWindow):
             or self.isMinimized()
         ):
             return
-        self._start_refresh(background=True)
+        self._start_refresh()
 
-    def _start_refresh(self, background: bool) -> None:
+    def _start_refresh(self) -> None:
         """Start the fetch worker. Failures are reported inline, never in a dialog."""
         hub = self.hub
         if hub is None:
@@ -708,7 +731,7 @@ class DirigeraDashboard(QMainWindow):
         if self._refresh_worker is not None:
             self._refresh_pending = True
             return
-        self._start_refresh(background=True)
+        self._start_refresh()
 
     @override
     def changeEvent(self, event: Optional[QEvent]) -> None:
@@ -929,7 +952,7 @@ class DirigeraDashboard(QMainWindow):
         self.refresh_button.setEnabled(self.hub is not None)
         if self._refresh_pending:
             self._refresh_pending = False
-            self._start_refresh(background=True)
+            self._start_refresh()
 
     def _new_room_section(self, room_name: str) -> Tuple[QWidget, CardGrid, QLabel]:
         """Build one empty room section: section label plus reflowing grid.
@@ -1077,16 +1100,6 @@ class DirigeraDashboard(QMainWindow):
             ):
                 return card
         return None
-
-    def clear_layout(self, layout: QVBoxLayout) -> None:
-        """Clear all widgets from a layout."""
-        while layout.count() > 1:  # Keep the stretch at the end
-            item = layout.takeAt(0)
-            if item is None:
-                break
-            widget = item.widget()
-            if widget is not None:
-                widget.deleteLater()
 
     def _running_workers(self) -> List[QThread]:
         """Return every worker thread that is still running."""
