@@ -230,7 +230,13 @@ remotes. Answers to section 4 where the data settles them:
    `[{"attributes": {"energyConsumedAtLastReset": 0}}]` succeeds; the hub then
    stores the current `totalEnergyConsumed` in `energyConsumedAtLastReset` and
    sets `timeOfLastEnergyReset` to now. `totalEnergyConsumed` itself never
-   resets, so "since reset" starts again at 0.
+   resets, so "since reset" starts again at 0. **Repeated 2026-11-22 (owner's
+   permission, one plug, sent from a script, not the dashboard button):** before,
+   total 19.026 kWh, at last reset 19.020 kWh, reset time the previous evening;
+   the PATCH was accepted and a read 3 s later already showed
+   `energyConsumedAtLastReset` equal to the total (19.026) and
+   `timeOfLastEnergyReset` set to now, unchanged 5 s later. The total stayed
+   19.026. The dashboard's Reset button itself was not part of this test.
 3. **Air purifier (STARKVIND E2007)**: `fanModeSequence` is
    `lowMediumHighAuto`; `currentPM25` is a plain integer. **Speed control
    (tried with the owner's permission):** `PATCH` of `motorState` sets the
