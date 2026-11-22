@@ -40,6 +40,7 @@ dev = [
     "mypy>=2.4.1",
     "pre-commit>=4.7.0",
     "pytest>=9.2.0",
+    "pytest-xdist>=3.8.0",
     "ruff>=0.17.5",
     "types-requests>=2.31.0",
 ]
@@ -67,6 +68,10 @@ disallow_untyped_defs = false
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+# Tests run in parallel (pytest-xdist), one file per worker so timer-based
+# tests within a file keep their order. Use `-n 0` to run serially, e.g. under
+# a debugger.
+addopts = "-n auto --dist loadfile"
 markers = [
     "slow: long-running test; CI runs it on master only",
     "hardware: needs a real DIRIGERA hub; never run in CI",
