@@ -143,7 +143,10 @@ created in the IKEA app only. A light's state is the top-level field
 `activate_adaptive_profile(id)` sends `PATCH /devices/{id}`
 `[{"adaptiveProfile": {"id": id, "active": true}}]` without a capability check.
 There is no library call to leave adaptive mode; its docstring says a manual
-change ends it (unverified, see section 5 item 7). `reload()` to see the state.
+change ends it (unverified, see section 5 item 7). What ends it, verified on the
+real hub 2026-11-22: `PATCH /devices/{id}`
+`[{"adaptiveProfile": {"id": <active id>, "active": false}}]` through
+`light.dirigera_client.patch` (the hub then reports `{}`; level and on-state stay). `reload()` to see the state.
 
 ### 2.6 Events `[lib]`
 
@@ -285,6 +288,18 @@ remotes. Answers to section 4 where the data settles them:
    reports `{}`; that light also gets the picker, and a failed activation
    shows the card error. **Pending owner permission (hub writes, not run):**
    W1 (what activation does to an off light, level and warmth; which manual
-   changes end a profile) and W2 (a payload that leaves adaptive mode).
-   Until W2 is answered, "Off" in the picker is only a state and cannot be
-   chosen while a profile is active.
+   changes end a profile).
+   **W2 and activation on the Light Strip (owner, 2026-11-22, one light, model
+   "TRADFRI Driver 30W": brightness only, no warmth; same for all the owner's
+   lights, whose `canReceive` is `customName`, `isOn`, `lightLevel`,
+   `colorHue`, `colorSaturation`).** Start: on, level 100, `adaptiveProfile`
+   `{}`. Activation, `PATCH /devices/{id}` `[{"adaptiveProfile": {"id": <profile
+   id>, "active": true}}]`, was accepted; about 6 s later the light reported
+   `{"id": <id>, "active": true}` and its level had moved from 100 to 98, so a
+   light without warmth accepts a profile and follows it. W2a, the same
+   payload with `"active": false` (id kept), was accepted; about 6 s later
+   `adaptiveProfile` was `{}` and level and on-state were unchanged (on, 98).
+   **That payload leaves adaptive mode**; the id-less variant (W2b) was not
+   needed and not tried. Side observation, not investigated: a later `PATCH`
+   `[{"lightLevel": 100}]`, sent twice with an 8 s wait, was accepted but the
+   strip stayed at 98.

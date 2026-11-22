@@ -191,6 +191,13 @@ never printing the token, and wait 6 s before each read (`hub.get(f"/devices/{id
 Record the answers in commit 1. Without them, commits 2 to 5 use the defaults
 named in their steps and commit 6 is skipped.
 
+> **Answered 2026-11-22 (owner, real hub, Light Strip "TRADFRI Driver 30W",
+> brightness only):** activation with `{"id": <id>, "active": true}` was
+> accepted and the light followed the profile (level 100 to 98 after about
+> 6 s). W2a, `{"id": <id>, "active": false}`, was accepted: `adaptiveProfile`
+> became `{}` after about 6 s, level and on-state unchanged. W2b was not
+> needed. Details: `doc/dirigera-api.md` §5 item 7. W1 stays unrun.
+
 #### Commit 1 — "record adaptive profile facts" (t-15) ✓ executed 2026-11-22
 
 1. `doc/dirigera-api.md` §5: new item 7 "Adaptive profiles" with the E1 (and,
