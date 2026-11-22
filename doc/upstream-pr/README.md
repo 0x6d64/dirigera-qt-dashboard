@@ -7,10 +7,13 @@ Tracked as `t-101`. Nothing here has been posted; the hub facts are also in
 
 ## What is proposed
 
-| # | Change | Library today | Verified on the real hub |
-| --- | --- | --- | --- |
-| 1 | `Light.leave_adaptive_profile()` | `activate_adaptive_profile()` only | yes, one light (2026-11-22) |
-| 2 | `Outlet.reset_energy_counter()` and `ElectricalSensor.reset_energy_counter()` | read-only energy attributes | outlet only, one INSPELNING plug (2026-11-21 and 2026-11-22) |
+| # | Change | Priority | Library today | Verified on the real hub |
+| --- | --- | --- | --- | --- |
+| 1 | `Light.leave_adaptive_profile()` | lower | `activate_adaptive_profile()` only | yes, one light (2026-11-22) |
+| 2 | `Outlet.reset_energy_counter()` and `ElectricalSensor.reset_energy_counter()` | first | read-only energy attributes | outlet only, one INSPELNING plug (2026-11-21 and 2026-11-22) |
+
+Item 2 goes first; leaving an adaptive profile (item 1) is lower priority (owner,
+2026-11-22), so its issue and PR can wait.
 
 Upstream was searched on 2026-11-22: no open issues or PRs, and no closed ones
 cover either change.
@@ -47,8 +50,14 @@ reformats unrelated files, so format only the six touched files).
 
 - Check upstream issues and PRs again.
 - Real-hub check of the dashboard's Reset button and the "Off" adaptive choice.
-- Decide on item 2 for split plugs (GRILLPLATS): untested, the capability guard
-  would refuse the reset there.
+- **Decision deferred (owner, 2026-11-22): `reset_energy_counter()` on
+  `ElectricalSensor` (split plugs such as GRILLPLATS).** The patch has the method
+  on both classes with a capability guard, but the GRILLPLATS sensor lists only
+  `customName` in `canReceive` (upstream issue #132), so the guard would refuse
+  there, and nobody has tried the PATCH on that device or on its sibling outlet.
+  Options: (1) keep the guard; (2) drop the guard on `ElectricalSensor` and let
+  the hub decide; (3) ship `Outlet` only and ask a GRILLPLATS owner in the issue
+  to test. Leaning towards 3. Until decided, the patch stays as it is.
 - Add the README sentences listed in `pr-text.md`.
 - Decide whether to send one PR or two; the changes are independent.
 - No real IPs, tokens, device IDs or serial numbers in any text. The traces use

@@ -3,6 +3,10 @@
 Drafts, not yet posted. Target repo: `Leggin/dirigera`, base version 1.6.1.
 Check the open issues and PRs again before posting (none were open on
 2026-11-22). The maintainer's usual flow is an issue first, then a PR.
+Issue 2 (energy reset) goes first; issue 1 (leave adaptive) is lower priority.
+**Open decision:** whether `reset_energy_counter()` is offered on
+`ElectricalSensor` at all (see README, open points); the texts below still
+assume both classes.
 
 ## Issue 1: leave an adaptive profile
 
