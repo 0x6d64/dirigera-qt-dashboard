@@ -122,6 +122,18 @@ def make_profile(id_: str, name: str | None) -> SimpleNamespace:
     return SimpleNamespace(id=id_, name=name)
 
 
+class StubLightClient:
+    """The `dirigera_client` of a `StubLight`: records raw `patch` calls."""
+
+    def __init__(self, light: "StubLight") -> None:
+        self.light = light
+
+    def patch(self, route: str, data: list[dict[str, Any]]) -> str:
+        self.light._command()
+        self.light.sent.append(("patch", (route, data)))
+        return ""
+
+
 class StubLight:
     """A light whose commands record their thread and can be made to fail.
 
@@ -144,6 +156,7 @@ class StubLight:
         self.fail = fail
         self.threads: list[threading.Thread] = []
         self.sent: list[tuple[str, Any]] = []  # commands in the order sent
+        self.dirigera_client = StubLightClient(self)
 
     def _command(self) -> None:
         self.threads.append(threading.current_thread())

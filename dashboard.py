@@ -33,7 +33,7 @@ from PyQt6.QtWidgets import (
 )
 
 import theme
-from adaptive import active_profile_id, profile_options
+from adaptive import active_profile_id, leave_profile, profile_options
 from network_discovery import (
     get_local_networks,
     hosts_to_scan,
@@ -1446,20 +1446,29 @@ class DirigeraDashboard(QMainWindow):
         )
 
     def set_adaptive_profile(self, card: DeviceCard, profile_id: Optional[str]) -> None:
-        """Let a light follow an adaptive profile (t-15).
+        """Let a light follow an adaptive profile, or leave it with `None` (t-15, t-95).
 
-        "Off" (`None`) sends nothing: the library has no call to leave
-        adaptive mode (doc/dirigera-api.md §5 item 7). The card shows the
-        state the library stored, then the hub's own after a delay.
+        "Off" ends adaptive mode with the id of the profile the light follows
+        (`leave_profile`); it runs only on the user's explicit choice, never
+        from a refresh or resync. The card shows the state stored locally,
+        then the hub's own after a delay.
         """
-        if profile_id is None:
-            return
         device = card.device
-        worker = self.run_device_command(
-            card,
-            lambda: device.activate_adaptive_profile(profile_id),
-            "set adaptive profile",
-        )
+        if profile_id is None:
+            active = active_profile_id(device)
+            if active is None:  # nothing to leave
+                card.sync_from_device()
+                return
+
+            def command() -> None:
+                leave_profile(device, active)
+
+        else:
+
+            def command() -> None:
+                device.activate_adaptive_profile(profile_id)
+
+        worker = self.run_device_command(card, command, "set adaptive profile")
         if worker is not None:
             worker.succeeded.connect(self._schedule_adaptive_refresh)
 

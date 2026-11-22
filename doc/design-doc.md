@@ -289,9 +289,9 @@ Rules:
 Light card: adaptive row (`t-15`). A light that carries an adaptive profile state gets,
 after the warmth slider, a row with the label "Adaptive" and a combo box: "Off", then
 the hub's profile names (profiles are created in the IKEA app only). It shows the profile
-the light follows, or "Unknown profile" when that id is not in the list. While a profile
-is active "Off" is disabled and the tooltip says "Change brightness or warmth to stop
-following the profile". The row is hidden while the hub reports no profiles. The popup
+the light follows, or "Unknown profile" when that id is not in the list. Choosing
+"Off" while a profile is active ends adaptive mode (t-95, `req-24`); it is always
+selectable and sends only on that explicit choice. The row is hidden while the hub reports no profiles. The popup
 is not a modal dialog (8.14), and the mouse wheel never changes the box. `[proposed]`
 
 Control shape (`t-98`, `req-26`): controls are built once per card, so a card is

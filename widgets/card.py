@@ -86,7 +86,6 @@ FAN_MOTOR_STATES = (0, 1, 10, 20, 30, 40, 50)
 # Adaptive profile row of a light card (t-15, design-doc.md §8.1).
 ADAPTIVE_LABEL = "Adaptive"
 OFF_LABEL = "Off"
-LEAVE_HINT = "Change brightness or warmth to stop following the profile"
 # Quiet time after the last pick before the profile is sent; read when the
 # timer starts, so tests can change it.
 PROFILE_COMMIT_MS = 300
@@ -461,9 +460,9 @@ class DeviceCard(CardBase):
     def _sync_profile(self, protect_user: bool) -> None:
         """Show the profile the light follows; sends nothing.
 
-        "Off" cannot be chosen while a profile is active: the library has no
-        way to leave adaptive mode (dirigera-api.md §5 item 7), the hint says
-        what ends it. A profile missing from the list shows as unknown.
+        "Off" is always selectable: choosing it ends adaptive mode
+        (dirigera-api.md §5 item 7). A profile missing from the list shows as
+        unknown.
         """
         box = getattr(self, "profile_box", None)
         if not isinstance(box, ProfileBox):
@@ -488,8 +487,7 @@ class DeviceCard(CardBase):
             box.setCurrentIndex(index)
         off_item = model.item(0)
         if off_item is not None:
-            off_item.setEnabled(active is None)
-        box.setToolTip("" if active is None else LEAVE_HINT)
+            off_item.setEnabled(True)
         box.blockSignals(False)
 
     @staticmethod
