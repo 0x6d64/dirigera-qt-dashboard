@@ -16,6 +16,13 @@ jobs:
       - run: >
           sudo apt-get update && sudo apt-get install -y
           libegl1 libgl1 libxkbcommon0 libdbus-1-3 libfontconfig1 libglib2.0-0
+      # Imports from another directory, so a module missing from
+      # `py-modules` in pyproject.toml fails here (t-96).
+      - name: Import smoke test
+        working-directory: ${{ runner.temp }}
+        run: uv run --project "$GITHUB_WORKSPACE" python -I -c "import dashboard"
+        env:
+          QT_QPA_PLATFORM: offscreen
       - run: uv run black --check .
       - run: uv run ruff check .
       - run: uv run mypy .
