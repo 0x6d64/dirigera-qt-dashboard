@@ -52,7 +52,7 @@ from settings import (
     parse_energy_settings,
     ui_settings,
 )
-from widgets.card import DeviceCard, device_sort_key
+from widgets.card import DeviceCard, control_shape, device_sort_key
 from widgets.cardbase import RoomSectionHeader, label_style
 from widgets.chip import StatusChip
 from widgets.connection import ConnectionBlock
@@ -1133,7 +1133,15 @@ class DirigeraDashboard(QMainWindow):
                 card = old_cards.get(device_id)
                 if card is None:
                     card = self.create_device_widget(device)
+                elif card.shape != control_shape(device) and not card.is_pending:
+                    # Controls are built once, so a changed shape needs a new
+                    # card (t-98). The old one is dropped below.
+                    card = self.create_device_widget(device)
                 else:
+                    if card.shape != control_shape(device):
+                        # Pending: a running command keeps its card. Rebuild
+                        # on the next refresh, which must not be skipped.
+                        self._signature = None
                     card.update_from_device(device)
                     card.set_profiles(profiles)
                 card.set_room_colour(theme.room_colour(room_colour_name(device)))
@@ -1151,7 +1159,7 @@ class DirigeraDashboard(QMainWindow):
             section.deleteLater()
         # Cards for devices that are gone (their section may live on).
         for device_id, card in old_cards.items():
-            if device_id not in new_cards:
+            if new_cards.get(device_id) is not card:
                 card.hide()
                 card.deleteLater()
         self._device_cards = new_cards
