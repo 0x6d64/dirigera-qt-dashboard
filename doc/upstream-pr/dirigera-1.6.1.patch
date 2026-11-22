@@ -5,7 +5,7 @@ index 847fb36..e12c40a 100644
 @@ -32,6 +32,21 @@ class ElectricalSensor(Device):
          self.dirigera_client.patch(route=f"/devices/{self.id}", data=data)
          self.attributes.custom_name = name
-
+ 
 +    def reset_energy_counter(self) -> None:
 +        """
 +        Restarts the "since last reset" count: the hub stores the current
@@ -21,7 +21,7 @@ index 847fb36..e12c40a 100644
 +        data = [{"attributes": {"energyConsumedAtLastReset": 0}}]
 +        self.dirigera_client.patch(route=f"/devices/{self.id}", data=data)
 +
-
+ 
  def dict_to_electrical_sensor(
      data: Dict[str, Any], dirigera_client: AbstractSmartHomeHub
 diff --git a/src/dirigera/devices/light.py b/src/dirigera/devices/light.py
@@ -31,7 +31,7 @@ index c2cb931..7a25f44 100644
 @@ -130,6 +130,20 @@ class Light(Device):
          self.dirigera_client.patch(route=f"/devices/{self.id}", data=data)
          self.adaptive_profile = AdaptiveProfileState(id=profile_id, active=True)
-
+ 
 +    def leave_adaptive_profile(self) -> None:
 +        """
 +        Takes the lamp out of adaptive mode. Level and on/off state stay as they are.
@@ -46,7 +46,7 @@ index c2cb931..7a25f44 100644
 +        self.dirigera_client.patch(route=f"/devices/{self.id}", data=data)
 +        self.adaptive_profile = AdaptiveProfileState()
 +
-
+ 
  def dict_to_light(data: Dict[str, Any], dirigera_client: AbstractSmartHomeHub) -> Light:
      return Light(
 diff --git a/src/dirigera/devices/outlet.py b/src/dirigera/devices/outlet.py
@@ -56,7 +56,7 @@ index 3d1634a..3147190 100644
 @@ -64,6 +64,21 @@ class Outlet(Device):
          self.dirigera_client.patch(route=f"/devices/{self.id}", data=data)
          self.attributes.startup_on_off = behaviour
-
+ 
 +    def reset_energy_counter(self) -> None:
 +        """
 +        Restarts the "since last reset" count: the hub stores the current
@@ -72,7 +72,7 @@ index 3d1634a..3147190 100644
 +        data = [{"attributes": {"energyConsumedAtLastReset": 0}}]
 +        self.dirigera_client.patch(route=f"/devices/{self.id}", data=data)
 +
-
+ 
  def dict_to_outlet(
      data: Dict[str, Any], dirigera_client: AbstractSmartHomeHub
 diff --git a/tests/test_electrical_sensor.py b/tests/test_electrical_sensor.py

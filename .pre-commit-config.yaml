@@ -1,5 +1,8 @@
 # Install once per clone: uv run pre-commit install --install-hooks
 # Tool hooks run through `uv run`, so they use the versions pinned in uv.lock.
+# doc/upstream-pr/ holds files meant for another project (a patch, JSON traces):
+# no hook may rewrite them.
+exclude: ^doc/upstream-pr/
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
