@@ -166,6 +166,9 @@ uv run mypy .
 uv run pytest -q
 ```
 
+Tests run in parallel (`pytest-xdist`, one worker per CPU core). Pass `-n 0` to
+run them serially, for example under a debugger.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
