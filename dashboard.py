@@ -1366,6 +1366,7 @@ class DirigeraDashboard(QMainWindow):
 
     def _on_command_done(self, card: CommandTarget) -> None:
         """Redraw the card from the value the library stored on success."""
+        self._signature = None  # the card may differ from the last fetch
         if not _is_deleted(card):
             card.sync_from_device()
 
@@ -1373,6 +1374,7 @@ class DirigeraDashboard(QMainWindow):
         self, card: CommandTarget, action: str, message: str
     ) -> None:
         """Report the failure and show the device's real state (req-3)."""
+        self._signature = None  # the card may differ from the last fetch
         if not _is_deleted(card):
             card.sync_from_device()
             card.show_error(f"Couldn't {action}: {message}")
