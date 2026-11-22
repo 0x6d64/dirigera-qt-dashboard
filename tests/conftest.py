@@ -28,6 +28,15 @@ def qapp() -> QApplication:
     return app
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _always_have_qapp(qapp: QApplication) -> None:
+    """Create the QApplication before any test, whatever order tests run in.
+
+    Some tests build widgets without asking for `qapp`; with a parallel
+    runner such a test can be the first on a worker and would crash Qt.
+    """
+
+
 @pytest.fixture(autouse=True)
 def isolated_ui_settings(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """Point the UI settings at a temp dir so no test touches the real ones."""
