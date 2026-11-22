@@ -11,6 +11,8 @@ Follows design-doc.md §8.4:
 - Command signal `committed(int)` (req-6): fires once on release after a drag,
   and after a short pause for every other user change — track clicks, arrow
   and Page keys, mouse wheel — so no input path leaves a value unsent.
+- The wheel only moves a slider that has focus (click or Tab), so scrolling a
+  card list never changes a value by accident (doc/qt-gotchas.md item 13).
   Programmatic `set_value()` never fires it.
 - Optional `gradient=(start, end)`: the track is a left-to-right gradient
   between two theme colours instead of a fill (colour temperature, §8.4.7).
@@ -20,12 +22,28 @@ Follows design-doc.md §8.4:
 from typing import Optional, override
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import QWheelEvent
 from PyQt6.QtWidgets import QHBoxLayout, QLabel, QSlider, QWidget
 
 import theme
 
 # Pause after a non-drag change before the value is committed (req-6).
 COMMIT_DELAY_MS = 300
+
+
+class _FocusWheelSlider(QSlider):
+    """A slider that takes focus on click or Tab and ignores wheel turns before."""
+
+    def __init__(self, orientation: Qt.Orientation) -> None:
+        super().__init__(orientation)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+
+    @override
+    def wheelEvent(self, e: Optional[QWheelEvent]) -> None:
+        if e is not None and not self.hasFocus():
+            e.ignore()  # let the scroll area scroll instead
+            return
+        super().wheelEvent(e)
 
 
 class LabeledSlider(QWidget):
@@ -72,7 +90,7 @@ class LabeledSlider(QWidget):
             """)
 
         # QSlider
-        self._slider = QSlider(Qt.Orientation.Horizontal)
+        self._slider = _FocusWheelSlider(Qt.Orientation.Horizontal)
         self._slider.setMinimum(minimum)
         self._slider.setMaximum(maximum)
         self._slider.setValue(initial_value)
