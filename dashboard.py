@@ -901,8 +901,8 @@ class DirigeraDashboard(QMainWindow):
         and timer refreshes fetch them, not the event-driven ones (t-15).
         """
         hub = self.hub
-        if hub is None:
-            return
+        if hub is None or self._close_pending:
+            return  # a pending close waits for workers; it starts no new ones
         if self._refresh_worker is not None:
             return  # one fetch at a time
 
@@ -973,13 +973,18 @@ class DirigeraDashboard(QMainWindow):
         """Any hub event means something changed: refresh once per window."""
         if not self._from_current_listener():
             return
-        if self.hub is None or self.isMinimized() or self._event_timer.isActive():
+        if (
+            self.hub is None
+            or self._close_pending
+            or self.isMinimized()
+            or self._event_timer.isActive()
+        ):
             return  # restoring a minimised window polls at once
         self._event_timer.start(EVENT_COALESCE_MS)
 
     def _request_background_refresh(self) -> None:
         """Refresh in the background now, or once the running fetch ends."""
-        if self.hub is None:
+        if self.hub is None or self._close_pending:
             return
         if self._refresh_worker is not None:
             self._refresh_pending = True
@@ -1278,7 +1283,7 @@ class DirigeraDashboard(QMainWindow):
         self.refresh_button.setEnabled(self.hub is not None)
         if self._refresh_pending:
             self._refresh_pending = False
-            self._start_refresh()
+            self._start_refresh()  # does nothing while a close is pending
 
     def _new_room_section(
         self, room_name: str
@@ -1449,6 +1454,8 @@ class DirigeraDashboard(QMainWindow):
 
     def _schedule_adaptive_refresh(self, _card: object = None) -> None:
         """(Re)start the delayed refresh that shows what the hub applied."""
+        if self._close_pending:
+            return
         self._adaptive_refresh_timer.start(ADAPTIVE_REFRESH_DELAY_MS)
 
     def set_fan_speed(self, card: DeviceCard, motor_state: int) -> None:
@@ -1508,6 +1515,8 @@ class DirigeraDashboard(QMainWindow):
         if tile is not None:
             tile.show_activated()
         # Restarting coalesces quick activations into one fetch.
+        if self._close_pending:
+            return
         self._scene_refresh_timer.start(SCENE_REFRESH_DELAY_MS)
 
     def _on_scene_failed(self, scene: Scene, message: str) -> None:
@@ -1555,6 +1564,7 @@ class DirigeraDashboard(QMainWindow):
         self.refresh_timer.stop()
         self._scene_refresh_timer.stop()
         self._adaptive_refresh_timer.stop()
+        self._event_timer.stop()
         self._stop_events()
         discovery = getattr(self, "discovery_thread", None)
         if discovery is not None and discovery.isRunning():
