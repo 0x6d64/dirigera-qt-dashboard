@@ -1064,7 +1064,9 @@ class DirigeraDashboard(QMainWindow):
         signature = self._data_signature(devices, scenes, self.adaptive_profiles)
         if signature == self._signature:
             # Nothing changed: leave the widget tree and caption alone, except
-            # for undoing an earlier failure message.
+            # for undoing an earlier failure message and ageing "Last seen".
+            for card in self._device_cards.values():
+                card.refresh_offline_footer()
             if self._status_is_failure:
                 self._status_is_failure = False
                 self.set_status_text(self._summary_text)

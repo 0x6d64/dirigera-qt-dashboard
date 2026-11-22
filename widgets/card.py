@@ -769,6 +769,11 @@ class DeviceCard(CardBase):
     def _on_pending_changed(self) -> None:
         self._apply_controls_enabled()
 
+    def refresh_offline_footer(self) -> None:
+        """Recompute "Last seen ..." (it ages while the data stays the same)."""
+        if self._is_offline:
+            self._set_footer(self._offline_text())
+
     @override
     def sync_from_device(self) -> None:
         """Resync every control, the chip and the footer from `self.device`.
