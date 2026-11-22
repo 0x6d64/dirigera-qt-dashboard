@@ -1,0 +1,160 @@
+diff --git a/src/dirigera/devices/electrical_sensor.py b/src/dirigera/devices/electrical_sensor.py
+index 847fb36..e12c40a 100644
+--- a/src/dirigera/devices/electrical_sensor.py
++++ b/src/dirigera/devices/electrical_sensor.py
+@@ -32,6 +32,21 @@ class ElectricalSensor(Device):
+         self.dirigera_client.patch(route=f"/devices/{self.id}", data=data)
+         self.attributes.custom_name = name
+ 
++    def reset_energy_counter(self) -> None:
++        """
++        Restarts the "since last reset" count: the hub stores the current
++        total_energy_consumed as energy_consumed_at_last_reset and sets
++        time_of_last_energy_reset to now. total_energy_consumed itself never resets.
++        Call reload() to see the new values.
++        """
++        if "energyConsumedAtLastReset" not in self.capabilities.can_receive:
++            raise AssertionError(
++                "This device does not support the energyConsumedAtLastReset capability"
++            )
++
++        data = [{"attributes": {"energyConsumedAtLastReset": 0}}]
++        self.dirigera_client.patch(route=f"/devices/{self.id}", data=data)
++
+ 
+ def dict_to_electrical_sensor(
+     data: Dict[str, Any], dirigera_client: AbstractSmartHomeHub
+diff --git a/src/dirigera/devices/light.py b/src/dirigera/devices/light.py
+index c2cb931..7a25f44 100644
+--- a/src/dirigera/devices/light.py
++++ b/src/dirigera/devices/light.py
+@@ -130,6 +130,20 @@ class Light(Device):
+         self.dirigera_client.patch(route=f"/devices/{self.id}", data=data)
+         self.adaptive_profile = AdaptiveProfileState(id=profile_id, active=True)
+ 
++    def leave_adaptive_profile(self) -> None:
++        """
++        Takes the lamp out of adaptive mode. Level and on/off state stay as they are.
++        Does nothing if the lamp is not known to follow a profile, call reload()
++        first if its state may be out of date.
++        """
++        profile = self.adaptive_profile
++        if profile is None or not profile.active or profile.id is None:
++            return
++
++        data = [{"adaptiveProfile": {"id": profile.id, "active": False}}]
++        self.dirigera_client.patch(route=f"/devices/{self.id}", data=data)
++        self.adaptive_profile = AdaptiveProfileState()
++
+ 
+ def dict_to_light(data: Dict[str, Any], dirigera_client: AbstractSmartHomeHub) -> Light:
+     return Light(
+diff --git a/src/dirigera/devices/outlet.py b/src/dirigera/devices/outlet.py
+index 3d1634a..3147190 100644
+--- a/src/dirigera/devices/outlet.py
++++ b/src/dirigera/devices/outlet.py
+@@ -64,6 +64,21 @@ class Outlet(Device):
+         self.dirigera_client.patch(route=f"/devices/{self.id}", data=data)
+         self.attributes.startup_on_off = behaviour
+ 
++    def reset_energy_counter(self) -> None:
++        """
++        Restarts the "since last reset" count: the hub stores the current
++        total_energy_consumed as energy_consumed_at_last_reset and sets
++        time_of_last_energy_reset to now. total_energy_consumed itself never resets.
++        Call reload() to see the new values.
++        """
++        if "energyConsumedAtLastReset" not in self.capabilities.can_receive:
++            raise AssertionError(
++                "This device does not support the energyConsumedAtLastReset capability"
++            )
++
++        data = [{"attributes": {"energyConsumedAtLastReset": 0}}]
++        self.dirigera_client.patch(route=f"/devices/{self.id}", data=data)
++
+ 
+ def dict_to_outlet(
+     data: Dict[str, Any], dirigera_client: AbstractSmartHomeHub
+diff --git a/tests/test_electrical_sensor.py b/tests/test_electrical_sensor.py
+index 48ac4f6..d89d748 100644
+--- a/tests/test_electrical_sensor.py
++++ b/tests/test_electrical_sensor.py
+@@ -92,3 +92,21 @@ def test_dict_to_electrical_sensor(
+     assert sensor.attributes.total_energy_consumed == attributes["totalEnergyConsumed"]
+     assert sensor.attributes.total_energy_consumed_last_updated is not None
+     assert sensor.attributes.time_of_last_energy_reset is not None
++
++
++def test_reset_energy_counter(
++    fake_electrical_sensor: ElectricalSensor, fake_client: FakeDirigeraHub
++) -> None:
++    fake_electrical_sensor.capabilities.can_receive.append("energyConsumedAtLastReset")
++    fake_electrical_sensor.reset_energy_counter()
++    action = fake_client.patch_actions.pop()
++    assert action["route"] == f"/devices/{fake_electrical_sensor.id}"
++    assert action["data"] == [{"attributes": {"energyConsumedAtLastReset": 0}}]
++
++
++def test_reset_energy_counter_needs_capability(
++    fake_electrical_sensor: ElectricalSensor, fake_client: FakeDirigeraHub
++) -> None:
++    with pytest.raises(AssertionError):
++        fake_electrical_sensor.reset_energy_counter()
++    assert not fake_client.patch_actions
+diff --git a/tests/test_light.py b/tests/test_light.py
+index 3b40518..d721305 100644
+--- a/tests/test_light.py
++++ b/tests/test_light.py
+@@ -462,3 +462,26 @@ def test_dict_to_light_3rdparty(fake_client: FakeDirigeraHub) -> None:
+     assert light.attributes.model == data["attributes"]["model"]
+     assert light.attributes.manufacturer == data["attributes"]["manufacturer"]
+     assert light.attributes.serial_number == data["attributes"]["serialNumber"]
++
++
++def test_leave_adaptive_profile(
++    fake_light: Light, fake_client: FakeDirigeraHub
++) -> None:
++    fake_light.activate_adaptive_profile(PROFILE_ID)
++    fake_client.patch_actions.clear()
++    fake_light.leave_adaptive_profile()
++    action = fake_client.patch_actions.pop()
++    assert action["route"] == f"/devices/{fake_light.id}"
++    assert action["data"] == [{"adaptiveProfile": {"id": PROFILE_ID, "active": False}}]
++    assert fake_light.adaptive_profile == AdaptiveProfileState()
++
++
++def test_leave_adaptive_profile_does_nothing_outside_adaptive_mode(
++    fake_light: Light, fake_client: FakeDirigeraHub
++) -> None:
++    # the hub did not report a profile
++    fake_light.leave_adaptive_profile()
++    # the hub reported an empty profile
++    fake_light.adaptive_profile = AdaptiveProfileState()
++    fake_light.leave_adaptive_profile()
++    assert not fake_client.patch_actions
+diff --git a/tests/test_outlet.py b/tests/test_outlet.py
+index 5bb4b03..bddb481 100644
+--- a/tests/test_outlet.py
++++ b/tests/test_outlet.py
+@@ -170,3 +170,21 @@ def test_dict_to_outlet(fake_client: FakeDirigeraHub) -> None:
+     assert outlet.attributes.model == data["attributes"]["model"]
+     assert outlet.attributes.manufacturer == data["attributes"]["manufacturer"]
+     assert outlet.attributes.serial_number == data["attributes"]["serialNumber"]
++
++
++def test_reset_energy_counter(
++    fake_outlet: Outlet, fake_client: FakeDirigeraHub
++) -> None:
++    fake_outlet.capabilities.can_receive.append("energyConsumedAtLastReset")
++    fake_outlet.reset_energy_counter()
++    action = fake_client.patch_actions.pop()
++    assert action["route"] == f"/devices/{fake_outlet.id}"
++    assert action["data"] == [{"attributes": {"energyConsumedAtLastReset": 0}}]
++
++
++def test_reset_energy_counter_needs_capability(
++    fake_outlet: Outlet, fake_client: FakeDirigeraHub
++) -> None:
++    with pytest.raises(AssertionError):
++        fake_outlet.reset_energy_counter()
++    assert not fake_client.patch_actions
