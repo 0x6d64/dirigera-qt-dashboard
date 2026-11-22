@@ -9,6 +9,13 @@ caption. This base owns what they share:
 - the card surface, normal or offline, with the room colour edge (req-22);
 - the footer state machine: "Sending…" while a command runs, and a command
   error in danger tone for `CARD_ERROR_MS` before the normal text returns.
+- a count of running commands (`set_pending`): while it is above zero the
+  footer stays "Sending…" whatever a refresh does, and `_on_pending_changed`
+  lets a subclass disable its controls.
+
+A card runs one command at a time: the dashboard ignores a second command on
+a card that is pending (see `Dashboard.run_device_command`) and resyncs the
+card, so a slider snaps back to the device's real value.
 
 Subclasses build their body into `card_layout`, call `_init_footer()` last,
 and provide `_update_footer()` (the normal footer text) and
@@ -134,7 +141,7 @@ class CardBase(QFrame):
         self._is_offline = False
         self._room_colour: Optional[str] = None
         self._marker_shown = False
-        self._pending = False
+        self._pending_count = 0
         self._error: Optional[str] = None
         self._error_timer = QTimer(self)
         self._error_timer.setSingleShot(True)
@@ -285,9 +292,17 @@ class CardBase(QFrame):
         color = theme.DANGER if danger else theme.TEXT2
         self.footer_label.setStyleSheet(label_style(color, theme.FONT_CAPTION))
 
+    @property
+    def is_pending(self) -> bool:
+        """True while at least one command runs on this card."""
+        return self._pending_count > 0
+
     def _set_footer(self, text: str) -> None:
-        """Show `text`, unless a command error is being shown (danger tone)."""
-        if self._error is not None and text != PENDING_TEXT:
+        """Show `text`; "Sending…" while pending, a command error otherwise."""
+        if self.is_pending:
+            self.footer_label.setText(PENDING_TEXT)
+            self._style_footer(danger=False)
+        elif self._error is not None:
             self.footer_label.setText(self._error)
             self._style_footer(danger=True)
         else:
@@ -306,19 +321,28 @@ class CardBase(QFrame):
         """Show `message` in the footer in danger tone for CARD_ERROR_MS."""
         self._error = message
         self._error_timer.start()
-        if self._pending:
+        if self.is_pending:
             return
         self._refresh_footer()
 
     def _clear_error(self) -> None:
         self._error = None
-        if self._pending:
+        if self.is_pending:
             return
         self._refresh_footer()
 
     def set_pending(self, pending: bool) -> None:
-        """Show pending command status in footer."""
+        """Count a command start (True) or end (False) on this card.
+
+        The footer shows "Sending…" while the count is above zero; the normal
+        or offline text returns when it reaches zero.
+        """
         if pending:
-            self._set_footer(PENDING_TEXT)
+            self._pending_count += 1
         else:
-            self._update_footer()
+            self._pending_count = max(0, self._pending_count - 1)
+        self._refresh_footer()
+        self._on_pending_changed()
+
+    def _on_pending_changed(self) -> None:
+        """Hook: react to `is_pending` having changed (e.g. disable controls)."""

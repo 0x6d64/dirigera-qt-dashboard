@@ -158,7 +158,9 @@ def test_reset_is_blocked_while_a_command_runs(qapp: QApplication) -> None:
     assert not card.confirm_button.isEnabled()
     assert card.confirm_button.isHidden()  # the open confirm step is withdrawn
     assert not card.reset_button.isEnabled()
-    card.sync_from_device()
+    card.sync_from_device()  # a resync does not end the command
+    assert not card.reset_button.isEnabled()
+    card.set_pending(False)
     assert card.reset_button.isEnabled()
 
 
