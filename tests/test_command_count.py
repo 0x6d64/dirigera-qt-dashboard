@@ -76,3 +76,51 @@ def test_energy_card_keeps_sending_through_a_refresh(qapp: Any) -> None:
     assert not card.reset_button.isEnabled()
     card.set_pending(False)
     assert card.reset_button.isEnabled()
+
+
+def test_second_command_on_a_pending_card_is_ignored(
+    window: Any, wait_until: Any
+) -> None:
+    import threading
+
+    card = window.create_device_widget(make_device("light", "l1", "Lamp", is_on=True))
+    release = threading.Event()
+    sent: list[str] = []
+    first = window.run_device_command(card, lambda: release.wait(5), "first")
+    second = window.run_device_command(card, lambda: sent.append("second"), "second")
+    assert first is not None
+    assert second is None
+    assert card.footer_label.text() == "Sending…"
+    release.set()
+    wait_until(lambda: not card.is_pending)
+    first.wait(5000)
+    assert sent == []
+    # Once the card is free again a new command runs.
+    third = window.run_device_command(card, lambda: sent.append("third"), "third")
+    assert third is not None
+    third.wait(5000)
+    wait_until(lambda: not card.is_pending)
+    assert sent == ["third"]
+
+
+def test_ignored_slider_command_snaps_the_slider_back(window: Any) -> None:
+    card = window.create_device_widget(
+        make_device("light", "l1", "Lamp", is_on=True, light_level=40)
+    )
+    card.set_pending(True)
+    card.brightness_slider.set_value(90)  # the user's value, not on the device
+    window.set_light_brightness(card, 90)
+    assert card.brightness_slider.value() == 40
+    card.set_pending(False)
+
+
+def test_double_reset_sends_one_patch(window: Any, wait_until: Any) -> None:
+    from test_energy_reset import StubEnergyClient, _outlet
+
+    client = StubEnergyClient()
+    window._on_refreshed([_outlet(client)], [])
+    (card,) = window.energy_view.cards()
+    window.reset_energy(card)
+    window.reset_energy(card)
+    wait_until(lambda: not card.is_pending)
+    assert len(client.calls) == 1

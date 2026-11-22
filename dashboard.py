@@ -1329,13 +1329,21 @@ class DirigeraDashboard(QMainWindow):
 
     def run_device_command(
         self, card: CommandTarget, command: Callable[[], None], action: str
-    ) -> CommandWorker:
+    ) -> Optional[CommandWorker]:
         """Run a device command in a worker and resync the card afterwards.
 
         Hub calls block for up to the library's 10 s timeout, so they never
         run on the GUI thread (req-4). The card shows "Sending…" meanwhile.
         Returns the worker, so a caller can attach its own success handler.
+
+        A card runs one command at a time: a command that arrives while the
+        card is pending is ignored (nothing is sent, `None` is returned) and
+        the card is resynced, so a control snaps back to the real value. This
+        keeps two quick commands from racing on the hub.
         """
+        if card.is_pending:
+            card.sync_from_device()
+            return None
         self._command_workers = [w for w in self._command_workers if w.isRunning()]
         card.set_pending(True)
         worker = CommandWorker(card, command, action, self)
@@ -1360,7 +1368,8 @@ class DirigeraDashboard(QMainWindow):
             )
 
         worker = self.run_device_command(card, command, "reset energy")
-        worker.succeeded.connect(self._on_energy_reset_done)
+        if worker is not None:
+            worker.succeeded.connect(self._on_energy_reset_done)
 
     def _on_energy_reset_done(self, _card: object) -> None:
         """Fetch the values the hub stored for the reset."""
@@ -1441,11 +1450,12 @@ class DirigeraDashboard(QMainWindow):
             lambda: device.activate_adaptive_profile(profile_id),
             "set adaptive profile",
         )
-        worker.succeeded.connect(self._schedule_adaptive_refresh)
+        if worker is not None:
+            worker.succeeded.connect(self._schedule_adaptive_refresh)
 
     def _run_light_command(
         self, card: DeviceCard, command: Callable[[], None], action: str
-    ) -> CommandWorker:
+    ) -> Optional[CommandWorker]:
         """Run a manual light change; on a light that follows a profile, refresh.
 
         The hub decides whether the change ended the profile, so the card
@@ -1454,7 +1464,7 @@ class DirigeraDashboard(QMainWindow):
         """
         following = active_profile_id(card.device) is not None
         worker = self.run_device_command(card, command, action)
-        if following:
+        if following and worker is not None:
             worker.succeeded.connect(self._schedule_adaptive_refresh)
         return worker
 
