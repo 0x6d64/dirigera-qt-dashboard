@@ -87,8 +87,10 @@ during implementation. Each entry cites its origin.
   refreshes and resyncs never send a profile command, and after a profile
   change, or a manual brightness, warmth or colour change on a light that
   follows a profile, the card is updated from the hub once the hub has applied
-  it (a delayed refresh). "Off" sends nothing until the write tests of t-95.
-  *(t-15, implemented)*
+  it (a delayed refresh). "Off" ends adaptive mode, and only on the user's
+  explicit choice: it sends the active profile's id with `active: false`;
+  refreshes and resyncs never send a profile command. *(t-15, t-95,
+  implemented)*
 - **req-25** — A card runs one device command at a time. While a command runs
   the card shows "Sending…" and its controls are disabled, also across
   refreshes; a second command on that card is ignored and the control snaps

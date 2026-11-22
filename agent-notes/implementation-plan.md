@@ -90,7 +90,7 @@ Verification: grep the docs for the old wording; gates.
 
 ### Plan: adaptive light profiles (t-15)
 
-Status: partly done (picker and activation built; "Off" command waits for write test W2)
+Status: done 2026-11-22 (picker and activation on `feat/adaptive-profiles`; "Off" command on `feat/adaptive-off`)
 
 Goal: each light that can follow an adaptive profile shows, as text, which
 profile it follows ("Off" or the profile name), and the owner can pick a
@@ -365,7 +365,7 @@ Verification: gates; the new tests.
 
 Verification: gates; the new tests.
 
-#### Commit 6 — "leave adaptive mode from the card" (t-15) — skipped: waits for owner-approved write test W2 (t-95)
+#### Commit 6 — "leave adaptive mode from the card" (t-15, t-95) ✓ executed 2026-11-22 on `feat/adaptive-off`
 
 1. `set_adaptive_profile(card, None)`: run the payload recorded in
    `doc/dirigera-api.md` §5 item 7 through
@@ -377,7 +377,9 @@ Verification: gates; the new tests.
    "Off" sends exactly the recorded route and data, the box shows "Off", a
    failure resyncs to the profile with the footer error.
 
-Skipped otherwise: the disabled "Off" item and hint from commit 4 stay.
+Executed with the W2a payload (`{"id": <active id>, "active": false}`) through
+`adaptive.leave_profile`; the hint (`LEAVE_HINT`) was removed. "Off" without an
+active profile sends nothing. `req-24` and design-doc §8.1 updated.
 
 #### Commit 7 — "record adaptive profiles" (t-15) ✓ executed 2026-11-22 (as the sixth commit on the branch, commit 6 being skipped)
 
@@ -415,6 +417,13 @@ and see the box after the refresh match the IKEA app; the box survives a poll.
 > change; `tests/test_live_updates.py` `_count_refreshes` now accepts the new
 > `with_profiles` argument of `_start_refresh`. Owner check on the real hub
 > still outstanding (see Verification above).
+>
+> **Executed 2026-11-22 (commit 6, t-95)** on `feat/adaptive-off`: "record the
+> adaptive off write test" and "add the adaptive off command"; this note and the
+> bookkeeping are the third commit. The owner ran W2 on the real hub (a Light
+> Strip); `adaptive.leave_profile` sends the W2a payload. Not merged. Owner
+> check on the real hub of the finished button is still outstanding. W1 stays
+> unrun.
 
 #### Risks
 
@@ -1119,7 +1128,7 @@ Verification: gates; manual by the owner (colours look roughly like the app).
 Status: partly done. Commit 1 (t-12) done 2026-11-15; commit 2 (t-14) done
 2026-11-21 by the plan "light colour controls"; commit 4 (t-16) done 2026-11-21
 by the plan "live updates via websocket"; commit 3 (t-15) superseded by the plan
-"adaptive light profiles" (partly done: the "Off" command waits for t-95)
+"adaptive light profiles" (done)
 
 Goal: Adopt the capabilities added in `dirigera` 1.6.1 that the card UI does
 not expose yet. t-12 and t-13 landed with the `DeviceCard` refactor (design

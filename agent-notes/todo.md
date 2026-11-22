@@ -29,7 +29,7 @@ take the next free number (see `AGENTS.md`).
 - [x] **t-11 [A·S]** Fix `generate_token.py`: `dirigera.create_token()` does not exist (also not in 1.2.x) *(generate_token.py:32)*. Use the `dirigera.hub.auth` flow (`send_challenge` + `get_token`) or call the library's `generate-token` console script. Update README usage accordingly.
 - [x] **t-12 [C·S]** Add blind up/down/stop controls using the new `BlindsStateEnum` / `Blind.set_state()`. *(superseded by t-45 for the card design; implemented there, capability guard fixed and verified offscreen)*
 - [x] **t-14 [C·M]** Add light color temperature / color controls (`set_color_temperature`, `set_light_color`). *(control logic; visual polish in t-42 and t-45)*
-- [x] **t-15 [C·L]** Expose adaptive light profiles via `hub.get_adaptive_profiles()` and `activate_adaptive_profile()`. *(done on `feat/adaptive-profiles`: a picker on each light card and a delayed refresh show what the hub applied; "Off" as a command is a follow-up, t-95; real-hub check outstanding)*
+- [x] **t-15 [C·L]** Expose adaptive light profiles via `hub.get_adaptive_profiles()` and `activate_adaptive_profile()`. *(done on `feat/adaptive-profiles`: a picker on each light card and a delayed refresh show what the hub applied; "Off" as a command followed in t-95; real-hub check outstanding)*
 - [x] **t-16 [C·L]** Replace manual Refresh with live updates using `Hub.create_event_listener()` (websocket). *(done on `feat/live-events`: events prompt one coalesced refresh, the poll is the fallback; real-hub check outstanding, see the plan)*
 
 ## UI responsiveness
@@ -133,7 +133,7 @@ Stated by the user; recorded, not yet planned.
 
 - [x] **t-94 [B·S]** Bug (owner report 2026-11-21): moving the brightness slider of an off light did nothing. Expected: the light switches on at the chosen level. Cause: the hub ignores a level sent to an off light (`doc/dirigera-api.md` §5 item 6). *(done on `fix/slider-while-off`: the command sends on, then the level)*
 
-- [ ] **t-95 [C·S]** Adaptive profile "Off" command: needs owner-approved write tests W1/W2 on the real hub (`doc/dirigera-api.md` §5 item 7), then plan commit 6 in "adaptive light profiles". Until then "Off" is shown as a state and is disabled while a profile is active.
+- [x] **t-95 [C·S]** Adaptive profile "Off" command: needs owner-approved write tests W1/W2 on the real hub (`doc/dirigera-api.md` §5 item 7), then plan commit 6 in "adaptive light profiles". Until then "Off" is shown as a state and is disabled while a profile is active. *(done 2026-11-22 on `feat/adaptive-off`: owner ran W2, the `active: false` payload with the profile id ends adaptive mode; "Off" is now selectable and sends it)*
 
 ## Design document implementation (v1.0)
 
