@@ -394,3 +394,69 @@ def test_failed_scene_refresh_records_no_dialog(
     wait_until(lambda: len(hub.calls) > before and connected._refresh_worker is None)
     assert connected.status_label.text().startswith("Refresh failed")
     assert dialogs == []
+
+
+# --- controls follow the device's shape (t-98) -------------------------------
+
+
+def _warm_light(adaptive: bool) -> Any:
+    dev = make_device(
+        "light",
+        "l1",
+        "Lamp",
+        is_on=True,
+        light_level=40,
+        color_temperature=3000,
+        color_temperature_min=2000,
+        color_temperature_max=4000,
+        adaptive=("p1", True) if adaptive else None,
+    )
+    if not adaptive:
+        dev.capabilities.can_receive = ["colorTemperature"]
+    return dev
+
+
+def test_card_is_rebuilt_when_adaptive_profile_gives_way_to_warmth(
+    connected: Any, hub: StubHub, wait_until: Wait
+) -> None:
+    hub.devices = [_warm_light(adaptive=True)]
+    _refresh(connected, wait_until)
+    before = _cards(connected)["l1"]
+    assert not hasattr(before, "temperature_slider")
+    hub.devices = [_warm_light(adaptive=False)]
+    _refresh(connected, wait_until)
+    after = _cards(connected)["l1"]
+    assert after is not before
+    assert hasattr(after, "temperature_slider")
+    assert after.device is hub.devices[0]
+    assert len(connected._device_cards) == 1
+
+
+def test_unchanged_shape_keeps_the_card(
+    connected: Any, hub: StubHub, wait_until: Wait
+) -> None:
+    hub.devices = [_warm_light(adaptive=False)]
+    _refresh(connected, wait_until)
+    before = _cards(connected)["l1"]
+    hub.devices = [_warm_light(adaptive=False)]
+    hub.devices[0].attributes.light_level = 70
+    _refresh(connected, wait_until)
+    assert _cards(connected)["l1"] is before
+
+
+def test_pending_card_is_not_rebuilt_until_the_command_ends(
+    connected: Any, hub: StubHub, wait_until: Wait
+) -> None:
+    hub.devices = [_warm_light(adaptive=True)]
+    _refresh(connected, wait_until)
+    card = _cards(connected)["l1"]
+    card.set_pending(True)
+    hub.devices = [_warm_light(adaptive=False)]
+    _refresh(connected, wait_until)
+    assert _cards(connected)["l1"] is card  # deferred, still pending
+    assert card.is_pending
+    card.set_pending(False)
+    _refresh(connected, wait_until)  # same data again: must not be skipped
+    rebuilt = _cards(connected)["l1"]
+    assert rebuilt is not card
+    assert hasattr(rebuilt, "temperature_slider")

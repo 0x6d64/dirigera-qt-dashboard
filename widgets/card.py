@@ -163,6 +163,24 @@ def _can_receive(device: Any) -> list[str]:
     return list(getattr(getattr(device, "capabilities", None), "can_receive", []))
 
 
+def control_shape(device: Any) -> Tuple[Any, ...]:
+    """Key of the controls a card builds for `device` (t-98).
+
+    Controls exist only from construction, so a card whose device later gains
+    or loses a capability (an adaptive profile replacing the warmth slider)
+    must be rebuilt when this key changes.
+    """
+    attrs = getattr(device, "attributes", None)
+    return (
+        getattr(device, "device_type", "unknown"),
+        tuple(sorted(_can_receive(device))),
+        getattr(attrs, "light_level", None) is not None,
+        kelvin_bounds(attrs) is not None,
+        supports_adaptive(device),
+        getattr(attrs, "blinds_state", None) is not None,
+    )
+
+
 def device_sort_key(device: Any) -> Tuple[int, str]:
     """Sort key for devices within a room: category weight then device name."""
     dtype = getattr(device, "device_type", "unknown")
@@ -219,6 +237,7 @@ class DeviceCard(CardBase):
         handler can reach `card.device` and resync the card afterwards with
         `sync_from_device()`."""
         super().__init__(device, parent)
+        self.shape = control_shape(device)
         self._on_toggle = on_toggle
         self._on_brightness = on_brightness
         self._on_blind_position = on_blind_position
