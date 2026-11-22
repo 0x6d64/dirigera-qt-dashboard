@@ -52,4 +52,5 @@ Windows). Add a new one here when it costs time; do not repeat these in other do
     over it changes its value instead of scrolling the page. Override
     `wheelEvent` to call `event.ignore()` (see `ProfileBox` in
     `widgets/card.py`) and use `StrongFocus` so it takes focus only on click or
-    tab.
+    tab. A `QSlider` needs the same: `LabeledSlider` ignores the wheel until the
+    slider has focus (`_FocusWheelSlider` in `widgets/slider.py`).

@@ -15,6 +15,8 @@ PyQt6 desktop dashboard for IKEA DIRIGERA hubs, managed with `uv`; talks to the
 hub through the `dirigera` library. Versions are authoritative in
 `pyproject.toml` and `uv.lock`; the layout is `dashboard.py` (main window), `workers.py` (worker threads),
 `settings.py` (config parsing, UI settings), `rooms.py` (room grouping),
+`adaptive.py` (adaptive light profile helpers), `network_discovery.py` (hub
+discovery), `tools/` (read-only helper scripts such as `tools/hub_get.py`),
 `widgets/` (components; `widgets/cardbase.py` is the shared card base),
 `theme.py` (design tokens). Read the tree rather than trusting a description
 of it.
@@ -127,6 +129,9 @@ Orientation docs: `README.md`, `doc/design-doc.md` (visual design), `doc/diriger
   in a worker thread.
 - Colours, spacing, and fonts come from `theme.py` tokens; do not hard-code
   them in widgets.
+- A new top-level module must be added to `py-modules` in `pyproject.toml`
+  (a new package to `packages`), or the installed `dirigera-dashboard` script
+  fails with `ModuleNotFoundError`; `tests/test_packaging.py` checks this.
 
 ## Git
 
