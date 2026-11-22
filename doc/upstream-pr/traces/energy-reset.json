@@ -1,0 +1,40 @@
+{
+  "note": "Measured 2026-11-22 on one real hub, one metering plug (INSPELNING E2206, energy attributes on the outlet itself). The write was done with the owner's permission.",
+  "device": {
+    "deviceType": "outlet",
+    "model": "INSPELNING",
+    "canReceive_contains": "energyConsumedAtLastReset"
+  },
+  "steps": [
+    {
+      "step": "before",
+      "attributes": {
+        "totalEnergyConsumed": 19.025999069213867,
+        "energyConsumedAtLastReset": 19.020000457763672,
+        "timeOfLastEnergyReset": "2026-11-21T20:59:17.000Z"
+      }
+    },
+    {
+      "step": "reset (proposed: Outlet.reset_energy_counter)",
+      "request": {
+        "method": "PATCH",
+        "route": "/devices/<device-id>",
+        "body": [{"attributes": {"energyConsumedAtLastReset": 0}}]
+      },
+      "result": "accepted"
+    },
+    {
+      "step": "read 3 s later (same values 5 s later)",
+      "attributes": {
+        "totalEnergyConsumed": 19.025999069213867,
+        "energyConsumedAtLastReset": 19.025999069213867,
+        "timeOfLastEnergyReset": "2026-11-22T11:11:06.000Z"
+      }
+    }
+  ],
+  "reading": "The hub copies the total into energyConsumedAtLastReset and sets the reset time to now; the total never resets. Usage since reset = totalEnergyConsumed - energyConsumedAtLastReset.",
+  "not_tried": [
+    "GRILLPLATS (separate electricalSensor device): its canReceive in upstream issue #132 is only customName, so the capability check would refuse the reset there",
+    "other plug models"
+  ]
+}

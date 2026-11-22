@@ -1,0 +1,47 @@
+{
+  "note": "Measured 2026-11-22 on one real hub, one light. IDs replaced by placeholders. Hub writes were done with the owner's permission.",
+  "device": {
+    "deviceType": "light",
+    "model": "TRADFRI Driver 30W",
+    "canReceive": ["customName", "isOn", "lightLevel", "colorHue", "colorSaturation"]
+  },
+  "steps": [
+    {
+      "step": "start",
+      "state": {"isOn": true, "lightLevel": 100, "adaptiveProfile": {}}
+    },
+    {
+      "step": "activate (library: Light.activate_adaptive_profile)",
+      "request": {
+        "method": "PATCH",
+        "route": "/devices/<device-id>",
+        "body": [{"adaptiveProfile": {"id": "<profile-id>", "active": true}}]
+      },
+      "result": "accepted",
+      "state_after_about_6s": {
+        "isOn": true,
+        "lightLevel": 98,
+        "adaptiveProfile": {"id": "<profile-id>", "active": true}
+      }
+    },
+    {
+      "step": "leave (proposed: Light.leave_adaptive_profile)",
+      "request": {
+        "method": "PATCH",
+        "route": "/devices/<device-id>",
+        "body": [{"adaptiveProfile": {"id": "<profile-id>", "active": false}}]
+      },
+      "result": "accepted",
+      "state_after_about_6s": {
+        "isOn": true,
+        "lightLevel": 98,
+        "adaptiveProfile": {}
+      }
+    }
+  ],
+  "not_tried": [
+    "the same PATCH without the id (the proposal always sends the id)",
+    "which manual changes end a profile on their own"
+  ],
+  "unexplained_side_observation": "A later PATCH [{\"lightLevel\": 100}], sent twice with an 8 s wait, was accepted but the light stayed at 98."
+}
