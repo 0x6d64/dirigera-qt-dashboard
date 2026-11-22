@@ -28,7 +28,7 @@ may end with an `> **Executed …**` note listing branch and commit hashes.
 
 ### Plan: review fixes (t-96, t-97, t-98, t-99, t-100)
 
-Status: open
+Status: done 2026-11-22
 
 Goal: fix the findings of the whole-project review (2026-11-22). Four
 branches, in this order, each merged before the next starts. Not covered:
@@ -38,7 +38,7 @@ Affected files: `pyproject.toml`, `.github/workflows/`, `dashboard.py`,
 `settings.py`, `tools/hub_get.py`, `widgets/cardbase.py`, `widgets/card.py`,
 `widgets/energy.py`, `widgets/slider.py`, tests, docs.
 
-#### Branch 1 `fix/review-quick` — "quick fixes" (t-96, t-100)
+#### Branch 1 `fix/review-quick` — "quick fixes" (t-96, t-100) ✓ executed 2026-11-22
 1. Add `adaptive` to `py-modules`; add a test or CI step that runs
    `python -I -c "import dashboard"` from a different directory after
    `uv sync`.
@@ -52,7 +52,7 @@ Affected files: `pyproject.toml`, `.github/workflows/`, `dashboard.py`,
    the slider has no focus. Test both cases.
 Verification: black, ruff, mypy, pytest (twice).
 
-#### Branch 2 `fix/command-count` — "count running commands per card" (t-97)
+#### Branch 2 `fix/command-count` — "count running commands per card" (t-97) ✓ executed 2026-11-22
 1. `CardBase` keeps a running-command count; `set_pending(True)` increments,
    `set_pending(False)` decrements; "Sending…" and disabled controls show while
    the count is above zero and refreshes do not clear it.
@@ -64,14 +64,14 @@ Verification: black, ruff, mypy, pytest (twice).
 Verification: tests for two quick commands, refresh during a command, reset
 double click; gates.
 
-#### Branch 3 `fix/card-rebuild` — "rebuild cards when controls change" (t-98)
+#### Branch 3 `fix/card-rebuild` — "rebuild cards when controls change" (t-98) ✓ executed 2026-11-22
 1. Compute a control-shape key per device (type, sorted `can_receive`, level
    present, `supports_adaptive`); in the in-place refresh, rebuild the card
    when the key differs from the card's key.
 2. Test: light with adaptive profile loses it, the warmth slider appears.
 Verification: gates.
 
-#### Branch 4 `docs/review-sweep` — "docs sweep" (t-99)
+#### Branch 4 `docs/review-sweep` — "docs sweep" (t-99) ✓ executed 2026-11-22
 1. README: purifier, adaptive profiles, live updates, room colours, energy
    reset, blind buttons; screenshots are left to the owner.
 2. Fix drift: design-doc §10.2 item 7, §8.1/§10.1 "Sending…", §4.2 breakpoint,
@@ -80,6 +80,13 @@ Verification: gates.
    `adaptive.py`, `network_discovery.py`, `tools/`.
 3. Mark t-96…t-100 done, set this plan's Status.
 Verification: grep the docs for the old wording; gates.
+
+> **Executed 2026-11-22** — branches `fix/review-quick` (t-96, t-100),
+> `fix/command-count` (t-97), `fix/card-rebuild` (t-98) and `docs/review-sweep`
+> (t-99), each merged into the working branch with a merge commit (hashes:
+> `git log --oneline --merges`; the merge of the last one is up to the owner). Branch 2 decided that a second command on a
+> busy card is ignored and the control snaps back. Not done, as planned: screenshots
+> (the owner adds them).
 
 ### Plan: adaptive light profiles (t-15)
 
@@ -1105,7 +1112,7 @@ Verification: gates; manual by the owner (colours look roughly like the app).
 Status: partly done. Commit 1 (t-12) done 2026-11-15; commit 2 (t-14) done
 2026-11-21 by the plan "light colour controls"; commit 4 (t-16) done 2026-11-21
 by the plan "live updates via websocket"; commit 3 (t-15) superseded by the plan
-"adaptive light profiles" (open)
+"adaptive light profiles" (partly done: the "Off" command waits for t-95)
 
 Goal: Adopt the capabilities added in `dirigera` 1.6.1 that the card UI does
 not expose yet. t-12 and t-13 landed with the `DeviceCard` refactor (design

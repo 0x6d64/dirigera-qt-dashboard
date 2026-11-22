@@ -11,18 +11,54 @@ describe what the app talks to. The app uses the unofficial
 
 - **Rooms**: all devices grouped by room, with controls that fit the device:
   - **Lights**: on/off, brightness, and colour temperature or colour where the
-    light supports them
-  - **Blinds**: position
+    light supports them. Lights that can follow an adaptive profile have an
+    "Adaptive" picker (see below).
+  - **Blinds**: a position slider and Up, Down and Stop buttons
   - **Outlets**: on/off, with power and energy readings where available
+  - **Air purifiers**: a Fan control (Off, Auto, speeds 1 to 5), the PM2.5
+    reading with a word for its band (good, moderate, poor), and the filter:
+    how much life is left and when to change it, with a "Change filter" chip
+    once the hub raises the filter alarm. The child lock is deliberately not
+    shown.
   - **Sensors and other devices**: their current state
-- **Scenes**: list and trigger the scenes stored on the hub
-- **Energy**: live power use of outlets and electrical sensors with metering
-- **Auto refresh**: data refreshes every 30 seconds while connected; the
-  Refresh button fetches immediately. If the hub cannot be reached, the last
-  good data stays visible with the time it is from.
+- **Adaptive profiles**: a light that can follow one of the hub's adaptive
+  profiles shows which one it follows, and you pick another from its card. The
+  profiles themselves are created in the IKEA app only. "Off" is shown as the
+  state but cannot be chosen yet; changing the light's brightness or warmth
+  ends the profile on the hub, and the card then shows what the hub applied
+  after a few seconds.
+- **Room colours**: a switch above the rooms marks each room with the colour
+  you gave it in the IKEA app (a dot by the room name and a coloured card
+  edge). It is off by default, and the choice is remembered.
+- **Scenes**: list and trigger the scenes stored on the hub. Automatic scenes
+  (every scene that is not a user scene) are hidden unless you turn on "Show
+  automatic scenes" above the scene grid; the choice is remembered.
+- **Energy**: live power use of outlets and electrical sensors with metering,
+  totals per room and for the home, the usage since the last reset with its
+  cost (see "Energy price"), and a Reset button for plugs the hub lets reset.
+  Reset asks for a second click to confirm and cannot be undone.
+- **Live updates**: while the hub's event connection is open, changes made
+  elsewhere (the IKEA app, a wall switch) show within about two seconds, and
+  the status line reads "Live". If the connection drops, the dashboard keeps
+  working by polling.
+- **Auto refresh**: data also refreshes by polling, every 30 seconds (every
+  300 seconds while live updates work); the Refresh button fetches
+  immediately. If the hub cannot be reached, the last good data stays visible
+  with the time it is from.
+- **Commands**: a device command runs in the background and the card shows
+  "Sending…" while it runs. A card handles one command at a time: a second
+  change on a card that is still sending is ignored and the control snaps back
+  to the real value, so wait for "Sending…" to go away. A slider's mouse wheel
+  works only after you click it or reach it with Tab; otherwise the wheel
+  scrolls the page.
 - **Inline errors**: problems (bad IP, wrong token, unreachable hub) show as
   messages in the window, not as pop-up dialogs
 - **Hub discovery**: scans your local network for hubs
+
+Closing the window while a hub call is running waits for the call to finish
+(up to the 10 second timeout) and then exits; no new refresh starts meanwhile.
+
+<!-- Screenshots: to be added by the owner. -->
 
 ## Requirements
 

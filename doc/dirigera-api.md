@@ -6,9 +6,11 @@ it describes the library, not the app's design (see `design-doc.md`) or its code
 
 Tags: `[lib]` read in the library source or its README; `[unverified]` needs real hub
 data before it is relied on; `[opinion]` judgment, open to challenge; `[known]` general
-knowledge, not re-tested. No live hub was
-available when this was written, so nothing here was observed on real payloads.
-Section 4 gives a read-only way to dump them.
+knowledge, not re-tested. Sections 1 to 4 were written
+without a hub and rest on the library source. Section 5 records what was later
+observed on a real hub (2026-11-21 and 2026-11-22) and takes precedence where
+they differ; section 4 gives a read-only way to dump payloads
+(`tools/hub_get.py`).
 
 ## 1. Findings that affect the implementation
 
@@ -26,15 +28,17 @@ Section 4 gives a read-only way to dump them.
    re-fetches `/devices`. Every request has a 10 s timeout. None of them isolates a
    single device that fails pydantic validation, so one odd device fails the whole
    refresh. The library README confirms this can happen ("reports data that the
-   library doesn't expect yet"). Measure latency on the real hub before optimizing
-   `[unverified]`; relevant to `req-2`. A cheaper refresh would use one raw
+   library doesn't expect yet"). Latency was checked on a real hub (2026-11-21): a
+   refresh is fast enough, so the app uses `get_all_devices()` as it is; relevant
+   to `req-2`. A cheaper refresh would use one raw
    `hub.get("/devices")` with per-device conversion in `try/except`; the library's
    `dict_to_*` converters are not documented as public API.
 3. **Plugs with metering can split into two devices.** `[lib]` Some plugs (the README
    names GRILLPLATS) report energy as a separate `electricalSensor` that shares the
-   outlet's `relation_id`. Merge it into the outlet card by `relation_id`; do not
-   render a second tile. Other plugs (INSPELNING) carry the energy attributes on the
-   outlet itself. Which case a given plug is: `[unverified]`.
+   outlet's `relation_id`, so it could be merged into the outlet card. The app does not do this: each device gets its own
+   card, and the Energy view lists outlets and electrical sensors alike. The
+   test hub's plug (INSPELNING) carries the energy attributes on the outlet itself (§5
+   item 2), so no split plug has been seen. Other plugs: `[unverified]`.
 4. **Controllers have no press state.** `[lib]` Button presses are not stored as
    device state. A remote tile can show name, battery and reachability, nothing
    interactive. Do not show a generic "healthy" mark for them.
@@ -166,7 +170,7 @@ disable controls. Never show the raw `device_type` string; humanize it.
 | # | Type | Shows | Notes |
 | --- | --- | --- | --- |
 | 1 | `light` | Switch; brightness 1 to 100; colour temperature (gradient slider); hue and saturation | 0 is rejected by the library, "off" goes through the switch. Colour controls belong in a secondary section. An "Adaptive" profile picker shows on lights that carry the `adaptiveProfile` state (`supports_adaptive`, §5 item 7; t-15). `QColor.hueF()` returns 0 to 1 and -1 for greys; convert to 0 to 360 |
-| 2 | `outlet`, `electricalSensor` | Switch (outlets); power W, voltage V, current A, total kWh, only non-None values | Merge a sensor into the outlet with the same `relation_id`; standalone read-only tile only if no outlet matches |
+| 2 | `outlet`, `electricalSensor` | Switch (outlets); power W, voltage V, current A, total kWh, only non-None values | Not merged by the app: a split-off sensor is its own read-only card (§1 item 3) |
 | 3 | `blinds` | Position slider (0 to 100); Up, Stop, Down buttons; moving state as text | Do not label the ends "open" or "closed" until checked on a real blind |
 | 4 | `airPurifier` | Fan speed (Off, Auto, 1–5 via `motorState`, §5 item 3); PM2.5; filter life and alarm | Child lock is deliberately not shown (owner decision 2026-11-21, `req-21`); status light is not planned. Fan control (t-80) and the filter footer and alarm chip (t-85) are implemented |
 | 5 | `*Controller` | Name, type, battery, reachability | No press state exists; a live "pressed" flash needs the event shape (section 2.6 item 4) |

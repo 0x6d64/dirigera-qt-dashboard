@@ -53,9 +53,11 @@ during implementation. Each entry cites its origin.
   list kept only as a fallback. *(t-20, implemented)*
 - **req-6** — Slider-based controls must not send one hub command per tick;
   commands must be debounced or sent on release, and every user input path
-  (drag, track click, arrow/Page keys, mouse wheel) must send its value.
-  *(t-18, implemented: `LabeledSlider.committed` fires on release after a drag
-  and after a 300 ms pause for every other change)*
+  (drag, track click, arrow/Page keys, mouse wheel on a focused slider) must
+  send its value. The wheel changes a slider only while it has focus; over an
+  unfocused slider it scrolls the page. *(t-18, t-100, implemented:
+  `LabeledSlider.committed` fires on release after a drag and after a 300 ms
+  pause for every other change)*
 - **req-7** — *Obsolete (2026-11-21, user decision).* The hub token must not be
   stored in plaintext as the primary mechanism. Dropped: a gitignored
   `config.ini` is accepted for this single-user desktop tool. *(t-29, obsolete)*
@@ -74,12 +76,24 @@ during implementation. Each entry cites its origin.
   challenge flow). *(t-11, implemented)*
 - **req-14** — Closing the window while hub calls are in flight must not
   crash or lose the call; the app may finish them before it exits, but no
-  running worker thread may be destroyed. *(t-61, implemented)*
+  running worker thread may be destroyed. Once a close is pending no new
+  refresh, timer or worker starts, and the window closes when the last worker
+  ends. *(t-61, t-96, implemented)*
 - **req-23** — A change made outside the dashboard must show on the cards within
   about two seconds while the hub's event socket is up, and the dashboard must
   keep working by polling when it is not. Events only prompt a refresh; their
   shapes are not relied on. *(t-16, implemented)*
 - **req-24** — A light's adaptive profile is shown as text on its card;
   refreshes and resyncs never send a profile command, and after a profile
-  change the card is updated from the hub once the hub has applied it.
+  change, or a manual brightness, warmth or colour change on a light that
+  follows a profile, the card is updated from the hub once the hub has applied
+  it (a delayed refresh). "Off" sends nothing until the write tests of t-95.
   *(t-15, implemented)*
+- **req-25** — A card runs one device command at a time. While a command runs
+  the card shows "Sending…" and its controls are disabled, also across
+  refreshes; a second command on that card is ignored and the control snaps
+  back to the device's real value. *(t-97, implemented)*
+- **req-26** — A card offers the controls its device currently supports: when
+  the device's control shape (type, `can_receive`, level, colour-temperature
+  bounds, blind state, adaptive support) changes, the card is rebuilt, not
+  only updated. *(t-98, implemented)*
