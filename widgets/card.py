@@ -35,7 +35,7 @@ from PyQt6.QtWidgets import (
 
 import theme
 from adaptive import UNKNOWN_PROFILE, active_profile_id, supports_adaptive
-from widgets.cardbase import PENDING_TEXT, CardBase, device_name, label_style
+from widgets.cardbase import CardBase, device_name, label_style
 from widgets.metric import MetricWidget
 from widgets.segments import SegmentedControl
 from widgets.slider import LabeledSlider
@@ -716,9 +716,6 @@ class DeviceCard(CardBase):
 
     @override
     def _update_footer(self) -> None:
-        if self._pending:
-            self._set_footer(PENDING_TEXT)
-            return
         attrs = getattr(self.device, "attributes", None)
         dtype = getattr(self.device, "device_type", "unknown")
 
@@ -754,15 +751,28 @@ class DeviceCard(CardBase):
         """Mark card offline: sunken background, disabled controls, offline chip."""
         self._is_offline = offline
         self._apply_card_style(is_offline=offline)
-        for ctrl in self._controls:
-            ctrl.setEnabled(not offline)
+        self._apply_controls_enabled()
         if offline:
             self._set_chip("Offline", "neutral")
-            if not self._pending:
-                self._set_footer(self._offline_text())
+            self._set_footer(self._offline_text())
         else:
             self._update_status_chip()
             self._update_footer()
+
+    def _apply_controls_enabled(self) -> None:
+        """Controls work while the card is online and no command runs."""
+        enabled = not self._is_offline and not self.is_pending
+        for ctrl in self._controls:
+            ctrl.setEnabled(enabled)
+
+    @override
+    def _on_pending_changed(self) -> None:
+        self._apply_controls_enabled()
+
+    def refresh_offline_footer(self) -> None:
+        """Recompute "Last seen ..." (it ages while the data stays the same)."""
+        if self._is_offline:
+            self._set_footer(self._offline_text())
 
     @override
     def sync_from_device(self) -> None:

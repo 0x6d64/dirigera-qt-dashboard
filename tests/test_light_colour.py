@@ -120,6 +120,7 @@ def test_commit_sends_both_values_scaled(window: Any, wait_until: Wait) -> None:
     card.saturation_slider._commit()
     wait_until(lambda: lamp.colour_calls == [(120.0, 0.8)])
     assert lamp.threads[0] is not threading.main_thread()
+    wait_until(lambda: not card.is_pending)  # one command at a time
     card.hue_slider._slider.setValue(300)
     card.hue_slider._commit()
     wait_until(lambda: lamp.colour_calls[-1] == (300.0, 0.8))

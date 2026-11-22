@@ -44,6 +44,9 @@ class CommandTarget(Protocol):
 
     device: Any
 
+    @property
+    def is_pending(self) -> bool: ...
+
     def set_pending(self, pending: bool) -> None: ...
 
     def sync_from_device(self) -> None: ...
