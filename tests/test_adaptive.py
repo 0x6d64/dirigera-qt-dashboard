@@ -233,8 +233,8 @@ def test_box_texts_for_the_two_real_states(qapp: Any) -> None:
     box = following.profile_box
     assert _texts(box) == ["Off", "Day", "Night"]
     assert box.currentText() == "Night"
-    assert box.model().item(0).isEnabled() is False
-    assert "stop following" in box.toolTip()
+    assert box.model().item(0).isEnabled() is True  # Off ends the profile (t-95)
+    assert box.toolTip() == ""
     # A light reporting `{}`: picker shown, "Off" selected and enabled.
     idle = _card(qapp, _empty_state(_lamp()))
     assert idle.profile_box.currentText() == "Off"
@@ -452,11 +452,87 @@ def test_failed_activation_shows_the_error_and_schedules_nothing(
     assert len(hub.calls) == fetches
 
 
-def test_off_is_not_sent(connected: Any, hub: StubHub, wait_until: Wait) -> None:
+def test_off_on_a_light_without_a_profile_sends_nothing(
+    connected: Any, hub: StubHub, wait_until: Wait
+) -> None:
     lamp = _stub_lamp()
     hub.devices = [lamp]
     _refresh(connected, wait_until)
     connected.set_adaptive_profile(_card_of(connected), None)
+    assert lamp.sent == []
+    assert connected._command_workers == []
+
+
+def test_off_ends_the_active_profile_then_refreshes_from_the_hub(
+    connected: Any,
+    hub: StubHub,
+    wait_until: Wait,
+    fast: None,
+    dialogs: list[tuple[str, str]],
+) -> None:
+    import threading
+
+    lamp = _stub_lamp(adaptive=("p2", True))
+    hub.devices = [lamp]
+    _refresh(connected, wait_until)
+    card = _card_of(connected)
+    assert card.profile_box.currentText() == "Night"
+    fetches = len(hub.calls)
+
+    _pick(card, 0)  # "Off"
+    wait_until(lambda: lamp.sent != [])
+    wait_until(lambda: not card.is_pending)
+    assert lamp.sent == [
+        (
+            "patch",
+            (
+                f"/devices/{lamp.id}",
+                [{"adaptiveProfile": {"id": "p2", "active": False}}],
+            ),
+        )
+    ]
+    assert lamp.threads[0] is not threading.main_thread()
+    assert card.profile_box.currentText() == "Off"
+
+    # The hub's own answer follows once, after the delay.
+    hub.devices = [
+        _empty_state(make_device("light", lamp.id, "Lamp", is_on=True, light_level=98))
+    ]
+    wait_until(lambda: len(hub.calls) == fetches + 1)
+    wait_until(lambda: connected._refresh_worker is None)
+    assert _card_of(connected).profile_box.currentText() == "Off"
+    assert len(hub.calls) == fetches + 1
+    assert lamp.sent[-1][0] == "patch" and len(lamp.sent) == 1
+    assert dialogs == []
+
+
+def test_failed_off_keeps_the_profile_and_shows_the_error(
+    connected: Any, hub: StubHub, wait_until: Wait, fast: None
+) -> None:
+    lamp = _stub_lamp(adaptive=("p1", True), fail=True)
+    hub.devices = [lamp]
+    _refresh(connected, wait_until)
+    card = _card_of(connected)
+    fetches = len(hub.calls)
+    _pick(card, 0)
+    wait_until(lambda: "hub said no" in card.footer_label.text())
+    assert card.footer_label.text().startswith("Couldn't set adaptive profile")
+    assert card.profile_box.currentText() == "Day"
+    assert connected._adaptive_refresh_timer.isActive() is False
+    assert len(hub.calls) == fetches
+
+
+def test_refresh_and_resync_never_send_a_profile_command(
+    connected: Any, hub: StubHub, wait_until: Wait, fast: None, pump: Any
+) -> None:
+    lamp = _stub_lamp(adaptive=("p1", True))
+    hub.devices = [lamp]
+    _refresh(connected, wait_until)
+    _refresh(connected, wait_until)
+    card = _card_of(connected)
+    card.sync_from_device()
+    card.update_from_device(lamp)
+    pump(60)
     assert lamp.sent == []
     assert connected._command_workers == []
 

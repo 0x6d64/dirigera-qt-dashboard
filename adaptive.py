@@ -52,6 +52,22 @@ def active_profile_id(device: Any) -> Optional[str]:
     return None
 
 
+def leave_profile(device: Any, profile_id: str) -> None:
+    """End adaptive mode on a light (blocking hub call; run it in a worker).
+
+    The library has no call for it. Verified on the real hub 2026-11-22
+    (doc/dirigera-api.md §5 item 7): the activation payload with
+    `"active": false` and the followed profile's id ends the mode and leaves
+    level and on-state alone. On success the local state is cleared, so the
+    card shows "Off" at once.
+    """
+    device.dirigera_client.patch(
+        route=f"/devices/{device.id}",
+        data=[{"adaptiveProfile": {"id": profile_id, "active": False}}],
+    )
+    device.adaptive_profile = None
+
+
 def supports_adaptive(device: Any) -> bool:
     """Whether a light gets the adaptive picker.
 
