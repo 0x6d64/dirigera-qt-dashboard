@@ -26,6 +26,61 @@ may end with an `> **Executed …**` note listing branch and commit hashes.
 
 ## Plans
 
+### Plan: review fixes (t-96, t-97, t-98, t-99, t-100)
+
+Status: open
+
+Goal: fix the findings of the whole-project review (2026-11-22). Four
+branches, in this order, each merged before the next starts. Not covered:
+splitting `dashboard.py`, event refresh storms from metering plugs (needs a
+real-hub check), minor test weaknesses.
+Affected files: `pyproject.toml`, `.github/workflows/`, `dashboard.py`,
+`settings.py`, `tools/hub_get.py`, `widgets/cardbase.py`, `widgets/card.py`,
+`widgets/energy.py`, `widgets/slider.py`, tests, docs.
+
+#### Branch 1 `fix/review-quick` — "quick fixes" (t-96, t-100)
+1. Add `adaptive` to `py-modules`; add a test or CI step that runs
+   `python -I -c "import dashboard"` from a different directory after
+   `uv sync`.
+2. Close bug: once `_close_pending` is set, no new refresh, timer or
+   adaptive refresh starts, and the window closes when the last worker ends.
+   Test: close while a refresh is queued; close right after a reset.
+3. Reset `self._signature = None` when a command finishes or fails.
+4. `ConfigParser(interpolation=None)` and `read_file` in `settings.py` and
+   `tools/hub_get.py`; test with a `%` in the token.
+5. Slider wheel: `Qt.FocusPolicy.StrongFocus`; wheel events are ignored while
+   the slider has no focus. Test both cases.
+Verification: black, ruff, mypy, pytest (twice).
+
+#### Branch 2 `fix/command-count` — "count running commands per card" (t-97)
+1. `CardBase` keeps a running-command count; `set_pending(True)` increments,
+   `set_pending(False)` decrements; "Sending…" and disabled controls show while
+   the count is above zero and refreshes do not clear it.
+2. A second command on a card queues behind or is ignored while one runs
+   (decide in code, keep it simple, document in a docstring); remove
+   `EnergyCard._command_running` in favour of the count.
+3. "Last seen" recomputed on each refresh even when the data signature is
+   unchanged (or include the text in the signature).
+Verification: tests for two quick commands, refresh during a command, reset
+double click; gates.
+
+#### Branch 3 `fix/card-rebuild` — "rebuild cards when controls change" (t-98)
+1. Compute a control-shape key per device (type, sorted `can_receive`, level
+   present, `supports_adaptive`); in the in-place refresh, rebuild the card
+   when the key differs from the card's key.
+2. Test: light with adaptive profile loses it, the warmth slider appears.
+Verification: gates.
+
+#### Branch 4 `docs/review-sweep` — "docs sweep" (t-99)
+1. README: purifier, adaptive profiles, live updates, room colours, energy
+   reset, blind buttons; screenshots are left to the owner.
+2. Fix drift: design-doc §10.2 item 7, §8.1/§10.1 "Sending…", §4.2 breakpoint,
+   req-24 wording; dirigera-api lines 9–10 and §1 items 2–3; stale notes in
+   this file and `todo.md` (t-35, t-31, t-81, header); AGENTS.md layout adds
+   `adaptive.py`, `network_discovery.py`, `tools/`.
+3. Mark t-96…t-100 done, set this plan's Status.
+Verification: grep the docs for the old wording; gates.
+
 ### Plan: adaptive light profiles (t-15)
 
 Status: partly done (picker and activation built; "Off" command waits for write test W2)
