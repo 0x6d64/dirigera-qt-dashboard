@@ -317,9 +317,11 @@ class DirigeraDashboard(QMainWindow):
         )
         if not CONFIG_PATH.exists():
             return
-        config = configparser.ConfigParser()
+        # No interpolation: a "%" in a token must stay literal.
+        config = configparser.ConfigParser(interpolation=None)
         try:
-            config.read(CONFIG_PATH, encoding="utf-8-sig")
+            with open(CONFIG_PATH, encoding="utf-8-sig") as file:
+                config.read_file(file)
         except (configparser.Error, OSError, UnicodeDecodeError) as error:
             self.set_status_text(f"Could not read config.ini: {error}", "danger")
             return
