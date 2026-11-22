@@ -38,8 +38,11 @@ def credentials() -> Tuple[str, str]:
     token = os.environ.get("DIRIGERA_TOKEN", "")
     if ip and token:
         return ip, token
-    config = configparser.ConfigParser()
-    config.read(CONFIG_PATH, encoding="utf-8-sig")
+    # No interpolation: a "%" in a token must stay literal.
+    config = configparser.ConfigParser(interpolation=None)
+    if CONFIG_PATH.exists():
+        with open(CONFIG_PATH, encoding="utf-8-sig") as file:
+            config.read_file(file)
     hub = config["hub"] if "hub" in config else {}
     return ip or hub.get("ip_address", ""), token or hub.get("token", "")
 

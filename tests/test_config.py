@@ -195,3 +195,31 @@ def test_invalid_energy_value_is_reported_in_the_status(
     assert "[energy] price_per_kwh" in text
     assert "[discovery] timeout" in text
     assert dialogs == []
+
+
+def test_percent_in_token_is_kept_literally(window: Any, tmp_path: Path) -> None:
+    write_config(
+        tmp_path / "config.ini", "[hub]\nip_address = 10.0.0.5\ntoken = ab%cd%(x)s\n"
+    )
+    window.load_config()
+    assert fields(window) == ("10.0.0.5", "ab%cd%(x)s")
+
+
+def test_hub_get_tool_reads_a_percent_token(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import importlib.util
+
+    path = Path(dashboard.__file__).resolve().parent / "tools" / "hub_get.py"
+    spec = importlib.util.spec_from_file_location("hub_get", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    config = tmp_path / "config.ini"
+    write_config(config, "﻿[hub]\nip_address = 10.0.0.5\ntoken = ab%cd\n")
+    monkeypatch.setattr(module, "CONFIG_PATH", config)
+    monkeypatch.delenv("DIRIGERA_IP", raising=False)
+    monkeypatch.delenv("DIRIGERA_TOKEN", raising=False)
+    assert module.credentials() == ("10.0.0.5", "ab%cd")
+    monkeypatch.setattr(module, "CONFIG_PATH", tmp_path / "missing.ini")
+    assert module.credentials() == ("", "")
