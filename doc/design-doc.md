@@ -104,8 +104,11 @@ field (260 px); segmented view switcher; Refresh button. `[verified]`
 
 Padding: 20 px horizontal, 12 px vertical. Bottom border 1 px `border` token. `[verified]`
 
-Below 900 px window width the header has two 48 px rows: row 1 as above (search field
-fills the free width), row 2 the view switcher, left-aligned. `[verified]`
+From 900 px window width up the header is one 56 px row. Below that it has two 48 px
+rows: row 1 as above (search field fills the free width), row 2 the view switcher,
+left-aligned. 900 px is a floor: the switch happens at the larger of 900 px and the
+width the single row needs with the current fonts and scaling (`_header_row_width` in
+`dashboard.py`), so the row never clips. `[verified]`
 
 ### 4.3 Content area
 
@@ -270,7 +273,7 @@ States:
 | --- | --- | --- | --- |
 | 1 | Normal | As above | All controls enabled |
 | 2 | Offline | Background `sunken`; chip "Offline"; footer "Last seen <relative time>" | Controls disabled; card keeps grid position |
-| 3 | Pending command | Changed control stays in place; footer "Sending…" | Resolves to hub value or reverts on failure (`req-3`) |
+| 3 | Pending command | Changed control stays in place; footer "Sending…"; controls disabled | The card counts its running commands and shows "Sending…" while the count is above zero, also across refreshes. A second command on a pending card is ignored and the control snaps back to the device's value (`req-25`). Resolves to hub value or reverts on failure (`req-3`) |
 | 4 | Attention | Chip in warn or danger colour with the specific fact | No other change |
 | 5 | Read-only | No control zone | Shorter card; no disabled control placeholder |
 
@@ -290,6 +293,14 @@ the light follows, or "Unknown profile" when that id is not in the list. While a
 is active "Off" is disabled and the tooltip says "Change brightness or warmth to stop
 following the profile". The row is hidden while the hub reports no profiles. The popup
 is not a modal dialog (8.14), and the mouse wheel never changes the box. `[proposed]`
+
+Control shape (`t-98`, `req-26`): controls are built once per card, so a card is
+rebuilt, not updated in place, when its device's control shape changes: device type, the
+sorted `can_receive` list, whether a light level, colour-temperature bounds or a blind
+state exists, or whether the light carries an adaptive profile state (`control_shape` in
+`widgets/card.py`). A light that stops following adaptive profiles thus gets its warmth
+slider back. A card with a running command is rebuilt on the next refresh instead.
+`[verified]` (test)
 
 ### 8.2 Status chip
 
@@ -335,6 +346,10 @@ Variants:
    `[verified]` (test for behaviour; the rendering itself is not asserted)
 8. Disabled state: track and thumb in muted tones of the enabled colours (see
    `qt-gotchas.md`, item 4).
+9. The mouse wheel changes a slider only while it has focus (click or Tab). Otherwise
+   the wheel scrolls the page, so scrolling never changes a value by accident
+   (`t-100`); the wheel still sends its value once it works (`req-6`). `[verified]`
+   (test)
 
 ### 8.5 Metric
 
@@ -460,7 +475,15 @@ e.g. "Home: 120 W now · 18.40 kWh · 28.34 RON" and "45 W now · 1.30 kWh · 2.
 2. Slider commands are coalesced; the latest value wins (`req-6`). `[proposed]`
 3. On failure, the control is resynchronised with the device's real state (`req-3`).
    `[verified]` (test)
-4. A command in flight shows "Sending…" in the card footer. `[proposed]`
+4. A command in flight shows "Sending…" in the card footer and disables the card's
+   controls. The card keeps a count of running commands, so "Sending…" stays through a
+   refresh. `[verified]` (test)
+5. A card runs one command at a time: a second command on a pending card is ignored,
+   nothing is sent, and the card is resynchronised so the control snaps back to the
+   device's value (`req-25`). `[verified]` (test)
+6. Closing the window while hub calls run hides it and finishes the close when the last
+   worker ends; from the first close on no new refresh, timer or adaptive refresh starts
+   (`req-14`). `[verified]` (test)
 
 ### 10.2 Refresh
 
@@ -471,17 +494,20 @@ e.g. "Home: 120 W now · 18.40 kWh · 28.34 RON" and "45 W now · 1.30 kWh · 2.
 3. On failure, the last good data stays and the hub chip turns amber (3.2). `[proposed]`
 4. Card order, scroll position and focus are preserved across refresh (`t-19`). Cards
    are updated in place, matched by device id; new ids add a card, vanished ids remove
-   it, and a slider being dragged or focused keeps its value. A fetch identical to the
-   last one changes nothing. `[verified]` (test)
+   it, and a slider being dragged or focused keeps its value. A card whose control shape
+   changed is rebuilt (8.1). A fetch identical to the last one changes nothing, except
+   that an offline card's relative "Last seen" text is aged; a finished or failed
+   command makes the next refresh redraw even when the data is unchanged. `[verified]`
+   (test)
 5. Polling (`req-13`, `t-56`): the dashboard refreshes by itself every 30 s while a hub
    is connected, every 300 s while live events arrive (10.3). A poll is skipped, not
    queued, while a fetch is in flight and while the window is minimised; restoring the
    window polls at once. `[verified]` (test)
 6. The status row shows `Updated HH:MM · every 30 s`; it turns warn when the last success
    is older than two intervals. `[verified]` (test)
-7. A failed background poll shows no modal dialog: the hub chip turns amber and the
-   stale caption appears (3.2). A failed manual refresh still reports in a dialog until
-   `t-66` replaces it. `[verified]` (test)
+7. A failed refresh, manual or background, shows no modal dialog (`t-66`): the hub chip
+   turns amber, the status row reports the error, and the stale caption appears (3.2).
+   `[verified]` (test)
 8. A scene activation triggers a background refresh after a short delay (1.5 s). `[verified]` (test)
 9. An adaptive profile change, and a brightness, warmth or colour change on a light that
    follows a profile, triggers a background refresh after 5 s, when the hub has applied
@@ -523,7 +549,8 @@ e.g. "Home: 120 W now · 18.40 kWh · 28.34 RON" and "45 W now · 1.30 kWh · 2.
 1. Every control reachable by Tab in the order it appears. `[proposed]`
 2. Segments: arrow keys move selection. `[proposed]`
 3. Switches: Space toggles. `[proposed]`
-4. Sliders: arrow keys step, Page keys step larger. `[proposed]`
+4. Sliders: arrow keys step, Page keys step larger; the wheel steps only a focused
+   slider (8.4 item 9). `[proposed]`
 5. Focus ring always visible on the focused control. `[verified]`
 
 ## 11. Responsive behaviour
@@ -533,7 +560,7 @@ e.g. "Home: 120 W now · 18.40 kWh · 28.34 RON" and "45 W now · 1.30 kWh · 2.
 | 1 | 1080 px and wider | Three card columns at 280 px minimum |
 | 2 | About 760 px | Two columns; search field shrinks to about 180 px |
 | 3 | Under 640 px | One column |
-| 4 | Under 900 px | View switcher moves to a second header row |
+| 4 | Under 900 px, or narrower than the single header row needs | View switcher moves to a second header row |
 
 Minimum window size 640 × 480 px. `[proposed]`
 
